@@ -244,12 +244,18 @@ export class PolymarketClient {
       if (!resp.data || resp.data.length === 0) return null;
 
       const m = resp.data[0];
+      // Gamma API returns some array fields as JSON strings
+      const parseField = (v: any, fallback: any[]) => {
+        if (Array.isArray(v)) return v;
+        if (typeof v === "string") { try { return JSON.parse(v); } catch { return fallback; } }
+        return fallback;
+      };
       const info: MarketInfo = {
         conditionId: m.conditionId,
         questionId: m.questionID,
-        clobTokenIds: m.clobTokenIds || [],
-        outcomes: m.outcomes || ["Yes", "No"],
-        outcomePrices: m.outcomePrices || [],
+        clobTokenIds: parseField(m.clobTokenIds, []),
+        outcomes: parseField(m.outcomes, ["Yes", "No"]),
+        outcomePrices: parseField(m.outcomePrices, []),
         negRisk: m.negRisk || false,
         active: m.active,
         closed: m.closed,
