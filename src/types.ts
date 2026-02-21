@@ -92,3 +92,94 @@ export interface RedemptionRecord {
   txHash?: string;
   status: "SUCCESS" | "FAILED";
 }
+
+// ---- Dashboard Types ----
+
+export interface LeaderboardEntry {
+  rank: number;
+  proxyWallet: string;
+  userName: string;
+  pnl: number;
+  vol: number;
+  profileImage: string;
+  xUsername: string;
+  verifiedBadge: boolean;
+}
+
+export interface TraderProfile extends LeaderboardEntry {
+  portfolioValue: number;
+  topPositions: {
+    title: string;
+    outcome: string;
+    size: number;
+    curPrice: number;
+    cashPnl: number;
+    percentPnl: number;
+  }[];
+}
+
+export interface TradeAlert {
+  trader: string;
+  traderName: string;
+  profileImage: string;
+  side: "BUY" | "SELL";
+  size: number;
+  price: number;
+  cashValue: number;
+  market: string;
+  outcome: string;
+  conditionId: string;
+  marketEndDate: string;
+  hoursToExpiry: number;
+  timestamp: string;
+  isNewAccount: boolean;
+  accountAgeDays: number;
+  isFirstLargeBet: boolean;
+  transactionHash: string;
+}
+
+export interface ScreenerResults {
+  topSpreads: {
+    rank: number;
+    market: string;
+    conditionId: string;
+    bestBid: number;
+    bestAsk: number;
+    spread: number;
+    spreadPct: string;
+    midpoint: number;
+    volume24hr: number;
+    liquidity: number;
+    bidDepth?: number;
+    askDepth?: number;
+  }[];
+  binaryArbs: {
+    market: string;
+    conditionId: string;
+    yesPrice: number;
+    noPrice: number;
+    sum: number;
+    deviation: number;
+    type: "BUY_BOTH" | "SELL_BOTH";
+    profitPerDollar: number;
+  }[];
+  negRiskArbs: {
+    event: string;
+    numOutcomes: number;
+    sumMidpoints: number;
+    sumBestAsk: number;
+    sumBestBid: number;
+    type: "BUY_ALL_YES" | "SELL_ALL_YES";
+    profitPerDollar: number;
+    outcomes: {
+      question: string;
+      groupTitle: string;
+      yesPrice: number;
+      bestBid: number;
+      bestAsk: number;
+      spread: number;
+    }[];
+  }[];
+  marketsScanned: number;
+  timestamp: string;
+}

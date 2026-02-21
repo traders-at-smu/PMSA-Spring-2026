@@ -4,6 +4,7 @@ import { ClobClient, Side } from "@polymarket/clob-client";
 const GAMMA_API_URL = process.env.GAMMA_API_URL || "https://gamma-api.polymarket.com";
 const CLOB_HTTP_URL = process.env.CLOB_HTTP_URL || "https://clob.polymarket.com";
 const CHAIN_ID = 137;
+const MIN_LIQUIDITY = 100_000;
 
 // ---- Types ----
 
@@ -152,8 +153,7 @@ export class ArbitrageScreener {
         continue;
 
       const liquidity = parseFloat(m.liquidity || "0");
-      // Filter for markets with at least some liquidity
-      if (liquidity < 100) continue;
+      if (liquidity < MIN_LIQUIDITY) continue;
 
       const midpoint = (m.bestBid + m.bestAsk) / 2;
       const spreadPct = midpoint > 0 ? (m.spread / midpoint) * 100 : 0;
@@ -212,6 +212,7 @@ export class ArbitrageScreener {
 
     for (const m of markets) {
       if (m.negRisk) continue;
+      if (parseFloat(m.liquidity || "0") < MIN_LIQUIDITY) continue;
       if (
         !m.outcomePrices ||
         m.outcomePrices.length < 2
@@ -264,6 +265,11 @@ export class ArbitrageScreener {
 
     for (const [negRiskId, groupMarkets] of groups) {
       if (groupMarkets.length < 2) continue;
+
+      const groupLiquidity = groupMarkets.reduce(
+        (s, m) => s + parseFloat(m.liquidity || "0"), 0
+      );
+      if (groupLiquidity < MIN_LIQUIDITY) continue;
 
       let sumMid = 0;
       let sumBestAsk = 0;
@@ -319,6 +325,24 @@ export class ArbitrageScreener {
 
     opportunities.sort((a, b) => b.profitPerDollar - a.profitPerDollar);
     return opportunities;
+  }
+
+  // ---- JSON Data (for API) ----
+
+  async getScreenerData() {
+    const [topSpreads, binaryArbs, negRiskArbs] = await Promise.all([
+      this.findTopSpreads(10),
+      this.findBinaryArbitrage(),
+      this.findNegRiskArbitrage(),
+    ]);
+    const markets = await this.fetchAllActiveMarkets();
+    return {
+      topSpreads,
+      binaryArbs,
+      negRiskArbs: negRiskArbs.slice(0, 20),
+      marketsScanned: markets.length,
+      timestamp: new Date().toISOString(),
+    };
   }
 
   // ---- Full Report ----
