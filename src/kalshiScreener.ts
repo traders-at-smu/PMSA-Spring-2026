@@ -1,0 +1,396 @@
+import axios from "axios";
+import {
+  KalshiMarket,
+  KalshiSpreadOpportunity,
+  KalshiBinaryMispricing,
+  KalshiEventGroupArb,
+  KalshiScreenerResults,
+} from "./types";
+
+const KALSHI_API_URL = process.env.KALSHI_API_URL || "https://api.elections.kalshi.com/trade-api/v2";
+const MIN_LIQUIDITY = parseInt(process.env.KALSHI_MIN_LIQUIDITY || "100000");
+const RATE_LIMIT_DELAY = 60; // ms between paginated requests (~16 req/sec, under 20/sec limit)
+
+// ---- Screener ----
+
+export class KalshiScreener {
+  private cachedMarkets: KalshiMarket[] | null = null;
+  private cacheExpiry: number = 0;
+  private readonly CACHE_TTL = 60_000; // 60 seconds
+
+  // ---- Market Fetching (cursor-based pagination) ----
+
+  async fetchAllActiveMarkets(): Promise<KalshiMarket[]> {
+    if (this.cachedMarkets && Date.now() < this.cacheExpiry) {
+      return this.cachedMarkets;
+    }
+
+    const allMarkets: KalshiMarket[] = [];
+    let cursor: string | undefined = undefined;
+
+    while (true) {
+      const params: Record<string, any> = {
+        limit: 200,
+        status: "open",
+      };
+      if (cursor) params.cursor = cursor;
+
+      let resp: any;
+      try {
+        resp = await axios.get(`${KALSHI_API_URL}/markets`, { params });
+      } catch (err: any) {
+        // Handle rate limiting with retry
+        if (axios.isAxiosError(err) && err.response?.status === 429) {
+          console.log("  Rate limited, waiting 2s...");
+          await new Promise((r) => setTimeout(r, 2000));
+          resp = await axios.get(`${KALSHI_API_URL}/markets`, { params });
+        } else {
+          throw err;
+        }
+      }
+
+      const markets: KalshiMarket[] = resp.data?.markets || [];
+      const nextCursor: string | undefined = resp.data?.cursor;
+
+      if (markets.length === 0) break;
+      allMarkets.push(...markets);
+
+      if (!nextCursor || nextCursor === cursor) break;
+      cursor = nextCursor;
+
+      // Rate limiting
+      await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY));
+    }
+
+    this.cachedMarkets = allMarkets;
+    this.cacheExpiry = Date.now() + this.CACHE_TTL;
+    console.log(`  Fetched ${allMarkets.length} active Kalshi markets`);
+    return this.cachedMarkets;
+  }
+
+  // ---- Helpers ----
+
+  private centsToNorm(cents: number): number {
+    return (cents || 0) / 100;
+  }
+
+  private async fetchOrderbook(ticker: string, depth: number = 10) {
+    try {
+      const resp = await axios.get(`${KALSHI_API_URL}/markets/${ticker}/orderbook`, {
+        params: { depth },
+      });
+      return resp.data?.orderbook_fp || resp.data?.orderbook || null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ---- 1. Top Spread Markets ----
+
+  async findTopSpreads(count: number = 10): Promise<KalshiSpreadOpportunity[]> {
+    console.log("Scanning Kalshi for markets with biggest spreads...");
+    const markets = await this.fetchAllActiveMarkets();
+    const opportunities: KalshiSpreadOpportunity[] = [];
+
+    for (const m of markets) {
+      if ((m.liquidity_dollars || 0) < MIN_LIQUIDITY) continue;
+      if (!m.yes_bid_dollars || !m.yes_ask_dollars) continue;
+
+      const yesBid = this.centsToNorm(m.yes_bid_dollars);
+      const yesAsk = this.centsToNorm(m.yes_ask_dollars);
+      const spread = yesAsk - yesBid;
+      if (spread <= 0) continue;
+
+      const midpoint = (yesBid + yesAsk) / 2;
+      const spreadPct = midpoint > 0 ? (spread / midpoint) * 100 : 0;
+
+      opportunities.push({
+        rank: 0,
+        ticker: m.ticker,
+        market: m.title || m.subtitle || m.ticker,
+        category: m.category || "",
+        yesBid,
+        yesAsk,
+        spread,
+        spreadPct: spreadPct.toFixed(1),
+        midpoint,
+        volume24h: (m.volume_24h_fp || 0) / 100, // cents to dollars
+        liquidity: m.liquidity_dollars || 0,
+        closeTime: m.close_time || "",
+        kalshiUrl: `https://kalshi.com/markets/${m.ticker.toLowerCase()}`,
+      });
+    }
+
+    // Sort by absolute spread descending
+    opportunities.sort((a, b) => b.spread - a.spread);
+    const top = opportunities.slice(0, count);
+    top.forEach((o, i) => (o.rank = i + 1));
+
+    // Enrich top results with orderbook depth
+    for (const opp of top) {
+      const book = await this.fetchOrderbook(opp.ticker);
+      if (book) {
+        opp.bidDepthDollars = (book.yes || []).reduce(
+          (sum: number, lvl: any) => sum + ((lvl.price || 0) * (lvl.contracts || 0)) / 100,
+          0
+        );
+        opp.askDepthDollars = (book.no || []).reduce(
+          (sum: number, lvl: any) => sum + ((lvl.price || 0) * (lvl.contracts || 0)) / 100,
+          0
+        );
+      }
+      await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY));
+    }
+
+    return top;
+  }
+
+  // ---- 2. Binary YES/NO Mispricing ----
+
+  async findBinaryMispricing(): Promise<KalshiBinaryMispricing[]> {
+    console.log("Scanning Kalshi for YES/NO mispricing...");
+    const markets = await this.fetchAllActiveMarkets();
+    const opportunities: KalshiBinaryMispricing[] = [];
+
+    for (const m of markets) {
+      if ((m.liquidity_dollars || 0) < MIN_LIQUIDITY) continue;
+      if (!m.yes_bid_dollars || !m.yes_ask_dollars || !m.no_bid_dollars || !m.no_ask_dollars) continue;
+
+      const yesMid = this.centsToNorm((m.yes_bid_dollars + m.yes_ask_dollars) / 2);
+      const noMid = this.centsToNorm((m.no_bid_dollars + m.no_ask_dollars) / 2);
+      const sum = yesMid + noMid;
+      const deviation = Math.abs(sum - 1.0);
+
+      // Threshold: >1% deviation is noteworthy
+      if (deviation > 0.01) {
+        opportunities.push({
+          ticker: m.ticker,
+          market: m.title || m.subtitle || m.ticker,
+          category: m.category || "",
+          yesPrice: yesMid,
+          noPrice: noMid,
+          sum,
+          deviation,
+          type: sum < 1.0 ? "BUY_BOTH" : "SELL_BOTH",
+          profitPerDollar: sum < 1.0 ? (1.0 - sum) / sum : (sum - 1.0) / sum,
+          kalshiUrl: `https://kalshi.com/markets/${m.ticker.toLowerCase()}`,
+        });
+      }
+    }
+
+    opportunities.sort((a, b) => b.deviation - a.deviation);
+    return opportunities;
+  }
+
+  // ---- 3. Event Group Arbitrage ----
+
+  async findEventGroupArbitrage(): Promise<KalshiEventGroupArb[]> {
+    console.log("Scanning Kalshi for event group arbitrage...");
+    const markets = await this.fetchAllActiveMarkets();
+
+    // Group by event_ticker
+    const groups = new Map<string, KalshiMarket[]>();
+    for (const m of markets) {
+      if (!m.event_ticker) continue;
+      const group = groups.get(m.event_ticker) || [];
+      group.push(m);
+      groups.set(m.event_ticker, group);
+    }
+
+    const opportunities: KalshiEventGroupArb[] = [];
+
+    for (const [eventTicker, groupMarkets] of groups) {
+      if (groupMarkets.length < 2) continue;
+
+      const groupLiquidity = groupMarkets.reduce(
+        (s, m) => s + (m.liquidity_dollars || 0),
+        0
+      );
+      if (groupLiquidity < MIN_LIQUIDITY) continue;
+
+      let sumMid = 0;
+      let sumAsks = 0;
+      let sumBids = 0;
+      const outcomeDetails: KalshiEventGroupArb["outcomes"] = [];
+
+      for (const m of groupMarkets) {
+        const yesMid = this.centsToNorm(
+          ((m.yes_bid_dollars || 0) + (m.yes_ask_dollars || 0)) / 2
+        );
+        const yesBid = this.centsToNorm(m.yes_bid_dollars || 0);
+        const yesAsk = this.centsToNorm(m.yes_ask_dollars || 0);
+
+        sumMid += yesMid;
+        sumAsks += yesAsk;
+        sumBids += yesBid;
+
+        outcomeDetails.push({
+          ticker: m.ticker,
+          title: m.subtitle || m.title || m.ticker,
+          yesPrice: yesMid,
+          yesBid,
+          yesAsk,
+          spread: yesAsk - yesBid,
+        });
+      }
+
+      // Buy all YES if sum of asks < 1.0 (accounting for fees ~0.5%)
+      if (sumAsks < 0.995) {
+        opportunities.push({
+          eventTicker,
+          eventTitle: (groupMarkets[0].title || eventTicker).substring(0, 80),
+          numOutcomes: groupMarkets.length,
+          sumYesMidpoints: sumMid,
+          sumYesAsks: sumAsks,
+          sumYesBids: sumBids,
+          type: "BUY_ALL_YES",
+          profitPerDollar: (1.0 - sumAsks) / sumAsks,
+          outcomes: outcomeDetails,
+        });
+      }
+
+      // Sell all YES if sum of bids > 1.0
+      if (sumBids > 1.005) {
+        opportunities.push({
+          eventTicker,
+          eventTitle: (groupMarkets[0].title || eventTicker).substring(0, 80),
+          numOutcomes: groupMarkets.length,
+          sumYesMidpoints: sumMid,
+          sumYesAsks: sumAsks,
+          sumYesBids: sumBids,
+          type: "SELL_ALL_YES",
+          profitPerDollar: (sumBids - 1.0) / 1.0,
+          outcomes: outcomeDetails,
+        });
+      }
+    }
+
+    opportunities.sort((a, b) => b.profitPerDollar - a.profitPerDollar);
+    return opportunities;
+  }
+
+  // ---- JSON Data (for API) ----
+
+  async getScreenerData(): Promise<KalshiScreenerResults> {
+    const [topSpreads, binaryMispricing, eventGroupArbs] = await Promise.all([
+      this.findTopSpreads(10),
+      this.findBinaryMispricing(),
+      this.findEventGroupArbitrage(),
+    ]);
+    const markets = await this.fetchAllActiveMarkets();
+    return {
+      topSpreads,
+      binaryMispricing,
+      eventGroupArbs: eventGroupArbs.slice(0, 20),
+      marketsScanned: markets.length,
+      timestamp: new Date().toISOString(),
+    };
+  }
+
+  // ---- Full Report (CLI) ----
+
+  async runFullScreener(): Promise<void> {
+    console.log("\n");
+    console.log("=".repeat(80));
+    console.log("  KALSHI ARBITRAGE SCREENER");
+    console.log("  " + new Date().toISOString());
+    console.log("=".repeat(80));
+
+    // 1. Top Spreads
+    const topSpreads = await this.findTopSpreads(3);
+    console.log("\n");
+    console.log("-".repeat(80));
+    console.log("  TOP 3 KALSHI MARKETS BY SPREAD");
+    console.log("-".repeat(80));
+
+    if (topSpreads.length === 0) {
+      console.log("  No markets with significant spreads found.");
+    }
+
+    for (const s of topSpreads) {
+      console.log(`\n  #${s.rank} | Spread: ${(s.spread * 100).toFixed(1)}¢ (${s.spreadPct}%)`);
+      console.log(`     Market: ${s.market}`);
+      console.log(`     Category: ${s.category}`);
+      console.log(`     YES Bid: ${(s.yesBid * 100).toFixed(1)}¢ | YES Ask: ${(s.yesAsk * 100).toFixed(1)}¢ | Midpoint: ${(s.midpoint * 100).toFixed(1)}¢`);
+      console.log(`     24h Volume: $${s.volume24h.toFixed(0)} | Liquidity: $${s.liquidity.toFixed(0)}`);
+      if (s.bidDepthDollars != null) {
+        console.log(`     Bid Depth: $${s.bidDepthDollars.toFixed(2)} | Ask Depth: $${s.askDepthDollars?.toFixed(2)}`);
+      }
+      console.log(`     Ticker: ${s.ticker}`);
+      console.log(`     URL: ${s.kalshiUrl}`);
+    }
+
+    // 2. Binary Mispricing
+    const binaryArbs = await this.findBinaryMispricing();
+    console.log("\n");
+    console.log("-".repeat(80));
+    console.log("  KALSHI BINARY YES/NO MISPRICING (sum != $1.00)");
+    console.log("-".repeat(80));
+
+    if (binaryArbs.length === 0) {
+      console.log("  No binary mispricing opportunities found (>1% deviation).");
+    }
+
+    for (const arb of binaryArbs.slice(0, 10)) {
+      const arrow = arb.type === "BUY_BOTH" ? "<<<" : ">>>";
+      console.log(
+        `\n  ${arrow} ${arb.type} | Deviation: ${(arb.deviation * 100).toFixed(2)}% | Profit/Dollar: ${(arb.profitPerDollar * 100).toFixed(2)}%`
+      );
+      console.log(`     Market: ${arb.market}`);
+      console.log(`     Category: ${arb.category}`);
+      console.log(
+        `     YES: ${(arb.yesPrice * 100).toFixed(1)}¢ + NO: ${(arb.noPrice * 100).toFixed(1)}¢ = ${(arb.sum * 100).toFixed(1)}¢`
+      );
+      console.log(`     URL: ${arb.kalshiUrl}`);
+    }
+
+    // 3. Event Group Arbitrage
+    const eventArbs = await this.findEventGroupArbitrage();
+    console.log("\n");
+    console.log("-".repeat(80));
+    console.log("  KALSHI EVENT GROUP ARBITRAGE");
+    console.log("-".repeat(80));
+
+    if (eventArbs.length === 0) {
+      console.log("  No event group arbitrage opportunities found.");
+    }
+
+    for (const arb of eventArbs.slice(0, 5)) {
+      console.log(
+        `\n  ${arb.type} | Profit/Dollar: ${(arb.profitPerDollar * 100).toFixed(2)}%`
+      );
+      console.log(`     Event: ${arb.eventTitle}`);
+      console.log(`     Outcomes: ${arb.numOutcomes}`);
+      console.log(
+        `     Sum(MidYES): ${arb.sumYesMidpoints.toFixed(4)} | Sum(Asks): ${arb.sumYesAsks.toFixed(4)} | Sum(Bids): ${arb.sumYesBids.toFixed(4)}`
+      );
+      console.log(`     Top outcomes by spread:`);
+      const sorted = [...arb.outcomes].sort((a, b) => b.spread - a.spread);
+      for (const o of sorted.slice(0, 5)) {
+        console.log(
+          `       ${o.title.substring(0, 40).padEnd(42)} YES=${(o.yesPrice * 100).toFixed(1)}¢ Bid=${(o.yesBid * 100).toFixed(1)}¢ Ask=${(o.yesAsk * 100).toFixed(1)}¢ Spread=${(o.spread * 100).toFixed(1)}¢`
+        );
+      }
+    }
+
+    // Summary
+    console.log("\n");
+    console.log("=".repeat(80));
+    console.log("  SUMMARY");
+    console.log(`  Markets scanned: ${(await this.fetchAllActiveMarkets()).length}`);
+    console.log(`  Wide-spread opportunities: ${topSpreads.length}`);
+    console.log(`  Binary mispricing: ${binaryArbs.length}`);
+    console.log(`  Event group arb: ${eventArbs.length}`);
+    console.log("=".repeat(80));
+    console.log("\n");
+  }
+}
+
+// Run as standalone script
+if (require.main === module) {
+  const screener = new KalshiScreener();
+  screener.runFullScreener().catch((err) => {
+    console.error("Kalshi Screener error:", err);
+    process.exit(1);
+  });
+}

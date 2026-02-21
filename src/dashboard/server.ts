@@ -4,6 +4,7 @@ import path from "path";
 import { getTopTraders, getTraderProfile } from "../services/traderService";
 import { getTradeAlerts, getAlertHistory } from "../services/tradeAlertService";
 import { ArbitrageScreener } from "../screener";
+import { KalshiScreener } from "../kalshiScreener";
 
 const app = express();
 const PORT = parseInt(process.env.DASHBOARD_PORT || "3456");
@@ -22,6 +23,20 @@ async function getCachedScreenerData() {
   }
   const data = await screener.getScreenerData();
   screenerCache = { data, expires: Date.now() + SCREENER_TTL };
+  return data;
+}
+
+// ---- Kalshi Screener instance (cached) ----
+const kalshiScreener = new KalshiScreener();
+let kalshiScreenerCache: { data: any; expires: number } | null = null;
+const KALSHI_SCREENER_TTL = 60 * 1000; // 60s
+
+async function getCachedKalshiScreenerData() {
+  if (kalshiScreenerCache && Date.now() < kalshiScreenerCache.expires) {
+    return kalshiScreenerCache.data;
+  }
+  const data = await kalshiScreener.getScreenerData();
+  kalshiScreenerCache = { data, expires: Date.now() + KALSHI_SCREENER_TTL };
   return data;
 }
 
@@ -108,6 +123,38 @@ app.get("/api/screener/stream", (req, res) => {
       // Invalidate cache so we get fresh data
       screenerCache = null;
       const data = await getCachedScreenerData();
+      res.write(`data: ${JSON.stringify(data)}\n\n`);
+    } catch {
+      // Skip on error
+    }
+  };
+
+  send();
+  const interval = setInterval(send, 60_000);
+  req.on("close", () => clearInterval(interval));
+});
+
+// Kalshi Screener (snapshot)
+app.get("/api/kalshi/screener", async (req, res) => {
+  try {
+    const data = await getCachedKalshiScreenerData();
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Kalshi Screener SSE stream
+app.get("/api/kalshi/screener/stream", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+
+  const send = async () => {
+    try {
+      kalshiScreenerCache = null;
+      const data = await getCachedKalshiScreenerData();
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     } catch {
       // Skip on error

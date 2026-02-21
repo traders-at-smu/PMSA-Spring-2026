@@ -183,3 +183,82 @@ export interface ScreenerResults {
   marketsScanned: number;
   timestamp: string;
 }
+
+// ---- Kalshi Types ----
+
+export interface KalshiMarket {
+  ticker: string;
+  event_ticker: string;
+  title: string;
+  subtitle: string;
+  category: string;
+  status: string;
+  market_type: string;
+  yes_bid_dollars: number;
+  yes_ask_dollars: number;
+  no_bid_dollars: number;
+  no_ask_dollars: number;
+  volume_24h_fp: number;
+  open_interest_fp: number;
+  liquidity_dollars: number;
+  close_time: string;
+  latest_expiration_time: string;
+}
+
+export interface KalshiSpreadOpportunity {
+  rank: number;
+  ticker: string;
+  market: string;
+  category: string;
+  yesBid: number;
+  yesAsk: number;
+  spread: number;
+  spreadPct: string;
+  midpoint: number;
+  volume24h: number;
+  liquidity: number;
+  bidDepthDollars?: number;
+  askDepthDollars?: number;
+  closeTime: string;
+  kalshiUrl: string;
+}
+
+export interface KalshiBinaryMispricing {
+  ticker: string;
+  market: string;
+  category: string;
+  yesPrice: number;
+  noPrice: number;
+  sum: number;
+  deviation: number;
+  type: "BUY_BOTH" | "SELL_BOTH";
+  profitPerDollar: number;
+  kalshiUrl: string;
+}
+
+export interface KalshiEventGroupArb {
+  eventTicker: string;
+  eventTitle: string;
+  numOutcomes: number;
+  sumYesMidpoints: number;
+  sumYesAsks: number;
+  sumYesBids: number;
+  type: "BUY_ALL_YES" | "SELL_ALL_YES";
+  profitPerDollar: number;
+  outcomes: {
+    ticker: string;
+    title: string;
+    yesPrice: number;
+    yesBid: number;
+    yesAsk: number;
+    spread: number;
+  }[];
+}
+
+export interface KalshiScreenerResults {
+  topSpreads: KalshiSpreadOpportunity[];
+  binaryMispricing: KalshiBinaryMispricing[];
+  eventGroupArbs: KalshiEventGroupArb[];
+  marketsScanned: number;
+  timestamp: string;
+}

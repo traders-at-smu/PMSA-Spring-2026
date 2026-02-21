@@ -10,7 +10,8 @@
     "screener": "ts-node src/screener.ts",
     "dashboard": "ts-node src/dashboard/server.ts",
     "dashboard:build": "cd src/dashboard-ui && npx vite build",
-    "dashboard:dev": "cd src/dashboard-ui && npx vite"
+    "dashboard:dev": "cd src/dashboard-ui && npx vite",
+    "kalshi-screener": "ts-node src/kalshiScreener.ts"
   },
   "dependencies": {
     "@ethersproject/bignumber": "^5.7.0",

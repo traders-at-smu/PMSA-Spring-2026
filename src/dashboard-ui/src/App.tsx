@@ -3,8 +3,9 @@ import { Layout } from "./components/Layout";
 import { TopTraders } from "./components/TopTraders";
 import { TradeAlerts } from "./components/TradeAlerts";
 import { ArbitragePanel } from "./components/ArbitragePanel";
+import { KalshiPanel } from "./components/KalshiPanel";
 
-type Tab = "traders" | "alerts" | "arbitrage";
+type Tab = "traders" | "alerts" | "arbitrage" | "kalshi";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("traders");
@@ -15,6 +16,7 @@ export default function App() {
       {tab === "traders" && <TopTraders />}
       {tab === "alerts" && <TradeAlerts paused={paused} />}
       {tab === "arbitrage" && <ArbitragePanel paused={paused} />}
+      {tab === "kalshi" && <KalshiPanel paused={paused} />}
     </Layout>
   );
 }
