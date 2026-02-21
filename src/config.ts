@@ -39,6 +39,14 @@ export const config = {
     .map((s) => s.trim())
     .filter(Boolean),
 
+  // Screener
+  minLiquidity: parseFloat(process.env.MIN_LIQUIDITY || "1000"), // $1k min
+  minVolume24h: parseFloat(process.env.MIN_VOLUME_24H || "5000"), // $5k min 24h vol
+  screenerCategories: (process.env.SCREENER_CATEGORIES || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+
   // Infrastructure
   rpcUrl: required("RPC_URL"),
   mongoUri: required("MONGO_URI"),
