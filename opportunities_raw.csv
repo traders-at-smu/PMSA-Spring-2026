@@ -1,0 +1,4 @@
+id,venue,strategy,market,yesAsk,noAsk,bidDepth,askDepth,liquidity,profitPerDollar,numOutcomes,sumAsks
+poly-binary-tight1,POLYMARKET,BINARY_BUY_BOTH,Will BTC hit $100k by March?,0.47,0.49,850,920,0,0.0417,2,0.96
+kalshi-binary-wide1,KALSHI,BINARY_BUY_BOTH,Fed rate cut by June?,0.38,0.52,0,0,45000,0.1111,2,0.90
+kalshi-event-multi1,KALSHI,EVENT_BUY_ALL_YES,Who wins NBA MVP?,0,0,0,0,0,0.0309,3,0.97
