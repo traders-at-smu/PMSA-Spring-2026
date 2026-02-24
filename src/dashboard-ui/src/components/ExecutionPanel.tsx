@@ -286,6 +286,24 @@ export function ExecutionPanel({ paused }: { paused: boolean }) {
           >
             Execute Top 3
           </button>
+          <a
+            href="/api/arbitrage/execution/export/plans.csv"
+            className="px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 text-sm"
+          >
+            Export Plans CSV
+          </a>
+          <a
+            href="/api/arbitrage/execution/export/history.csv"
+            className="px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 text-sm"
+          >
+            Export Log CSV
+          </a>
+          <a
+            href="/api/arbitrage/execution/export/history.json"
+            className="px-3 py-1.5 rounded-md bg-zinc-800 text-zinc-300 hover:bg-zinc-700 text-sm"
+          >
+            Export Log JSON
+          </a>
         </div>
 
         <div className="mt-3 flex flex-wrap gap-6 text-sm text-zinc-400">

@@ -262,6 +262,50 @@ app.get("/api/arbitrage/execution/health", (_req, res) => {
   }
 });
 
+app.get("/api/arbitrage/execution/export/plans.csv", (_req, res) => {
+  try {
+    const csv = executionService.exportPlansCsv();
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=\"arbitrage-plans.csv\"");
+    res.send(csv);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/arbitrage/execution/export/history.csv", (_req, res) => {
+  try {
+    const csv = executionService.exportHistoryCsv();
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=\"execution-history.csv\"");
+    res.send(csv);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/arbitrage/execution/export/history.json", (_req, res) => {
+  try {
+    const json = executionService.exportHistoryJson(true);
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=\"execution-history.json\"");
+    res.send(json);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/arbitrage/execution/export/history.jsonl", (_req, res) => {
+  try {
+    const jsonl = executionService.readHistoryJsonl();
+    res.setHeader("Content-Type", "application/x-ndjson; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=\"execution-history.jsonl\"");
+    res.send(jsonl);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/api/health", (_req, res) => {
   try {
     res.json({

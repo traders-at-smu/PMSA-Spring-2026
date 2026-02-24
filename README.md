@@ -146,6 +146,22 @@ Smoke test verifies:
 - `POST /api/arbitrage/execution/settings`
 - `POST /api/arbitrage/execution/execute/:planId`
 - `POST /api/arbitrage/execution/execute-top`
+- `GET /api/arbitrage/execution/export/plans.csv`
+- `GET /api/arbitrage/execution/export/history.csv`
+- `GET /api/arbitrage/execution/export/history.json`
+- `GET /api/arbitrage/execution/export/history.jsonl`
+
+## Exporting Arbitrage + Execution Logs
+
+From the **Execution** tab you can now export:
+
+- `Export Plans CSV` - current arbitrage table snapshot
+- `Export Log CSV` - in-memory recent execution history
+- `Export Log JSON` - in-memory recent execution history as JSON
+
+Persistent execution logs are also written on disk as newline-delimited JSON:
+
+- `logs/execution-history.jsonl`
 
 ## Execution Modes
 

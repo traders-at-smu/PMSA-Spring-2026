@@ -1,4 +1,6 @@
 import axios from "axios";
+import fs from "fs";
+import path from "path";
 import { ArbitrageScreener, BinaryArbOpportunity, NegRiskArbOpportunity } from "../screener";
 import { KalshiBinaryMispricing, KalshiEventGroupArb, KalshiScreener } from "../kalshiScreener";
 import { getSettings, validateSettingsForMode } from "../runtimeSettings";
@@ -161,11 +163,15 @@ export class ArbitrageExecutionService {
   private snapshots = new Map<string, RecentSnapshot[]>();
   private polymarketClientPromise: Promise<PolymarketClientLike | null> | null = null;
   private refreshInFlight: Promise<ExecutionState> | null = null;
+  private executionLogPath: string;
 
   private state: ExecutionState;
 
   constructor() {
     const settings = getSettings();
+    const logDir = path.resolve(process.cwd(), "logs");
+    fs.mkdirSync(logDir, { recursive: true });
+    this.executionLogPath = path.join(logDir, "execution-history.jsonl");
     this.state = {
       settings: {
         mode: settings.execution.mode,
@@ -881,8 +887,90 @@ export class ArbitrageExecutionService {
     };
   }
 
+  exportPlansCsv(): string {
+    const header = [
+      "id",
+      "venue",
+      "strategy",
+      "title",
+      "contractUrl",
+      "status",
+      "executable",
+      "expectedNetEdge",
+      "expectedNetProfitUsd",
+      "recommendedCapUsd",
+      "fillProb20s",
+      "refreshSeq",
+    ];
+    const rows = this.state.plans.map((p) => [
+      p.id,
+      p.venue,
+      p.strategy,
+      p.title,
+      p.contractUrl || "",
+      p.status,
+      String(p.executable),
+      p.expectedNetEdge.toFixed(8),
+      p.expectedNetProfitUsd.toFixed(8),
+      p.recommendedCapUsd.toFixed(8),
+      p.fillProb20s.toFixed(8),
+      String(this.state.refreshSeq),
+    ]);
+    return [header, ...rows].map((r) => r.map(csvEscape).join(",")).join("\n");
+  }
+
+  exportHistoryCsv(): string {
+    const header = [
+      "timestamp",
+      "planId",
+      "mode",
+      "status",
+      "message",
+      "expectedNetProfitUsd",
+      "realizedProfitUsd",
+      "orderIds",
+    ];
+    const rows = this.state.history.map((h) => [
+      h.timestamp,
+      h.planId,
+      h.mode,
+      h.status,
+      h.message,
+      h.expectedNetProfitUsd.toFixed(8),
+      h.realizedProfitUsd.toFixed(8),
+      h.orderIds.join("|"),
+    ]);
+    return [header, ...rows].map((r) => r.map(csvEscape).join(",")).join("\n");
+  }
+
+  exportHistoryJson(pretty = true): string {
+    return JSON.stringify(this.state.history, null, pretty ? 2 : 0);
+  }
+
+  readHistoryJsonl(): string {
+    if (!fs.existsSync(this.executionLogPath)) return "";
+    return fs.readFileSync(this.executionLogPath, "utf8");
+  }
+
+  getExecutionLogPath(): string {
+    return this.executionLogPath;
+  }
+
   private pushHistory(record: ExecutionRecord): ExecutionRecord {
     this.state.history = [record, ...this.state.history].slice(0, MAX_HISTORY);
+    try {
+      fs.appendFileSync(this.executionLogPath, `${JSON.stringify(record)}\n`, "utf8");
+    } catch {
+      // best-effort logging; keep runtime execution path non-fatal
+    }
     return record;
   }
+}
+
+function csvEscape(value: string): string {
+  const s = value ?? "";
+  if (/[",\n]/.test(s)) {
+    return `"${s.replace(/"/g, "\"\"")}"`;
+  }
+  return s;
 }
