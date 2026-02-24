@@ -34,5 +34,14 @@
     "clobHttpUrl": "https://clob.polymarket.com",
     "dataApiUrl": "https://data-api.polymarket.com",
     "kalshiApiUrl": "https://api.elections.kalshi.com/trade-api/v2"
+  },
+  "python": {
+    "pythonExecutable": "python",
+    "modelBridgePath": "python/model_v1_bridge.py",
+    "miguelScriptsDir": "python",
+    "miguel": {
+      "pollIntervalSec": 30,
+      "minPairs": 50
+    }
   }
 }

@@ -4,8 +4,8 @@ import path from "path";
 import { ArbitrageScreener, BinaryArbOpportunity, NegRiskArbOpportunity } from "../screener";
 import { KalshiBinaryMispricing, KalshiEventGroupArb, KalshiScreener } from "../kalshiScreener";
 import { getSettings, validateSettingsForMode } from "../runtimeSettings";
+import { ModelBatchItem, PythonModelClient } from "./pythonModelClient";
 
-const MODEL_MAX_CAP_RATIO = 0.2;
 const MAX_HISTORY = 25;
 const REFRESH_TIMEOUT_MS = 90_000;
 
@@ -95,6 +95,11 @@ export interface ExecutionRecord {
 
 export interface ExecutionState {
   settings: ExecutionSettings;
+  modelEngine: string;
+  modelInvocation: {
+    lastInvocationAt: string | null;
+    lastInvocationError: string | null;
+  };
   plans: TradePlan[];
   history: ExecutionRecord[];
   paperPnlUsd: number;
@@ -160,7 +165,9 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
 export class ArbitrageExecutionService {
   private polymarketScreener = new ArbitrageScreener();
   private kalshiScreener = new KalshiScreener();
+  private modelClient = new PythonModelClient();
   private snapshots = new Map<string, RecentSnapshot[]>();
+  private paperExecutedPlanIds = new Set<string>();
   private polymarketClientPromise: Promise<PolymarketClientLike | null> | null = null;
   private refreshInFlight: Promise<ExecutionState> | null = null;
   private executionLogPath: string;
@@ -181,6 +188,11 @@ export class ArbitrageExecutionService {
         defaultLegTickSize: settings.execution.defaultLegTickSize,
         kalshiUseMakerFees: settings.execution.kalshiUseMakerFees,
       },
+      modelEngine: "python:model_v1",
+      modelInvocation: {
+        lastInvocationAt: null,
+        lastInvocationError: null,
+      },
       plans: [],
       history: [],
       paperPnlUsd: 0,
@@ -198,6 +210,12 @@ export class ArbitrageExecutionService {
 
   getState(): ExecutionState {
     this.state.liveReadiness = this.computeLiveReadiness();
+    const modelStatus = this.modelClient.getStatus();
+    this.state.modelEngine = modelStatus.modelEngine;
+    this.state.modelInvocation = {
+      lastInvocationAt: modelStatus.lastInvocationAt,
+      lastInvocationError: modelStatus.lastInvocationError,
+    };
     return this.state;
   }
 
@@ -252,15 +270,25 @@ export class ArbitrageExecutionService {
         "Execution refresh"
       );
 
+      const polyData = polyResult.status === "fulfilled" ? polyResult.value : null;
+      const kalshiData = kalshiResult.status === "fulfilled" ? kalshiResult.value : null;
+      const decisionMap = await this.buildModelDecisionMap(polyData, kalshiData, warnings);
+
       let polyPlans: TradePlan[] = [];
       if (polyResult.status === "fulfilled") {
         const data = polyResult.value;
         for (const arb of data.binaryArbs) {
-          const plan = this.buildPolymarketBinaryPlan(arb);
+          const plan = this.buildPolymarketBinaryPlan(
+            arb,
+            decisionMap.get(`poly-binary-${arb.conditionId}`)
+          );
           if (plan) polyPlans.push(plan);
         }
         for (const arb of data.negRiskArbs) {
-          const plan = this.buildPolymarketEventPlan(arb);
+          const plan = this.buildPolymarketEventPlan(
+            arb,
+            decisionMap.get(`poly-event-${arb.negRiskMarketId}`)
+          );
           if (plan) polyPlans.push(plan);
         }
       } else {
@@ -272,11 +300,17 @@ export class ArbitrageExecutionService {
       if (kalshiResult.status === "fulfilled") {
         const data = kalshiResult.value;
         for (const arb of data.binaryArbs) {
-          const plan = this.buildKalshiBinaryPlan(arb);
+          const plan = this.buildKalshiBinaryPlan(
+            arb,
+            decisionMap.get(`kalshi-binary-${arb.ticker}`)
+          );
           if (plan) kalshiPlans.push(plan);
         }
         for (const arb of data.eventArbs) {
-          const plan = this.buildKalshiEventPlan(arb);
+          const plan = this.buildKalshiEventPlan(
+            arb,
+            decisionMap.get(`kalshi-event-${arb.eventTicker}`)
+          );
           if (plan) kalshiPlans.push(plan);
         }
       } else {
@@ -287,6 +321,15 @@ export class ArbitrageExecutionService {
       const plans = [...polyPlans, ...kalshiPlans]
         .sort((a, b) => b.expectedNetProfitUsd - a.expectedNetProfitUsd)
         .slice(0, 60);
+
+      if (this.state.settings.mode === "PAPER") {
+        for (const plan of plans) {
+          if (this.paperExecutedPlanIds.has(plan.id) && plan.status === "READY") {
+            plan.status = "SKIPPED";
+            plan.reason = "Already paper-executed";
+          }
+        }
+      }
 
       this.state.plans = plans;
       this.state.lastRefreshAt = new Date(startedAt).toISOString();
@@ -368,9 +411,25 @@ export class ArbitrageExecutionService {
     }
 
     if (this.state.settings.mode === "PAPER") {
+      if (this.paperExecutedPlanIds.has(plan.id)) {
+        plan.status = "SKIPPED";
+        plan.reason = "Already paper-executed";
+        return this.pushHistory({
+          planId: plan.id,
+          timestamp: new Date().toISOString(),
+          mode: "PAPER",
+          status: "SKIPPED",
+          message: "Plan already executed in paper mode",
+          orderIds: [],
+          expectedNetProfitUsd: plan.expectedNetProfitUsd,
+          realizedProfitUsd: 0,
+        });
+      }
+
       plan.status = "EXECUTED";
       const realized = plan.expectedNetProfitUsd;
       this.state.paperPnlUsd += realized;
+      this.paperExecutedPlanIds.add(plan.id);
       return this.pushHistory({
         planId: plan.id,
         timestamp: new Date().toISOString(),
@@ -453,38 +512,165 @@ export class ArbitrageExecutionService {
     return trimmed;
   }
 
-  private modelDecision(
-    grossEdgePerDollar: number,
-    lobMetrics: LobMetrics,
-    recentSnapshots: RecentSnapshot[]
-  ): ModelDecision {
-    const persistence = recentSnapshots.length === 0
-      ? lobMetrics.edgePersistence
-      : recentSnapshots.filter((s) => s.grossEdgePerDollar > 0).length / recentSnapshots.length;
+  private async buildModelDecisionMap(
+    polyData: { binaryArbs: BinaryArbOpportunity[]; negRiskArbs: NegRiskArbOpportunity[] } | null,
+    kalshiData: { binaryArbs: KalshiBinaryMispricing[]; eventArbs: KalshiEventGroupArb[] } | null,
+    warnings: string[]
+  ): Promise<Map<string, ModelDecision>> {
+    const items: ModelBatchItem[] = [];
 
-    const effectiveDepth = Math.max(1, Math.min(lobMetrics.topBookDepthUsd, lobMetrics.depthWithinProfitableBandUsd));
-    const depthRatio = clamp(effectiveDepth / (this.state.settings.bankrollUsd * MODEL_MAX_CAP_RATIO), 0, 1);
+    if (polyData) {
+      for (const arb of polyData.binaryArbs) {
+        if (arb.type !== "BUY_BOTH" || !arb.yesTokenId || !arb.noTokenId || arb.yesAsk <= 0 || arb.noAsk <= 0) continue;
+        const id = `poly-binary-${arb.conditionId}`;
+        const sumAsks = arb.yesAsk + arb.noAsk;
+        const grossEdge = (1 - sumAsks) / Math.max(sumAsks, 0.0001);
+        if (grossEdge <= 0) continue;
+        const snapshots = this.recordSnapshot(id, grossEdge);
+        const topDepth = (arb.bidDepth || 0) + (arb.askDepth || 0);
+        const profitableDepth = Math.min(arb.bidDepth || 0, arb.askDepth || 0);
+        items.push({
+          id,
+          opportunity_row: {
+            id,
+            venue: "POLYMARKET",
+            strategy: "BINARY_BUY_BOTH",
+            market: arb.market,
+            yesAsk: arb.yesAsk,
+            noAsk: arb.noAsk,
+            bidDepth: arb.bidDepth || 0,
+            askDepth: arb.askDepth || 0,
+            liquidity: 0,
+            profitPerDollar: grossEdge,
+            numOutcomes: 2,
+            sumAsks,
+          },
+          lob_metrics: {
+            topBookDepthUsd: topDepth,
+            depthWithinProfitableBandUsd: profitableDepth,
+            edgePersistence: 0,
+          },
+          recent_snapshots: snapshots,
+        });
+      }
 
-    const fillProb = clamp(depthRatio * 0.7 + persistence * 0.3, 0.05, 0.99);
-    const slippageMultiplier = clamp(1 - depthRatio, 0.08, 1);
-    const expectedSlippage = grossEdgePerDollar * 0.35 * slippageMultiplier;
-    const expectedNetEdge = grossEdgePerDollar - expectedSlippage;
+      for (const arb of polyData.negRiskArbs) {
+        if (arb.type !== "BUY_ALL_YES") continue;
+        const outcomes = arb.outcomes.filter((o) => o.bestAsk > 0 && !!o.yesTokenId && !!o.conditionId);
+        if (outcomes.length < 2) continue;
+        const id = `poly-event-${arb.negRiskMarketId}`;
+        const grossEdge = (1 - arb.sumBestAsk) / Math.max(arb.sumBestAsk, 0.0001);
+        if (grossEdge <= 0) continue;
+        const snapshots = this.recordSnapshot(id, grossEdge);
+        const depthWithinBand = outcomes.reduce((sum, o) => sum + Math.max(0, Math.min(o.bestAsk, o.bestBid)), 0) * 1000;
+        const topDepth = outcomes.reduce((sum, o) => sum + Math.max(o.bestAsk, o.bestBid) * 1000, 0);
+        items.push({
+          id,
+          opportunity_row: {
+            id,
+            venue: "POLYMARKET",
+            strategy: "EVENT_BUY_ALL_YES",
+            market: arb.event,
+            yesAsk: 0,
+            noAsk: 0,
+            bidDepth: 0,
+            askDepth: 0,
+            liquidity: 0,
+            profitPerDollar: grossEdge,
+            numOutcomes: outcomes.length,
+            sumAsks: arb.sumBestAsk,
+          },
+          lob_metrics: {
+            topBookDepthUsd: topDepth,
+            depthWithinProfitableBandUsd: depthWithinBand,
+            edgePersistence: 0,
+          },
+          recent_snapshots: snapshots,
+        });
+      }
+    }
 
-    const edgeStrengthScaled = clamp(expectedNetEdge / 0.05, 0, 1);
-    const recommendedCap = this.state.settings.bankrollUsd * Math.min(
-      MODEL_MAX_CAP_RATIO,
-      fillProb * edgeStrengthScaled
-    );
+    if (kalshiData) {
+      for (const arb of kalshiData.binaryArbs) {
+        if (arb.type !== "BUY_BOTH" || arb.yesAsk <= 0 || arb.noAsk <= 0) continue;
+        const id = `kalshi-binary-${arb.ticker}`;
+        const sumAsks = arb.yesAsk + arb.noAsk;
+        const grossEdge = (1 - sumAsks) / Math.max(sumAsks, 0.0001);
+        if (grossEdge <= 0) continue;
+        const snapshots = this.recordSnapshot(id, grossEdge);
+        items.push({
+          id,
+          opportunity_row: {
+            id,
+            venue: "KALSHI",
+            strategy: "BINARY_BUY_BOTH",
+            market: arb.market,
+            yesAsk: arb.yesAsk,
+            noAsk: arb.noAsk,
+            bidDepth: 0,
+            askDepth: 0,
+            liquidity: arb.liquidity || 0,
+            profitPerDollar: grossEdge,
+            numOutcomes: 2,
+            sumAsks,
+          },
+          lob_metrics: {
+            topBookDepthUsd: arb.liquidity || 0,
+            depthWithinProfitableBandUsd: (arb.liquidity || 0) * 0.02,
+            edgePersistence: 0,
+          },
+          recent_snapshots: snapshots,
+        });
+      }
 
-    return {
-      expected_slippage: Math.max(0, expectedSlippage),
-      fill_prob_20s: fillProb,
-      expected_net_edge: expectedNetEdge,
-      recommended_cap: Math.max(0, recommendedCap),
-    };
+      for (const arb of kalshiData.eventArbs) {
+        if (arb.type !== "BUY_ALL_YES") continue;
+        const outcomes = arb.outcomes.filter((o) => o.yesAsk > 0 && !!o.ticker);
+        if (outcomes.length < 2) continue;
+        const id = `kalshi-event-${arb.eventTicker}`;
+        const grossEdge = (1 - arb.sumYesAsks) / Math.max(arb.sumYesAsks, 0.0001);
+        if (grossEdge <= 0) continue;
+        const snapshots = this.recordSnapshot(id, grossEdge);
+        items.push({
+          id,
+          opportunity_row: {
+            id,
+            venue: "KALSHI",
+            strategy: "EVENT_BUY_ALL_YES",
+            market: arb.eventTitle,
+            yesAsk: 0,
+            noAsk: 0,
+            bidDepth: 0,
+            askDepth: 0,
+            liquidity: outcomes.length * 1500,
+            profitPerDollar: grossEdge,
+            numOutcomes: outcomes.length,
+            sumAsks: arb.sumYesAsks,
+          },
+          lob_metrics: {
+            topBookDepthUsd: outcomes.length * 1500,
+            depthWithinProfitableBandUsd: outcomes.length * 800,
+            edgePersistence: 0,
+          },
+          recent_snapshots: snapshots,
+        });
+      }
+    }
+
+    if (items.length === 0) {
+      return new Map<string, ModelDecision>();
+    }
+
+    try {
+      const decisions = await this.modelClient.evaluateBatch(items, this.state.settings.bankrollUsd);
+      return new Map(decisions.map((d) => [d.id, d.decision]));
+    } catch (err: any) {
+      warnings.push(`Model v1 bridge failed: ${err?.message || err}`);
+      return new Map<string, ModelDecision>();
+    }
   }
 
-  private buildPolymarketBinaryPlan(arb: BinaryArbOpportunity): TradePlan | null {
+  private buildPolymarketBinaryPlan(arb: BinaryArbOpportunity, decision?: ModelDecision): TradePlan | null {
     if (arb.type !== "BUY_BOTH") return null;
     if (!arb.yesTokenId || !arb.noTokenId || arb.yesAsk <= 0 || arb.noAsk <= 0) return null;
 
@@ -492,15 +678,10 @@ export class ArbitrageExecutionService {
     if (grossEdge <= 0) return null;
 
     const id = `poly-binary-${arb.conditionId}`;
-    const snapshots = this.recordSnapshot(id, grossEdge);
+    const snapshots = this.snapshots.get(id) || [];
     const topDepth = (arb.bidDepth || 0) + (arb.askDepth || 0);
     const profitableDepth = Math.min(arb.bidDepth || 0, arb.askDepth || 0);
-
-    const decision = this.modelDecision(grossEdge, {
-      topBookDepthUsd: topDepth,
-      depthWithinProfitableBandUsd: profitableDepth,
-      edgePersistence: 0,
-    }, snapshots);
+    if (!decision) return null;
 
     const recommendedCapUsd = decision.recommended_cap;
     const contracts = roundContracts(recommendedCapUsd / (arb.yesAsk + arb.noAsk));
@@ -550,7 +731,7 @@ export class ArbitrageExecutionService {
     });
   }
 
-  private buildPolymarketEventPlan(arb: NegRiskArbOpportunity): TradePlan | null {
+  private buildPolymarketEventPlan(arb: NegRiskArbOpportunity, decision?: ModelDecision): TradePlan | null {
     if (arb.type !== "BUY_ALL_YES") return null;
     const outcomes = arb.outcomes.filter((o) => o.bestAsk > 0 && !!o.yesTokenId && !!o.conditionId);
     if (outcomes.length < 2) return null;
@@ -559,16 +740,12 @@ export class ArbitrageExecutionService {
     if (grossEdge <= 0) return null;
 
     const id = `poly-event-${arb.negRiskMarketId}`;
-    const snapshots = this.recordSnapshot(id, grossEdge);
+    const snapshots = this.snapshots.get(id) || [];
 
     const depthWithinBand = outcomes.reduce((sum, o) => sum + Math.max(0, Math.min(o.bestAsk, o.bestBid)), 0) * 1000;
     const topDepth = outcomes.reduce((sum, o) => sum + Math.max(o.bestAsk, o.bestBid) * 1000, 0);
 
-    const decision = this.modelDecision(grossEdge, {
-      topBookDepthUsd: topDepth,
-      depthWithinProfitableBandUsd: depthWithinBand,
-      edgePersistence: 0,
-    }, snapshots);
+    if (!decision) return null;
 
     const recommendedCapUsd = decision.recommended_cap;
     const contracts = roundContracts(recommendedCapUsd / arb.sumBestAsk);
@@ -606,7 +783,7 @@ export class ArbitrageExecutionService {
     });
   }
 
-  private buildKalshiBinaryPlan(arb: KalshiBinaryMispricing): TradePlan | null {
+  private buildKalshiBinaryPlan(arb: KalshiBinaryMispricing, decision?: ModelDecision): TradePlan | null {
     if (arb.type !== "BUY_BOTH") return null;
     if (arb.yesAsk <= 0 || arb.noAsk <= 0) return null;
 
@@ -614,14 +791,9 @@ export class ArbitrageExecutionService {
     if (grossEdge <= 0) return null;
 
     const id = `kalshi-binary-${arb.ticker}`;
-    const snapshots = this.recordSnapshot(id, grossEdge);
+    const snapshots = this.snapshots.get(id) || [];
     const depthWithinBand = (arb.liquidity || 0) * 0.02;
-
-    const decision = this.modelDecision(grossEdge, {
-      topBookDepthUsd: arb.liquidity || 0,
-      depthWithinProfitableBandUsd: depthWithinBand,
-      edgePersistence: 0,
-    }, snapshots);
+    if (!decision) return null;
 
     const recommendedCapUsd = decision.recommended_cap;
     const contracts = roundContracts(recommendedCapUsd / (arb.yesAsk + arb.noAsk));
@@ -673,7 +845,7 @@ export class ArbitrageExecutionService {
     });
   }
 
-  private buildKalshiEventPlan(arb: KalshiEventGroupArb): TradePlan | null {
+  private buildKalshiEventPlan(arb: KalshiEventGroupArb, decision?: ModelDecision): TradePlan | null {
     if (arb.type !== "BUY_ALL_YES") return null;
     const outcomes = arb.outcomes.filter((o) => o.yesAsk > 0 && !!o.ticker);
     if (outcomes.length < 2) return null;
@@ -682,16 +854,12 @@ export class ArbitrageExecutionService {
     if (grossEdge <= 0) return null;
 
     const id = `kalshi-event-${arb.eventTicker}`;
-    const snapshots = this.recordSnapshot(id, grossEdge);
+    const snapshots = this.snapshots.get(id) || [];
 
     const topDepth = outcomes.length * 1500;
     const depthWithinBand = outcomes.length * 800;
 
-    const decision = this.modelDecision(grossEdge, {
-      topBookDepthUsd: topDepth,
-      depthWithinProfitableBandUsd: depthWithinBand,
-      edgePersistence: 0,
-    }, snapshots);
+    if (!decision) return null;
 
     const recommendedCapUsd = decision.recommended_cap;
     const contracts = roundContracts(recommendedCapUsd / arb.sumYesAsks);

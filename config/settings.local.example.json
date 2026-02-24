@@ -18,5 +18,14 @@
       "bearerToken": "",
       "orderEndpoint": ""
     }
+  },
+  "python": {
+    "pythonExecutable": "python",
+    "modelBridgePath": "python/model_v1_bridge.py",
+    "miguelScriptsDir": "python",
+    "miguel": {
+      "pollIntervalSec": 30,
+      "minPairs": 50
+    }
   }
 }

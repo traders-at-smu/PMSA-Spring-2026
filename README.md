@@ -1,82 +1,31 @@
-# Polymarket + Kalshi Arbitrage Trader
+# Polymarket + Kalshi Arbitrage Dashboard
 
-This project scans Polymarket and Kalshi for cross-market/arbitrage opportunities, ranks opportunities with a decision model, and supports both:
+Cross-venue arbitrage scanner/executor with a React dashboard, TypeScript backend, and a Python decision-model bridge (`model_v1.py`).
 
-- `PAPER` execution (simulated fills + expected PnL accounting)
-- `LIVE` execution (uses configured API keys/wallet credentials)
+## Current architecture
 
-It also includes a dashboard with a dedicated **Execution** tab for refresh, monitoring, and trade actuation.
-
-## What The Bot Does
-
-1. Fetches tradable markets from Polymarket and Kalshi.
-2. Detects arbitrage patterns:
-- binary mispricing (`YES + NO != 1`)
-- event-group / basket mispricing (`sum(YES asks) < 1`)
-3. Scores opportunities with a heuristic decision engine that outputs:
-- expected slippage
-- 20s fill probability
-- expected net edge
-- recommended cap
-4. Produces executable trade plans.
-5. Executes in:
-- `PAPER` mode: records simulated fills and paper PnL
-- `LIVE` mode: sends orders through configured venue APIs
-
-## Key Features
-
-- Non-blocking execution-state API (dashboard does not hang during long refreshes)
-- Refresh sequencing + duration metadata
-- Health endpoints for runtime diagnosis
-- API rate-limit mitigation (retry + backoff, slower request pacing)
-- Contract links in Execution table (open contract directly)
-- JSON-based runtime config with local key override
-
-## Project Layout
-
-- `src/dashboard/server.ts` - Dashboard/API server
-- `src/dashboard-ui/` - React dashboard frontend
-- `src/services/arbitrageExecutionService.ts` - Execution planning + actuation service
-- `src/screener.ts` - Polymarket screener
-- `src/kalshiScreener.ts` - Kalshi screener
-- `src/runtimeSettings.ts` - Unified runtime settings loader
-- `src/scripts/smokeDashboard.ts` - Runtime smoke test
-- `config/settings.json` - Committed default settings
-- `config/settings.local.json` - Local secrets override (gitignored)
+- Node/TypeScript API server: `src/dashboard/server.ts`
+- React dashboard (Vite): `src/dashboard-ui/`
+- Execution planner + executor: `src/services/arbitrageExecutionService.ts`
+- Python model bridge client: `src/services/pythonModelClient.ts`
+- Miguel pipeline service (pairs/quotes/raw opportunities): `src/services/miguelService.ts`
+- Python scripts:
+  - `model_v1.py` (standalone demo + core model function)
+  - `python/model_v1_bridge.py` (JSON stdin/stdout bridge used by backend)
+  - `python/build_pairs.py`
+  - `python/live_quotes.py`
+  - `python/raw_boxed_filter.py`
 
 ## Requirements
 
 - Node.js 18+
 - npm
-- Internet access to venue APIs
+- Python 3.11+ on PATH as `python` (or configure `python.pythonExecutable`)
+- Internet access to Polymarket/Kalshi APIs
 
-## Configuration
+## Setup
 
-### 1) Base config (committed)
-
-Edit `config/settings.json` for non-secret defaults.
-
-### 2) Local secrets (recommended)
-
-1. Copy:
-
-```bash
-cp config/settings.local.example.json config/settings.local.json
-```
-
-2. Fill keys in `config/settings.local.json`:
-- Polymarket wallet credentials
-- Kalshi API credentials
-
-`config/settings.local.json` is ignored by git.
-
-### 3) Precedence
-
-Runtime precedence is:
-
-`defaults < config/settings.json < config/settings.local.json < environment variables`
-
-## Install
+1. Install dependencies:
 
 ```bash
 npm install
@@ -84,66 +33,87 @@ cd src/dashboard-ui && npm install
 cd ../..
 ```
 
-## Boot The Dashboard + Trader
+2. Configure runtime settings:
 
-Run production-like dashboard stack (build UI then start API server):
+- Base defaults: `config/settings.json`
+- Local overrides/secrets: `config/settings.local.json` (gitignored)
+- Copy starter template from `config/settings.local.example.json`
+
+Precedence:
+
+`defaults < config/settings.json < config/settings.local.json < env vars`
+
+## Run
+
+### Dashboard (API + built UI)
 
 ```bash
 npm run dashboard
 ```
 
-On boot it logs:
-- settings files loaded
-- execution mode
-- refresh start seq
-- localhost and LAN URLs
-
-Open the dashboard at the printed URL, then go to **Execution** tab.
-
-## Development Modes
-
-### Split frontend/backend dev
-
-Backend:
+### Backend only
 
 ```bash
 npm run dashboard:server
 ```
 
-Frontend (Vite dev server with `/api` proxy):
+### Frontend dev server
 
 ```bash
 npm run dashboard:dev
 ```
 
-## Validation / Testing
-
-### Build checks
+## Build and validation
 
 ```bash
 npm run build
 npm run dashboard:build
+npm run dashboard:smoke
+python -m py_compile model_v1.py python/model_v1_bridge.py python/build_pairs.py python/live_quotes.py python/raw_boxed_filter.py
 ```
 
-### Runtime smoke test
+## Python model usage
+
+### Standalone console demo
 
 ```bash
-npm run dashboard:smoke
+python model_v1.py
 ```
 
-Smoke test verifies:
-- `/api/health` comes up
-- execution state endpoint responds quickly
-- refresh endpoint returns immediately
-- state schema is valid and refresh sequence advances
+Reads `opportunities_raw.csv` and prints model outputs (`expected_slippage`, `fill_prob_20s`, `expected_net_edge`, `recommended_cap`).
 
-## Important API Endpoints
+### Backend model authority
+
+Execution planning calls Python through `python/model_v1_bridge.py`. Health/status exposed in API and execution state.
+
+## Miguel pipeline commands
+
+```bash
+npm run miguel:pairs
+npm run miguel:quotes:once
+npm run miguel:quotes
+npm run miguel:raw
+```
+
+Output files:
+
+- `pairs.csv`
+- `python/data/live_quotes.csv`
+- `opportunities_raw.csv`
+- `python/data/model_v1_section_d.json`
+
+## API endpoints (current)
+
+### Core health
 
 - `GET /api/health`
 - `GET /api/arbitrage/execution/health`
+
+### Execution
+
 - `GET /api/arbitrage/execution/state`
-- `POST /api/arbitrage/execution/refresh`
 - `POST /api/arbitrage/execution/settings`
+- `POST /api/arbitrage/execution/refresh`
 - `POST /api/arbitrage/execution/execute/:planId`
 - `POST /api/arbitrage/execution/execute-top`
 - `GET /api/arbitrage/execution/export/plans.csv`
@@ -151,60 +121,23 @@ Smoke test verifies:
 - `GET /api/arbitrage/execution/export/history.json`
 - `GET /api/arbitrage/execution/export/history.jsonl`
 
-## Exporting Arbitrage + Execution Logs
+### Model v1 (Python bridge)
 
-From the **Execution** tab you can now export:
+- `GET /api/model-v1/health`
+- `POST /api/model-v1/evaluate`
 
-- `Export Plans CSV` - current arbitrage table snapshot
-- `Export Log CSV` - in-memory recent execution history
-- `Export Log JSON` - in-memory recent execution history as JSON
+### Miguel pipeline
 
-Persistent execution logs are also written on disk as newline-delimited JSON:
+- `GET /api/miguel/status`
+- `POST /api/miguel/pairs/rebuild`
+- `POST /api/miguel/live-quotes/start`
+- `POST /api/miguel/live-quotes/stop`
+- `POST /api/miguel/opportunities/rebuild`
+- `GET /api/miguel/opportunities/latest`
+- `GET /api/miguel/model-v1/top?limit=3`
 
-- `logs/execution-history.jsonl`
+## Notes
 
-## Execution Modes
-
-### PAPER
-
-- No real orders sent
-- Uses expected net PnL estimates
-- Safe default for tuning
-
-### LIVE
-
-- Requires venue credentials configured
-- Readiness shown in UI and health payload
-- Orders are blocked when required credentials are missing
-
-## Troubleshooting
-
-### `Failed to load execution state` / timeout
-
-- Confirm backend is running: `GET /api/health`
-- Use smoke test: `npm run dashboard:smoke`
-- Check execution tab phase (`Bootstrapping/Refreshing/Degraded/Ready`)
-
-### `Kalshi refresh failed: 429`
-
-- Bot now uses retry+backoff and slower request pacing.
-- If persistent:
-- reduce refresh frequency (`dashboard.refreshIntervalMs` in settings)
-- ensure no other process is hitting Kalshi with same credentials/IP
-
-### `Ready plans: 0`
-
-This can be valid. Common causes:
-- no current opportunities above edge threshold
-- markets filtered as closed/not tradable
-- bankroll/min-edge settings too strict
-
-## Safety Notes
-
-- Start in `PAPER` mode first.
-- Do not store production keys in committed files.
-- Use `config/settings.local.json` for local secrets.
-
-## License / Disclaimer
-
-This software is for educational/research purposes. You are responsible for exchange/API compliance, key security, and trading risk.
+- Start in `PAPER` mode before enabling `LIVE`.
+- Keep real keys in `config/settings.local.json` only.
+- Persistent execution log path: `logs/execution-history.jsonl`.

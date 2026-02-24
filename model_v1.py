@@ -125,6 +125,27 @@ def derive_lob_metrics(row: dict) -> dict:
             "edgePersistence": 0.0,
         }
 
+def describe_legs(row: dict) -> str:
+    """
+    Human-readable leg routing for demo output.
+    """
+    direction = str(row.get("best_direction", "")).upper()
+    if direction == "POLY_YES_KAL_NO":
+        return "POLY YES + KAL NO"
+    if direction == "POLY_NO_KAL_YES":
+        return "POLY NO + KAL YES"
+
+    venue = str(row.get("venue", "")).upper()
+    strategy = str(row.get("strategy", "")).upper()
+    if strategy == "BINARY_BUY_BOTH":
+        if venue == "POLYMARKET":
+            return "POLY YES + POLY NO"
+        if venue == "KALSHI":
+            return "KAL YES + KAL NO"
+    if strategy == "EVENT_BUY_ALL_YES":
+        return "ALL YES OUTCOMES"
+    return "N/A"
+
 
 # ---------- Core Decision Function ----------
 
@@ -233,7 +254,7 @@ if __name__ == "__main__":
 
     for i, row in enumerate(rows):
         lob = derive_lob_metrics(row)
-        snapshots = snapshot_scenarios[i]
+        snapshots = snapshot_scenarios[i % len(snapshot_scenarios)]
         gross_edge = calc_gross_edge(float(row["sumAsks"]))
         decision = model_decision(row, lob, snapshots)
 
@@ -255,6 +276,7 @@ if __name__ == "__main__":
         print(f"\n{'-' * 90}")
         print(f"  Opportunity {i + 1}: {row.get('market', 'N/A')}")
         print(f"  Venue: {venue}  |  Strategy: {strategy}")
+        print(f"  Legs: {describe_legs(row)}")
         print(f"{'-' * 90}")
 
         print(f"\n  INPUTS:")

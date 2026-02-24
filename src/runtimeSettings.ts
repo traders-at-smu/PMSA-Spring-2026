@@ -48,6 +48,15 @@ export interface RuntimeSettings {
   execution: ExecutionSettingsFile;
   apiKeys: ApiKeysSettings;
   externalApis: ExternalApiSettings;
+  python: {
+    pythonExecutable: string;
+    modelBridgePath: string;
+    miguelScriptsDir: string;
+    miguel: {
+      pollIntervalSec: number;
+      minPairs: number;
+    };
+  };
 }
 
 const defaults: RuntimeSettings = {
@@ -86,6 +95,15 @@ const defaults: RuntimeSettings = {
     clobHttpUrl: "https://clob.polymarket.com",
     dataApiUrl: "https://data-api.polymarket.com",
     kalshiApiUrl: "https://api.elections.kalshi.com/trade-api/v2",
+  },
+  python: {
+    pythonExecutable: "python",
+    modelBridgePath: "python/model_v1_bridge.py",
+    miguelScriptsDir: "python",
+    miguel: {
+      pollIntervalSec: 30,
+      minPairs: 50,
+    },
   },
 };
 
@@ -158,6 +176,11 @@ function envOverride(settings: RuntimeSettings): RuntimeSettings {
   if (process.env.CLOB_HTTP_URL) withEnv.externalApis.clobHttpUrl = process.env.CLOB_HTTP_URL;
   if (process.env.DATA_API_URL) withEnv.externalApis.dataApiUrl = process.env.DATA_API_URL;
   if (process.env.KALSHI_API_URL) withEnv.externalApis.kalshiApiUrl = process.env.KALSHI_API_URL;
+  if (process.env.PYTHON_EXECUTABLE) withEnv.python.pythonExecutable = process.env.PYTHON_EXECUTABLE;
+  if (process.env.MODEL_V1_BRIDGE_PATH) withEnv.python.modelBridgePath = process.env.MODEL_V1_BRIDGE_PATH;
+  if (process.env.MIGUEL_SCRIPTS_DIR) withEnv.python.miguelScriptsDir = process.env.MIGUEL_SCRIPTS_DIR;
+  if (process.env.MIGUEL_POLL_INTERVAL_SEC) withEnv.python.miguel.pollIntervalSec = Number(process.env.MIGUEL_POLL_INTERVAL_SEC);
+  if (process.env.MIGUEL_MIN_PAIRS) withEnv.python.miguel.minPairs = Number(process.env.MIGUEL_MIN_PAIRS);
 
   return withEnv;
 }
@@ -174,6 +197,18 @@ function validateShape(settings: RuntimeSettings): void {
   }
   if (!Number.isFinite(settings.execution.minNetEdge) || settings.execution.minNetEdge < 0) {
     throw new Error("execution.minNetEdge must be >= 0");
+  }
+  if (!settings.python.pythonExecutable) {
+    throw new Error("python.pythonExecutable must be provided");
+  }
+  if (!settings.python.modelBridgePath) {
+    throw new Error("python.modelBridgePath must be provided");
+  }
+  if (!Number.isFinite(settings.python.miguel.pollIntervalSec) || settings.python.miguel.pollIntervalSec < 1) {
+    throw new Error("python.miguel.pollIntervalSec must be >= 1");
+  }
+  if (!Number.isFinite(settings.python.miguel.minPairs) || settings.python.miguel.minPairs < 1) {
+    throw new Error("python.miguel.minPairs must be >= 1");
   }
 }
 

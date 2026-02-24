@@ -8,6 +8,8 @@ import { getTradeAlerts, getAlertHistory } from "../services/tradeAlertService";
 import { ArbitrageScreener } from "../screener";
 import { KalshiScreener } from "../kalshiScreener";
 import { ArbitrageExecutionService } from "../services/arbitrageExecutionService";
+import { PythonModelClient } from "../services/pythonModelClient";
+import { MiguelService } from "../services/miguelService";
 
 const app = express();
 const runtime = getSettings();
@@ -48,6 +50,8 @@ const kalshiScreener = new KalshiScreener();
 let kalshiScreenerCache: { data: any; expires: number } | null = null;
 const KALSHI_SCREENER_TTL = 60 * 1000; // 60s
 const executionService = new ArbitrageExecutionService();
+const modelClient = new PythonModelClient();
+const miguelService = new MiguelService(modelClient);
 
 function getLocalIpv4Urls(port: number): string[] {
   const interfaces = os.networkInterfaces();
@@ -254,9 +258,91 @@ app.get("/api/arbitrage/execution/health", (_req, res) => {
   try {
     res.json({
       ...executionService.getHealth(),
+      model: executionService.getState().modelInvocation,
       uptimeMs: Date.now() - BOOT_AT,
       settingsRedacted: getRedactedSettings(),
     });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get("/api/model-v1/health", async (_req, res) => {
+  try {
+    const health = await modelClient.health();
+    res.status(health.ok ? 200 : 500).json(health);
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/model-v1/evaluate", async (req, res) => {
+  try {
+    const items = Array.isArray(req.body?.items) ? req.body.items : [];
+    const bankrollUsd = Number(req.body?.bankrollUsd ?? runtime.execution.bankrollUsd);
+    const decisions = await modelClient.evaluateBatch(items, bankrollUsd);
+    res.json({ ok: true, decisions, model: modelClient.getStatus() });
+  } catch (err: any) {
+    res.status(400).json({ ok: false, error: err?.message || String(err) });
+  }
+});
+
+app.get("/api/miguel/status", (_req, res) => {
+  try {
+    res.json({ ok: true, ...miguelService.getStatus() });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/miguel/pairs/rebuild", async (_req, res) => {
+  try {
+    const result = await miguelService.rebuildPairs();
+    res.json({ ok: true, ...result, status: miguelService.getStatus() });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/miguel/live-quotes/start", (_req, res) => {
+  try {
+    res.json({ ok: true, ...miguelService.startLiveQuotes(), status: miguelService.getStatus() });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/miguel/live-quotes/stop", (_req, res) => {
+  try {
+    res.json({ ok: true, ...miguelService.stopLiveQuotes(), status: miguelService.getStatus() });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/miguel/opportunities/rebuild", async (_req, res) => {
+  try {
+    const result = await miguelService.rebuildOpportunities();
+    res.json({ ok: true, ...result, status: miguelService.getStatus() });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get("/api/miguel/opportunities/latest", (req, res) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || "25"), 10) || 25, 1), 200);
+    res.json({ ok: true, rows: miguelService.getLatestOpportunities(limit), status: miguelService.getStatus() });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get("/api/miguel/model-v1/top", async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || "3"), 10) || 3, 1), 10);
+    const rows = await miguelService.evaluateModelTop(limit);
+    res.json({ ok: true, rows, model: modelClient.getStatus() });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err.message });
   }

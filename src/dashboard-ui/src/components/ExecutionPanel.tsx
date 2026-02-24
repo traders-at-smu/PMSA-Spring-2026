@@ -38,6 +38,11 @@ interface ExecutionRecord {
 
 interface ExecutionState {
   settings: ExecutionSettings;
+  modelEngine?: string;
+  modelInvocation?: {
+    lastInvocationAt: string | null;
+    lastInvocationError: string | null;
+  };
   plans: TradePlan[];
   history: ExecutionRecord[];
   paperPnlUsd: number;
@@ -53,6 +58,13 @@ interface ExecutionState {
     kalshiReady: boolean;
     reasons: string[];
   };
+}
+
+interface MiguelStatus {
+  running: boolean;
+  pairsCount: number;
+  opportunitiesCount: number;
+  logs: string[];
 }
 
 const money = (n: number) =>
@@ -90,6 +102,8 @@ function toUserError(err: unknown): string {
 
 export function ExecutionPanel({ paused }: { paused: boolean }) {
   const [state, setState] = useState<ExecutionState | null>(null);
+  const [miguelStatus, setMiguelStatus] = useState<MiguelStatus | null>(null);
+  const [sectionDRows, setSectionDRows] = useState<any[]>([]);
   const [phase, setPhase] = useState<PanelPhase>("bootstrapping");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,17 +141,30 @@ export function ExecutionPanel({ paused }: { paused: boolean }) {
     }
   }, [scheduleRetry, state]);
 
+  const loadMiguel = useCallback(async () => {
+    try {
+      const status = await api<any>("/api/miguel/status", undefined, 20_000);
+      setMiguelStatus(status);
+      const top = await api<any>("/api/miguel/model-v1/top?limit=3", undefined, 30_000);
+      setSectionDRows(Array.isArray(top?.rows) ? top.rows : []);
+    } catch {
+      // best effort
+    }
+  }, []);
+
   useEffect(() => {
     if (paused) return;
     void loadState();
+    void loadMiguel();
     const poll = window.setInterval(() => {
       void loadState();
+      void loadMiguel();
     }, 20_000);
     return () => {
       window.clearInterval(poll);
       clearRetry();
     };
-  }, [paused, loadState]);
+  }, [paused, loadState, loadMiguel]);
 
   const readyPlans = useMemo(() => state?.plans.filter((p) => p.status === "READY") ?? [], [state]);
 
@@ -198,6 +225,20 @@ export function ExecutionPanel({ paused }: { paused: boolean }) {
         45_000
       );
       await loadState();
+    } catch (err) {
+      setError(toUserError(err));
+      setPhase("degraded");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const runMiguelAction = async (url: string) => {
+    setLoading(true);
+    try {
+      await api(url, { method: "POST" }, 90_000);
+      await loadMiguel();
+      setError(null);
     } catch (err) {
       setError(toUserError(err));
       setPhase("degraded");
@@ -307,6 +348,7 @@ export function ExecutionPanel({ paused }: { paused: boolean }) {
         </div>
 
         <div className="mt-3 flex flex-wrap gap-6 text-sm text-zinc-400">
+          <span>Model: <span className="text-zinc-200">{state.modelEngine || "python:model_v1"}</span></span>
           <span>Phase: <span className="text-zinc-200">{statusLabel}</span></span>
           <span>Ready plans: <span className="text-zinc-200">{readyPlans.length}</span></span>
           <span>Paper PnL: <span className={state.paperPnlUsd >= 0 ? "text-emerald-400" : "text-red-400"}>{money(state.paperPnlUsd)}</span></span>
@@ -314,12 +356,61 @@ export function ExecutionPanel({ paused }: { paused: boolean }) {
           {state.lastRefreshDurationMs != null && <span>Last duration: <span className="text-zinc-300">{state.lastRefreshDurationMs}ms</span></span>}
           {state.lastRefreshAt && <span>Last refresh: <span className="text-zinc-300">{new Date(state.lastRefreshAt).toLocaleTimeString()}</span></span>}
         </div>
+        {state.modelInvocation && (
+          <div className="mt-2 text-xs text-zinc-500">
+            Model last call: {state.modelInvocation.lastInvocationAt ? new Date(state.modelInvocation.lastInvocationAt).toLocaleTimeString() : "never"}
+            {state.modelInvocation.lastInvocationError ? ` | error: ${state.modelInvocation.lastInvocationError}` : ""}
+          </div>
+        )}
 
         {(error || state.refreshError) && <div className="mt-3 text-sm text-red-400">{error || state.refreshError}</div>}
 
         {state.liveReadiness.reasons.length > 0 && (
           <div className="mt-3 text-xs text-zinc-500">{state.liveReadiness.reasons.join(" | ")}</div>
         )}
+      </div>
+
+      <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-medium text-zinc-200 mr-2">Miguel Pipeline + Section D</h3>
+          <button onClick={() => runMiguelAction("/api/miguel/pairs/rebuild")} disabled={loading} className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">Rebuild Pairs</button>
+          <button onClick={() => runMiguelAction("/api/miguel/live-quotes/start")} disabled={loading} className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">Start Quotes</button>
+          <button onClick={() => runMiguelAction("/api/miguel/live-quotes/stop")} disabled={loading} className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">Stop Quotes</button>
+          <button onClick={() => runMiguelAction("/api/miguel/opportunities/rebuild")} disabled={loading} className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">Rebuild Opportunities</button>
+        </div>
+        <div className="mt-2 text-xs text-zinc-400">
+          Running: <span className="text-zinc-200">{miguelStatus?.running ? "yes" : "no"}</span>
+          {" | "}Pairs: <span className="text-zinc-200">{miguelStatus?.pairsCount ?? 0}</span>
+          {" | "}Opportunities: <span className="text-zinc-200">{miguelStatus?.opportunitiesCount ?? 0}</span>
+        </div>
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-zinc-500">
+                <th className="text-left py-1">Market</th>
+                <th className="text-right py-1">Raw Edge</th>
+                <th className="text-right py-1">Slippage</th>
+                <th className="text-right py-1">Fill 20s</th>
+                <th className="text-right py-1">Net Edge</th>
+                <th className="text-right py-1">Cap</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sectionDRows.length === 0 ? (
+                <tr><td colSpan={6} className="py-2 text-zinc-500">No Section D rows yet.</td></tr>
+              ) : sectionDRows.map((row) => (
+                <tr key={row.id} className="border-t border-zinc-800/50">
+                  <td className="py-1 text-zinc-300">{row.market || row.pair_id}</td>
+                  <td className="py-1 text-right text-zinc-300">{((Number(row.edge_raw) || 0) * 100).toFixed(2)}%</td>
+                  <td className="py-1 text-right text-zinc-300">{(((row.modelDecision?.expected_slippage ?? 0) as number) * 100).toFixed(3)}%</td>
+                  <td className="py-1 text-right text-zinc-300">{(((row.modelDecision?.fill_prob_20s ?? 0) as number) * 100).toFixed(1)}%</td>
+                  <td className="py-1 text-right text-amber-300">{(((row.modelDecision?.expected_net_edge ?? 0) as number) * 100).toFixed(3)}%</td>
+                  <td className="py-1 text-right text-emerald-400">{money(Number(row.modelDecision?.recommended_cap ?? 0))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div className="rounded-xl border border-zinc-800 overflow-hidden">
