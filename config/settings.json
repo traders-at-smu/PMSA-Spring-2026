@@ -1,0 +1,38 @@
+{
+  "dashboard": {
+    "port": 3456,
+    "bindHost": "0.0.0.0",
+    "initialRefreshOnBoot": true,
+    "refreshIntervalMs": 60000
+  },
+  "execution": {
+    "mode": "PAPER",
+    "autoExecute": false,
+    "bankrollUsd": 10000,
+    "minNetEdge": 0.005,
+    "defaultLegTickSize": "0.01",
+    "kalshiUseMakerFees": false
+  },
+  "apiKeys": {
+    "polymarket": {
+      "privateKey": "",
+      "proxyWalletAddress": "",
+      "rpcUrl": ""
+    },
+    "kalshi": {
+      "apiUrl": "https://api.elections.kalshi.com/trade-api/v2",
+      "tradingApiUrl": "",
+      "apiKey": "",
+      "apiSecret": "",
+      "apiPassphrase": "",
+      "bearerToken": "",
+      "orderEndpoint": ""
+    }
+  },
+  "externalApis": {
+    "gammaApiUrl": "https://gamma-api.polymarket.com",
+    "clobHttpUrl": "https://clob.polymarket.com",
+    "dataApiUrl": "https://data-api.polymarket.com",
+    "kalshiApiUrl": "https://api.elections.kalshi.com/trade-api/v2"
+  }
+}

@@ -1,8 +1,7 @@
 import axios from "axios";
 import { ClobClient, Side } from "@polymarket/clob-client";
+import { getSettings } from "./runtimeSettings";
 
-const GAMMA_API_URL = process.env.GAMMA_API_URL || "https://gamma-api.polymarket.com";
-const CLOB_HTTP_URL = process.env.CLOB_HTTP_URL || "https://clob.polymarket.com";
 const CHAIN_ID = 137;
 const MIN_LIQUIDITY = 100_000;
 
@@ -30,6 +29,7 @@ interface GammaMarket {
   volume: string;
   volume24hr: number;
   liquidity: string;
+  endDate?: string;
 }
 
 interface SpreadOpportunity {
@@ -49,19 +49,31 @@ interface SpreadOpportunity {
   askDepth?: number;
 }
 
-interface BinaryArbOpportunity {
+export interface BinaryArbOpportunity {
   market: string;
+  slug: string;
+  marketUrl: string;
   conditionId: string;
   yesPrice: number;
   noPrice: number;
+  yesBid: number;
+  yesAsk: number;
+  noBid: number;
+  noAsk: number;
+  yesTokenId: string;
+  noTokenId: string;
+  negRisk: boolean;
   sum: number;
   deviation: number;
   type: "BUY_BOTH" | "SELL_BOTH";
   profitPerDollar: number;
+  bidDepth?: number;
+  askDepth?: number;
 }
 
-interface NegRiskArbOpportunity {
+export interface NegRiskArbOpportunity {
   event: string;
+  eventUrl: string;
   negRiskMarketId: string;
   numOutcomes: number;
   sumMidpoints: number;
@@ -70,12 +82,16 @@ interface NegRiskArbOpportunity {
   type: "BUY_ALL_YES" | "SELL_ALL_YES";
   profitPerDollar: number;
   outcomes: {
+    conditionId: string;
     question: string;
+    slug: string;
+    marketUrl: string;
     groupTitle: string;
     yesPrice: number;
     bestBid: number;
     bestAsk: number;
     spread: number;
+    yesTokenId: string;
   }[];
 }
 
@@ -83,23 +99,39 @@ interface NegRiskArbOpportunity {
 
 export class ArbitrageScreener {
   private gammaApiUrl: string;
+  private clobHttpUrl: string;
   private clobClient: ClobClient | null = null;
   private cachedMarkets: GammaMarket[] | null = null;
+  private fetchInFlight: Promise<GammaMarket[]> | null = null;
+  private cacheExpiry = 0;
+  private readonly CACHE_TTL = 60_000;
 
   constructor() {
-    this.gammaApiUrl = GAMMA_API_URL;
+    const settings = getSettings();
+    this.gammaApiUrl = settings.externalApis.gammaApiUrl;
+    this.clobHttpUrl = settings.externalApis.clobHttpUrl;
   }
 
   private async initClobClient(): Promise<ClobClient> {
     if (this.clobClient) return this.clobClient;
 
     // Unauthenticated client for read-only market data
-    this.clobClient = new ClobClient(CLOB_HTTP_URL, CHAIN_ID);
+    this.clobClient = new ClobClient(this.clobHttpUrl, CHAIN_ID);
     return this.clobClient;
   }
 
   async fetchAllActiveMarkets(): Promise<GammaMarket[]> {
-    if (this.cachedMarkets) return this.cachedMarkets;
+    if (this.cachedMarkets && Date.now() < this.cacheExpiry) return this.cachedMarkets;
+    if (this.fetchInFlight) return this.fetchInFlight;
+    this.fetchInFlight = this.fetchAllActiveMarketsInternal();
+    try {
+      return await this.fetchInFlight;
+    } finally {
+      this.fetchInFlight = null;
+    }
+  }
+
+  private async fetchAllActiveMarketsInternal(): Promise<GammaMarket[]> {
     const allMarkets: GammaMarket[] = [];
     let offset = 0;
     const limit = 500;
@@ -131,7 +163,12 @@ export class ArbitrageScreener {
       offset += limit;
     }
 
-    this.cachedMarkets = allMarkets.filter((m) => m.acceptingOrders);
+    const now = Date.now();
+    this.cachedMarkets = allMarkets.filter((m) => {
+      const endTs = m.endDate ? Date.parse(m.endDate) : Number.POSITIVE_INFINITY;
+      return Boolean(m.active && !m.closed && m.acceptingOrders && endTs > now);
+    });
+    this.cacheExpiry = Date.now() + this.CACHE_TTL;
     return this.cachedMarkets;
   }
 
@@ -226,18 +263,33 @@ export class ArbitrageScreener {
 
       const sum = yesPrice + noPrice;
       const deviation = Math.abs(sum - 1.0);
+      const yesAsk = m.bestAsk || yesPrice;
+      const yesBid = m.bestBid || yesPrice;
+      const noAsk = 1 - yesBid;
+      const noBid = 1 - yesAsk;
 
       // Threshold: >1% deviation is noteworthy
       if (deviation > 0.01) {
         opportunities.push({
           market: m.question,
+          slug: m.slug || "",
+          marketUrl: m.slug ? `https://polymarket.com/event/${m.slug}` : "",
           conditionId: m.conditionId,
           yesPrice,
           noPrice,
+          yesBid,
+          yesAsk,
+          noBid,
+          noAsk,
+          yesTokenId: m.clobTokenIds?.[0] || "",
+          noTokenId: m.clobTokenIds?.[1] || "",
+          negRisk: m.negRisk || false,
           sum,
           deviation,
           type: sum < 1.0 ? "BUY_BOTH" : "SELL_BOTH",
           profitPerDollar: sum < 1.0 ? (1.0 - sum) / sum : (sum - 1.0) / sum,
+          bidDepth: undefined,
+          askDepth: undefined,
         });
       }
     }
@@ -283,12 +335,16 @@ export class ArbitrageScreener {
         sumBestBid += m.bestBid || yesPrice;
 
         outcomeDetails.push({
+          conditionId: m.conditionId,
           question: m.question,
+          slug: m.slug || "",
+          marketUrl: m.slug ? `https://polymarket.com/event/${m.slug}` : "",
           groupTitle: m.groupItemTitle || "",
           yesPrice,
           bestBid: m.bestBid || 0,
           bestAsk: m.bestAsk || 0,
           spread: m.spread || 0,
+          yesTokenId: m.clobTokenIds?.[0] || "",
         });
       }
 
@@ -296,6 +352,7 @@ export class ArbitrageScreener {
       if (sumBestAsk < 0.995) {
         opportunities.push({
           event: groupMarkets[0].question.substring(0, 80),
+          eventUrl: groupMarkets[0].slug ? `https://polymarket.com/event/${groupMarkets[0].slug}` : "",
           negRiskMarketId: negRiskId,
           numOutcomes: groupMarkets.length,
           sumMidpoints: sumMid,
@@ -311,6 +368,7 @@ export class ArbitrageScreener {
       if (sumBestBid > 1.005) {
         opportunities.push({
           event: groupMarkets[0].question.substring(0, 80),
+          eventUrl: groupMarkets[0].slug ? `https://polymarket.com/event/${groupMarkets[0].slug}` : "",
           negRiskMarketId: negRiskId,
           numOutcomes: groupMarkets.length,
           sumMidpoints: sumMid,

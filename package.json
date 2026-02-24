@@ -8,9 +8,11 @@
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "screener": "ts-node src/screener.ts",
-    "dashboard": "ts-node src/dashboard/server.ts",
+    "dashboard": "npm run dashboard:build && npm run dashboard:server",
+    "dashboard:server": "ts-node src/dashboard/server.ts",
     "dashboard:build": "cd src/dashboard-ui && npx vite build",
     "dashboard:dev": "cd src/dashboard-ui && npx vite",
+    "dashboard:smoke": "ts-node src/scripts/smokeDashboard.ts",
     "kalshi-screener": "ts-node src/kalshiScreener.ts"
   },
   "dependencies": {

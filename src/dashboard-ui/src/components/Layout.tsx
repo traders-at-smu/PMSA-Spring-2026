@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 
-type Tab = "traders" | "alerts" | "arbitrage" | "kalshi";
+type Tab = "traders" | "alerts" | "arbitrage" | "kalshi" | "execution";
 
 interface LayoutProps {
   activeTab: Tab;
@@ -15,6 +15,7 @@ const tabs: { id: Tab; label: string }[] = [
   { id: "alerts", label: "Smart Money Alerts" },
   { id: "arbitrage", label: "Arbitrage" },
   { id: "kalshi", label: "Kalshi" },
+  { id: "execution", label: "Execution" },
 ];
 
 export function Layout({ activeTab, onTabChange, paused, onTogglePause, children }: LayoutProps) {

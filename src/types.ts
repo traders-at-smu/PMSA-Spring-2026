@@ -155,16 +155,28 @@ export interface ScreenerResults {
   }[];
   binaryArbs: {
     market: string;
+    slug?: string;
+    marketUrl?: string;
     conditionId: string;
     yesPrice: number;
     noPrice: number;
+    yesBid?: number;
+    yesAsk?: number;
+    noBid?: number;
+    noAsk?: number;
+    yesTokenId?: string;
+    noTokenId?: string;
+    negRisk?: boolean;
     sum: number;
     deviation: number;
     type: "BUY_BOTH" | "SELL_BOTH";
     profitPerDollar: number;
+    bidDepth?: number;
+    askDepth?: number;
   }[];
   negRiskArbs: {
     event: string;
+    eventUrl?: string;
     numOutcomes: number;
     sumMidpoints: number;
     sumBestAsk: number;
@@ -172,12 +184,16 @@ export interface ScreenerResults {
     type: "BUY_ALL_YES" | "SELL_ALL_YES";
     profitPerDollar: number;
     outcomes: {
+      conditionId?: string;
       question: string;
+      slug?: string;
+      marketUrl?: string;
       groupTitle: string;
       yesPrice: number;
       bestBid: number;
       bestAsk: number;
       spread: number;
+      yesTokenId?: string;
     }[];
   }[];
   marketsScanned: number;
@@ -229,10 +245,15 @@ export interface KalshiBinaryMispricing {
   category: string;
   yesPrice: number;
   noPrice: number;
+  yesBid: number;
+  yesAsk: number;
+  noBid: number;
+  noAsk: number;
   sum: number;
   deviation: number;
   type: "BUY_BOTH" | "SELL_BOTH";
   profitPerDollar: number;
+  liquidity: number;
   kalshiUrl: string;
 }
 

@@ -1,22 +1,28 @@
 import axios from "axios";
+import { getSettings } from "./runtimeSettings";
 import {
   KalshiMarket,
   KalshiSpreadOpportunity,
-  KalshiBinaryMispricing,
-  KalshiEventGroupArb,
   KalshiScreenerResults,
 } from "./types";
 
-const KALSHI_API_URL = process.env.KALSHI_API_URL || "https://api.elections.kalshi.com/trade-api/v2";
 const MIN_LIQUIDITY = parseInt(process.env.KALSHI_MIN_LIQUIDITY || "100000");
-const RATE_LIMIT_DELAY = 60; // ms between paginated requests (~16 req/sec, under 20/sec limit)
+const RATE_LIMIT_DELAY = 500; // ms between requests to avoid aggressive polling/rate limits
 
 // ---- Screener ----
 
 export class KalshiScreener {
+  private apiUrl: string;
   private cachedMarkets: KalshiMarket[] | null = null;
   private cacheExpiry: number = 0;
+  private fetchInFlight: Promise<KalshiMarket[]> | null = null;
   private readonly CACHE_TTL = 60_000; // 60 seconds
+  private readonly MAX_RETRIES = 5;
+
+  constructor() {
+    const settings = getSettings();
+    this.apiUrl = settings.externalApis.kalshiApiUrl || settings.apiKeys.kalshi.apiUrl;
+  }
 
   // ---- Market Fetching (cursor-based pagination) ----
 
@@ -24,7 +30,19 @@ export class KalshiScreener {
     if (this.cachedMarkets && Date.now() < this.cacheExpiry) {
       return this.cachedMarkets;
     }
+    if (this.fetchInFlight) {
+      return this.fetchInFlight;
+    }
 
+    this.fetchInFlight = this.fetchAllActiveMarketsInternal();
+    try {
+      return await this.fetchInFlight;
+    } finally {
+      this.fetchInFlight = null;
+    }
+  }
+
+  private async fetchAllActiveMarketsInternal(): Promise<KalshiMarket[]> {
     const allMarkets: KalshiMarket[] = [];
     let cursor: string | undefined = undefined;
 
@@ -35,22 +53,9 @@ export class KalshiScreener {
       };
       if (cursor) params.cursor = cursor;
 
-      let resp: any;
-      try {
-        resp = await axios.get(`${KALSHI_API_URL}/markets`, { params });
-      } catch (err: any) {
-        // Handle rate limiting with retry
-        if (axios.isAxiosError(err) && err.response?.status === 429) {
-          console.log("  Rate limited, waiting 2s...");
-          await new Promise((r) => setTimeout(r, 2000));
-          resp = await axios.get(`${KALSHI_API_URL}/markets`, { params });
-        } else {
-          throw err;
-        }
-      }
-
-      const markets: KalshiMarket[] = resp.data?.markets || [];
-      const nextCursor: string | undefined = resp.data?.cursor;
+      const data: any = await this.getWithRetry(`${this.apiUrl}/markets`, { params });
+      const markets: KalshiMarket[] = data?.markets || [];
+      const nextCursor: string | undefined = data?.cursor;
 
       if (markets.length === 0) break;
       allMarkets.push(...markets);
@@ -74,12 +79,43 @@ export class KalshiScreener {
     return (cents || 0) / 100;
   }
 
+  private isOpenByTime(closeTime?: string): boolean {
+    if (!closeTime) return true;
+    const ts = Date.parse(closeTime);
+    if (!Number.isFinite(ts)) return true;
+    return ts > Date.now();
+  }
+
+  private async getWithRetry<T = any>(
+    url: string,
+    config?: { params?: Record<string, any> }
+  ): Promise<T> {
+    let attempt = 0;
+    let delayMs = 1000;
+    while (true) {
+      try {
+        const resp = await axios.get(url, { ...config, timeout: 15000 });
+        return resp.data as T;
+      } catch (err: any) {
+        const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+        const retryable = status === 429 || status === 503 || status === 504;
+        if (!retryable || attempt >= this.MAX_RETRIES) {
+          throw err;
+        }
+        console.log(`  Kalshi rate-limited/unavailable (${status}), retrying in ${delayMs}ms...`);
+        await new Promise((r) => setTimeout(r, delayMs));
+        attempt += 1;
+        delayMs = Math.min(delayMs * 2, 8000);
+      }
+    }
+  }
+
   private async fetchOrderbook(ticker: string, depth: number = 10) {
     try {
-      const resp = await axios.get(`${KALSHI_API_URL}/markets/${ticker}/orderbook`, {
+      const data: any = await this.getWithRetry(`${this.apiUrl}/markets/${ticker}/orderbook`, {
         params: { depth },
       });
-      return resp.data?.orderbook_fp || resp.data?.orderbook || null;
+      return data?.orderbook_fp || data?.orderbook || null;
     } catch {
       return null;
     }
@@ -93,6 +129,7 @@ export class KalshiScreener {
     const opportunities: KalshiSpreadOpportunity[] = [];
 
     for (const m of markets) {
+      if (!this.isOpenByTime(m.close_time)) continue;
       if ((m.liquidity_dollars || 0) < MIN_LIQUIDITY) continue;
       if (!m.yes_bid_dollars || !m.yes_ask_dollars) continue;
 
@@ -117,7 +154,7 @@ export class KalshiScreener {
         volume24h: (m.volume_24h_fp || 0) / 100, // cents to dollars
         liquidity: m.liquidity_dollars || 0,
         closeTime: m.close_time || "",
-        kalshiUrl: `https://kalshi.com/markets/${m.ticker.toLowerCase()}`,
+        kalshiUrl: `https://kalshi.com/markets/${encodeURIComponent(m.ticker)}`,
       });
     }
 
@@ -153,11 +190,16 @@ export class KalshiScreener {
     const opportunities: KalshiBinaryMispricing[] = [];
 
     for (const m of markets) {
+      if (!this.isOpenByTime(m.close_time)) continue;
       if ((m.liquidity_dollars || 0) < MIN_LIQUIDITY) continue;
       if (!m.yes_bid_dollars || !m.yes_ask_dollars || !m.no_bid_dollars || !m.no_ask_dollars) continue;
 
       const yesMid = this.centsToNorm((m.yes_bid_dollars + m.yes_ask_dollars) / 2);
       const noMid = this.centsToNorm((m.no_bid_dollars + m.no_ask_dollars) / 2);
+      const yesBid = this.centsToNorm(m.yes_bid_dollars);
+      const yesAsk = this.centsToNorm(m.yes_ask_dollars);
+      const noBid = this.centsToNorm(m.no_bid_dollars);
+      const noAsk = this.centsToNorm(m.no_ask_dollars);
       const sum = yesMid + noMid;
       const deviation = Math.abs(sum - 1.0);
 
@@ -169,11 +211,16 @@ export class KalshiScreener {
           category: m.category || "",
           yesPrice: yesMid,
           noPrice: noMid,
+          yesBid,
+          yesAsk,
+          noBid,
+          noAsk,
           sum,
           deviation,
           type: sum < 1.0 ? "BUY_BOTH" : "SELL_BOTH",
           profitPerDollar: sum < 1.0 ? (1.0 - sum) / sum : (sum - 1.0) / sum,
-          kalshiUrl: `https://kalshi.com/markets/${m.ticker.toLowerCase()}`,
+          liquidity: m.liquidity_dollars || 0,
+          kalshiUrl: `https://kalshi.com/markets/${encodeURIComponent(m.ticker)}`,
         });
       }
     }
@@ -191,6 +238,7 @@ export class KalshiScreener {
     // Group by event_ticker
     const groups = new Map<string, KalshiMarket[]>();
     for (const m of markets) {
+      if (!this.isOpenByTime(m.close_time)) continue;
       if (!m.event_ticker) continue;
       const group = groups.get(m.event_ticker) || [];
       group.push(m);
@@ -384,6 +432,43 @@ export class KalshiScreener {
     console.log("=".repeat(80));
     console.log("\n");
   }
+}
+
+export interface KalshiBinaryMispricing {
+  ticker: string;
+  market: string;
+  category: string;
+  yesPrice: number;
+  noPrice: number;
+  yesBid: number;
+  yesAsk: number;
+  noBid: number;
+  noAsk: number;
+  sum: number;
+  deviation: number;
+  type: "BUY_BOTH" | "SELL_BOTH";
+  profitPerDollar: number;
+  liquidity: number;
+  kalshiUrl: string;
+}
+
+export interface KalshiEventGroupArb {
+  eventTicker: string;
+  eventTitle: string;
+  numOutcomes: number;
+  sumYesMidpoints: number;
+  sumYesAsks: number;
+  sumYesBids: number;
+  type: "BUY_ALL_YES" | "SELL_ALL_YES";
+  profitPerDollar: number;
+  outcomes: {
+    ticker: string;
+    title: string;
+    yesPrice: number;
+    yesBid: number;
+    yesAsk: number;
+    spread: number;
+  }[];
 }
 
 // Run as standalone script

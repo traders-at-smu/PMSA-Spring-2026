@@ -1,16 +1,33 @@
 import express from "express";
 import cors from "cors";
 import path from "path";
+import os from "os";
+import { getRedactedSettings, getSettings, getSettingsWithMeta, validateSettingsForMode } from "../runtimeSettings";
 import { getTopTraders, getTraderProfile } from "../services/traderService";
 import { getTradeAlerts, getAlertHistory } from "../services/tradeAlertService";
 import { ArbitrageScreener } from "../screener";
 import { KalshiScreener } from "../kalshiScreener";
+import { ArbitrageExecutionService } from "../services/arbitrageExecutionService";
 
 const app = express();
-const PORT = parseInt(process.env.DASHBOARD_PORT || "3456");
+const runtime = getSettings();
+const settingsMeta = getSettingsWithMeta();
+const PORT = runtime.dashboard.port;
+const BIND_HOST = runtime.dashboard.bindHost;
+const BOOT_AT = Date.now();
 
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  if (req.path.endsWith("/stream")) return next();
+  const timer = setTimeout(() => {
+    if (!res.headersSent) {
+      res.status(504).json({ error: "Request timed out" });
+    }
+  }, 30_000);
+  res.on("finish", () => clearTimeout(timer));
+  next();
+});
 
 // ---- Screener instance (cached) ----
 const screener = new ArbitrageScreener();
@@ -30,6 +47,22 @@ async function getCachedScreenerData() {
 const kalshiScreener = new KalshiScreener();
 let kalshiScreenerCache: { data: any; expires: number } | null = null;
 const KALSHI_SCREENER_TTL = 60 * 1000; // 60s
+const executionService = new ArbitrageExecutionService();
+
+function getLocalIpv4Urls(port: number): string[] {
+  const interfaces = os.networkInterfaces();
+  const urls: string[] = [];
+
+  for (const entries of Object.values(interfaces)) {
+    for (const entry of entries || []) {
+      if (entry.family === "IPv4" && !entry.internal) {
+        urls.push(`http://${entry.address}:${port}`);
+      }
+    }
+  }
+
+  return Array.from(new Set(urls));
+}
 
 async function getCachedKalshiScreenerData() {
   if (kalshiScreenerCache && Date.now() < kalshiScreenerCache.expires) {
@@ -166,15 +199,108 @@ app.get("/api/kalshi/screener/stream", (req, res) => {
   req.on("close", () => clearInterval(interval));
 });
 
+// Arbitrage trade planning/execution state
+app.get("/api/arbitrage/execution/state", async (_req, res) => {
+  try {
+    const state = executionService.getState();
+    if (!state.lastRefreshAt) {
+      executionService.refreshPlansInBackground();
+    }
+    res.json(executionService.getState());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/arbitrage/execution/settings", (req, res) => {
+  try {
+    const state = executionService.updateSettings(req.body || {});
+    res.json(state);
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/api/arbitrage/execution/refresh", async (_req, res) => {
+  try {
+    executionService.refreshPlansInBackground();
+    res.json(executionService.getState());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/arbitrage/execution/execute/:planId", async (req, res) => {
+  try {
+    const record = await executionService.executePlan(req.params.planId);
+    res.json(record);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/arbitrage/execution/execute-top", async (req, res) => {
+  try {
+    const limitRaw = parseInt(req.body?.limit ?? "3");
+    const limit = Math.min(Math.max(limitRaw, 1), 10);
+    const records = await executionService.executeTopPlans(limit);
+    res.json(records);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/arbitrage/execution/health", (_req, res) => {
+  try {
+    res.json({
+      ...executionService.getHealth(),
+      uptimeMs: Date.now() - BOOT_AT,
+      settingsRedacted: getRedactedSettings(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get("/api/health", (_req, res) => {
+  try {
+    res.json({
+      ok: true,
+      uptimeMs: Date.now() - BOOT_AT,
+      execution: executionService.getHealth(),
+      settingsRedacted: getRedactedSettings(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ---- Static files (React SPA) ----
 const staticDir = path.join(__dirname, "../dashboard-ui/dist");
 app.use(express.static(staticDir));
-app.get("*", (req, res) => {
+app.get("/{*splat}", (req, res) => {
   if (req.path.startsWith("/api/")) return res.status(404).json({ error: "Not found" });
   res.sendFile(path.join(staticDir, "index.html"));
 });
 
 // ---- Start ----
-app.listen(PORT, () => {
+app.listen(PORT, BIND_HOST, () => {
+  console.log(`Loaded settings from: ${settingsMeta.loadedFrom.join(", ")}`);
+  console.log(`Mode: ${runtime.execution.mode}`);
+  const liveValidation = validateSettingsForMode(runtime.execution.mode, runtime);
+  if (!liveValidation.ok && liveValidation.reasons.length > 0) {
+    console.log(`Live readiness warnings: ${liveValidation.reasons.join(" | ")}`);
+  }
+  if (runtime.dashboard.initialRefreshOnBoot) {
+    executionService.refreshPlansInBackground();
+    console.log(`Execution refresh started (seq ${executionService.getState().refreshSeq})`);
+  }
+  if (runtime.dashboard.refreshIntervalMs > 0) {
+    setInterval(() => executionService.refreshPlansInBackground(), runtime.dashboard.refreshIntervalMs);
+  }
+  const localUrls = getLocalIpv4Urls(PORT);
   console.log(`Dashboard running at http://localhost:${PORT}`);
+  if (localUrls.length > 0) {
+    console.log(`Dashboard LAN URL(s): ${localUrls.join(", ")}`);
+  }
 });

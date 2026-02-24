@@ -3,3 +3,6 @@ dist/
 .env
 rpcUrls.json
 *.js.map
+
+config/settings.local.json
+
