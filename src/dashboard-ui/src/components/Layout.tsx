@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useState } from "react";
 
 type Tab = "traders" | "alerts" | "arbitrage" | "kalshi" | "execution";
 
@@ -19,6 +19,13 @@ const tabs: { id: Tab; label: string }[] = [
 ];
 
 export function Layout({ activeTab, onTabChange, paused, onTogglePause, children }: LayoutProps) {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100">
       {/* Header */}
@@ -40,7 +47,7 @@ export function Layout({ activeTab, onTabChange, paused, onTogglePause, children
             >
               {paused ? "Paused" : "Live"}
             </button>
-            <span className="text-xs text-zinc-500 font-mono">{new Date().toLocaleTimeString()}</span>
+            <span className="text-xs text-zinc-500 font-mono">{now.toLocaleTimeString()}</span>
           </div>
         </div>
 

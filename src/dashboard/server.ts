@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import os from "os";
+import fs from "fs";
 import { getRedactedSettings, getSettings, getSettingsWithMeta, validateSettingsForMode } from "../runtimeSettings";
 import { getTopTraders, getTraderProfile } from "../services/traderService";
 import { getTradeAlerts, getAlertHistory } from "../services/tradeAlertService";
@@ -17,17 +18,141 @@ const settingsMeta = getSettingsWithMeta();
 const PORT = runtime.dashboard.port;
 const BIND_HOST = runtime.dashboard.bindHost;
 const BOOT_AT = Date.now();
+const KALSHI_REFRESH_INTERVAL_MS = 60_000;
+const LOG_DIR = path.resolve(process.cwd(), "logs");
+const LOG_ARCHIVE_DIR = path.join(LOG_DIR, "archive");
+let RUNTIME_LOG_PATH = path.join(LOG_DIR, "dashboard-runtime.log");
+const LONG_RUNNING_PATHS = new Set([
+  "/api/miguel/pairs/rebuild",
+  "/api/miguel/opportunities/rebuild",
+  "/api/miguel/model-v1/top",
+  "/api/arbitrage/execution/refresh",
+  "/api/arbitrage/execution/execute-top",
+]);
+
+function toSafeTimestamp(d: Date): string {
+  const y = d.getUTCFullYear();
+  const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const da = String(d.getUTCDate()).padStart(2, "0");
+  const h = String(d.getUTCHours()).padStart(2, "0");
+  const mi = String(d.getUTCMinutes()).padStart(2, "0");
+  const s = String(d.getUTCSeconds()).padStart(2, "0");
+  const ms = String(d.getUTCMilliseconds()).padStart(3, "0");
+  return `${y}${mo}${da}-${h}${mi}${s}${ms}`;
+}
+
+function setupRuntimeLogCapture(): void {
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+  fs.mkdirSync(LOG_ARCHIVE_DIR, { recursive: true });
+
+  // One-time migration for legacy single-file logs.
+  const legacyLog = path.join(LOG_DIR, "dashboard-runtime.log");
+  if (fs.existsSync(legacyLog)) {
+    const stat = fs.statSync(legacyLog);
+    if (stat.size > 0) {
+      const migrated = path.join(LOG_ARCHIVE_DIR, `dashboard-runtime-legacy-${toSafeTimestamp(new Date())}.txt`);
+      fs.renameSync(legacyLog, migrated);
+    } else {
+      fs.unlinkSync(legacyLog);
+    }
+  }
+
+  // Move prior session runtime text logs to archive so each launch has one active output log in logs/.
+  for (const name of fs.readdirSync(LOG_DIR)) {
+    if (!/^dashboard-runtime-\d{8}-\d{9}(?:-p\d+)?\.txt$/.test(name)) continue;
+    const src = path.join(LOG_DIR, name);
+    const dest = path.join(LOG_ARCHIVE_DIR, name);
+    if (fs.existsSync(src) && !fs.existsSync(dest)) {
+      fs.renameSync(src, dest);
+    }
+  }
+
+  // Each launch gets a dedicated text log file.
+  RUNTIME_LOG_PATH = path.join(LOG_DIR, `dashboard-runtime-${toSafeTimestamp(new Date())}-p${process.pid}.txt`);
+  fs.writeFileSync(RUNTIME_LOG_PATH, `[${new Date().toISOString()}] INFO Runtime log session started\n`, "utf8");
+
+  const writeLine = (level: string, args: unknown[]) => {
+    const rendered = args
+      .map((arg) => {
+        if (arg instanceof Error) {
+          return arg.stack || arg.message;
+        }
+        if (typeof arg === "string") {
+          return arg;
+        }
+        try {
+          return JSON.stringify(arg);
+        } catch {
+          return String(arg);
+        }
+      })
+      .join(" ");
+    const line = `[${new Date().toISOString()}] ${level} ${rendered}\n`;
+    fs.appendFileSync(RUNTIME_LOG_PATH, line, "utf8");
+  };
+
+  const originalLog = console.log.bind(console);
+  const originalInfo = console.info.bind(console);
+  const originalWarn = console.warn.bind(console);
+  const originalError = console.error.bind(console);
+  const originalDebug = console.debug.bind(console);
+
+  console.log = (...args: unknown[]) => {
+    writeLine("INFO", args);
+    originalLog(...args);
+  };
+  console.info = (...args: unknown[]) => {
+    writeLine("INFO", args);
+    originalInfo(...args);
+  };
+  console.warn = (...args: unknown[]) => {
+    writeLine("WARN", args);
+    originalWarn(...args);
+  };
+  console.error = (...args: unknown[]) => {
+    writeLine("ERROR", args);
+    originalError(...args);
+  };
+  console.debug = (...args: unknown[]) => {
+    writeLine("DEBUG", args);
+    originalDebug(...args);
+  };
+}
+
+function readLastLogLines(filePath: string, maxLines: number): string[] {
+  if (!fs.existsSync(filePath)) return [];
+  const stat = fs.statSync(filePath);
+  if (stat.size <= 0) return [];
+
+  // Read only the tail window to avoid loading very large logs into heap.
+  const TAIL_BYTES = 512 * 1024;
+  const start = Math.max(0, stat.size - TAIL_BYTES);
+  const length = stat.size - start;
+  const fd = fs.openSync(filePath, "r");
+  try {
+    const buffer = Buffer.allocUnsafe(length);
+    const bytesRead = fs.readSync(fd, buffer, 0, length, start);
+    const content = buffer.toString("utf8", 0, bytesRead);
+    const lines = content.split(/\r?\n/).filter(Boolean);
+    return lines.slice(-maxLines);
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+setupRuntimeLogCapture();
 
 app.use(cors());
 app.use(express.json());
 app.use((req, res, next) => {
-  if (req.path.endsWith("/stream")) return next();
+  if (req.path.endsWith("/stream") || LONG_RUNNING_PATHS.has(req.path)) return next();
   const timer = setTimeout(() => {
-    if (!res.headersSent) {
+    if (!res.headersSent && !res.writableEnded) {
       res.status(504).json({ error: "Request timed out" });
     }
   }, 30_000);
   res.on("finish", () => clearTimeout(timer));
+  res.on("close", () => clearTimeout(timer));
   next();
 });
 
@@ -48,7 +173,7 @@ async function getCachedScreenerData() {
 // ---- Kalshi Screener instance (cached) ----
 const kalshiScreener = new KalshiScreener();
 let kalshiScreenerCache: { data: any; expires: number } | null = null;
-const KALSHI_SCREENER_TTL = 60 * 1000; // 60s
+const KALSHI_SCREENER_TTL = KALSHI_REFRESH_INTERVAL_MS;
 const executionService = new ArbitrageExecutionService();
 const modelClient = new PythonModelClient();
 const miguelService = new MiguelService(modelClient);
@@ -124,12 +249,17 @@ app.get("/api/alerts/stream", (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
+  let sendInFlight = false;
   const send = async () => {
+    if (sendInFlight) return;
+    sendInFlight = true;
     try {
       const alerts = await getTradeAlerts();
       res.write(`data: ${JSON.stringify(alerts)}\n\n`);
     } catch {
       // Skip on error
+    } finally {
+      sendInFlight = false;
     }
   };
 
@@ -155,7 +285,10 @@ app.get("/api/screener/stream", (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
+  let sendInFlight = false;
   const send = async () => {
+    if (sendInFlight) return;
+    sendInFlight = true;
     try {
       // Invalidate cache so we get fresh data
       screenerCache = null;
@@ -163,6 +296,8 @@ app.get("/api/screener/stream", (req, res) => {
       res.write(`data: ${JSON.stringify(data)}\n\n`);
     } catch {
       // Skip on error
+    } finally {
+      sendInFlight = false;
     }
   };
 
@@ -188,18 +323,28 @@ app.get("/api/kalshi/screener/stream", (req, res) => {
   res.setHeader("Connection", "keep-alive");
   res.flushHeaders();
 
+  let sendInFlight = false;
   const send = async () => {
+    if (sendInFlight) return;
+    sendInFlight = true;
     try {
       kalshiScreenerCache = null;
       const data = await getCachedKalshiScreenerData();
-      res.write(`data: ${JSON.stringify(data)}\n\n`);
+      const payload = {
+        ...data,
+        nextRefreshAt: new Date(Date.now() + KALSHI_REFRESH_INTERVAL_MS).toISOString(),
+        refreshEverySeconds: Math.floor(KALSHI_REFRESH_INTERVAL_MS / 1000),
+      };
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
     } catch {
       // Skip on error
+    } finally {
+      sendInFlight = false;
     }
   };
 
   send();
-  const interval = setInterval(send, 60_000);
+  const interval = setInterval(send, KALSHI_REFRESH_INTERVAL_MS);
   req.on("close", () => clearInterval(interval));
 });
 
@@ -298,8 +443,10 @@ app.get("/api/miguel/status", (_req, res) => {
 app.post("/api/miguel/pairs/rebuild", async (_req, res) => {
   try {
     const result = await miguelService.rebuildPairs();
+    if (res.headersSent || res.writableEnded) return;
     res.json({ ok: true, ...result, status: miguelService.getStatus() });
   } catch (err: any) {
+    if (res.headersSent || res.writableEnded) return;
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -323,8 +470,10 @@ app.post("/api/miguel/live-quotes/stop", (_req, res) => {
 app.post("/api/miguel/opportunities/rebuild", async (_req, res) => {
   try {
     const result = await miguelService.rebuildOpportunities();
+    if (res.headersSent || res.writableEnded) return;
     res.json({ ok: true, ...result, status: miguelService.getStatus() });
   } catch (err: any) {
+    if (res.headersSent || res.writableEnded) return;
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -342,8 +491,10 @@ app.get("/api/miguel/model-v1/top", async (req, res) => {
   try {
     const limit = Math.min(Math.max(parseInt(String(req.query.limit || "3"), 10) || 3, 1), 10);
     const rows = await miguelService.evaluateModelTop(limit);
+    if (res.headersSent || res.writableEnded) return;
     res.json({ ok: true, rows, model: modelClient.getStatus() });
   } catch (err: any) {
+    if (res.headersSent || res.writableEnded) return;
     res.status(500).json({ ok: false, error: err.message });
   }
 });
@@ -399,6 +550,23 @@ app.get("/api/health", (_req, res) => {
       uptimeMs: Date.now() - BOOT_AT,
       execution: executionService.getHealth(),
       settingsRedacted: getRedactedSettings(),
+    });
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.get("/api/logs/runtime", (req, res) => {
+  try {
+    const limit = Math.min(Math.max(parseInt(String(req.query.limit || "200"), 10) || 200, 10), 2000);
+    const lines = readLastLogLines(RUNTIME_LOG_PATH, limit);
+    const errorLines = lines.filter((line) => line.includes(" ERROR ") || line.toLowerCase().includes("error"));
+    res.json({
+      ok: true,
+      path: RUNTIME_LOG_PATH,
+      tradeLogPath: executionService.getTradeLogPath(),
+      lines,
+      errorLines,
     });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err.message });

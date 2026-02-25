@@ -7,7 +7,17 @@ import { getSettings, validateSettingsForMode } from "../runtimeSettings";
 import { ModelBatchItem, PythonModelClient } from "./pythonModelClient";
 
 const MAX_HISTORY = 25;
-const REFRESH_TIMEOUT_MS = 90_000;
+const REFRESH_TIMEOUT_MS = 300_000;
+const POLYMARKET_REFRESH_TIMEOUT_MS = 60_000;
+const KALSHI_REFRESH_TIMEOUT_MS = 240_000;
+const KALSHI_QUICK_WAIT_MS = 5_000;
+const MAX_CAP_RATIO = 0.20;
+const MIN_VALID_SUM_ASKS = 0.2;
+const MAX_VALID_SUM_ASKS = 1.2;
+const MAX_VALID_GROSS_EDGE = 1.0;
+const MAX_VALID_MODEL_NET_EDGE = 0.5;
+const MAX_MODEL_ITEMS = 150;
+const MAX_SNAPSHOT_KEYS = 5_000;
 
 type Venue = "POLYMARKET" | "KALSHI";
 type Strategy = "BINARY_BUY_BOTH" | "EVENT_BUY_ALL_YES";
@@ -46,6 +56,8 @@ export interface TradeLeg {
   side: "BUY";
   instrument: string;
   outcome: string;
+  bestBid?: number;
+  bestAsk?: number;
   price: number;
   contracts: number;
   notionalUsd: number;
@@ -61,6 +73,7 @@ export interface TradePlan {
   strategy: Strategy;
   title: string;
   contractUrl?: string;
+  expiryDate?: string;
   createdAt: string;
   status: PlanStatus;
   executable: boolean;
@@ -147,6 +160,28 @@ function roundContracts(value: number): number {
   return Math.floor(value * 100) / 100;
 }
 
+function isValidPrice(p: number): boolean {
+  return Number.isFinite(p) && p >= 0.01 && p <= 0.99;
+}
+
+function isSaneDecision(decision: ModelDecision | undefined): decision is ModelDecision {
+  if (!decision) return false;
+  return (
+    Number.isFinite(decision.expected_slippage) &&
+    Number.isFinite(decision.fill_prob_20s) &&
+    Number.isFinite(decision.expected_net_edge) &&
+    Number.isFinite(decision.recommended_cap)
+  );
+}
+
+function isValidSumAsks(sumAsks: number): boolean {
+  return Number.isFinite(sumAsks) && sumAsks >= MIN_VALID_SUM_ASKS && sumAsks <= MAX_VALID_SUM_ASKS;
+}
+
+function isValidGrossEdge(edge: number): boolean {
+  return Number.isFinite(edge) && edge > 0 && edge <= MAX_VALID_GROSS_EDGE;
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs);
@@ -170,15 +205,21 @@ export class ArbitrageExecutionService {
   private paperExecutedPlanIds = new Set<string>();
   private polymarketClientPromise: Promise<PolymarketClientLike | null> | null = null;
   private refreshInFlight: Promise<ExecutionState> | null = null;
+  private kalshiBackgroundInFlight: Promise<void> | null = null;
   private executionLogPath: string;
+  private tradeLogPath: string;
 
   private state: ExecutionState;
 
   constructor() {
     const settings = getSettings();
     const logDir = path.resolve(process.cwd(), "logs");
+    const tradeLogDir = path.join(logDir, "trades");
     fs.mkdirSync(logDir, { recursive: true });
+    fs.mkdirSync(tradeLogDir, { recursive: true });
     this.executionLogPath = path.join(logDir, "execution-history.jsonl");
+    this.tradeLogPath = path.join(tradeLogDir, `trade-log-${this.sessionStamp()}-p${process.pid}.txt`);
+    fs.writeFileSync(this.tradeLogPath, `[${new Date().toISOString()}] INFO Trade log session started\n`, "utf8");
     this.state = {
       settings: {
         mode: settings.execution.mode,
@@ -259,91 +300,192 @@ export class ArbitrageExecutionService {
     const priorPoly = priorPlans.filter((p) => p.venue === "POLYMARKET");
     const priorKalshi = priorPlans.filter((p) => p.venue === "KALSHI");
     const warnings: string[] = [];
+    const refreshSeqAtStart = this.state.refreshSeq;
 
     try {
-      const [polyResult, kalshiResult] = await withTimeout(
-        Promise.allSettled([
-          withTimeout(this.getPolymarketExecutionCandidates(), 60_000, "Polymarket refresh"),
-          withTimeout(this.getKalshiExecutionCandidates(), 60_000, "Kalshi refresh"),
-        ]),
-        REFRESH_TIMEOUT_MS,
-        "Execution refresh"
+      const kalshiCycleStartedAt = Date.now();
+      const polyPromise = withTimeout(
+        this.getPolymarketExecutionCandidates(),
+        POLYMARKET_REFRESH_TIMEOUT_MS,
+        "Polymarket refresh"
       );
+      const shouldStartKalshi = !this.kalshiBackgroundInFlight;
+      const kalshiPromise = shouldStartKalshi
+        ? withTimeout(this.getKalshiExecutionCandidates(), KALSHI_REFRESH_TIMEOUT_MS, "Kalshi refresh")
+        : null;
+
+      const polyResult = await polyPromise.then(
+        (value) => ({ status: "fulfilled" as const, value }),
+        (reason) => ({ status: "rejected" as const, reason })
+      );
+
+      // Do not block full refresh waiting for slow Kalshi responses.
+      // Publish plans as soon as we have Polymarket + any quickly available Kalshi data.
+      let kalshiResult:
+        | { status: "fulfilled"; value: { binaryArbs: KalshiBinaryMispricing[]; eventArbs: KalshiEventGroupArb[] } }
+        | { status: "rejected"; reason: any }
+        | { status: "pending" }
+        | { status: "skipped" };
+      if (!kalshiPromise) {
+        kalshiResult = { status: "skipped" };
+        warnings.push("Kalshi refresh already running in background; reused previous Kalshi plans");
+      } else {
+        const kalshiQuickResult = await Promise.race([
+          kalshiPromise.then(
+            (value) => ({ status: "fulfilled" as const, value }),
+            (reason) => ({ status: "rejected" as const, reason })
+          ),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), KALSHI_QUICK_WAIT_MS)),
+        ]);
+        kalshiResult = kalshiQuickResult ?? { status: "pending" as const };
+      }
 
       const polyData = polyResult.status === "fulfilled" ? polyResult.value : null;
       const kalshiData = kalshiResult.status === "fulfilled" ? kalshiResult.value : null;
+      if (polyData || kalshiData) {
+        console.log(
+          `Opportunity scan results | poly: binary=${polyData?.binaryArbs.length || 0}, event=${polyData?.negRiskArbs.length || 0} | kalshi: binary=${kalshiData?.binaryArbs.length || 0}, event=${kalshiData?.eventArbs.length || 0}`
+        );
+      }
+      if (kalshiResult.status === "pending") {
+        warnings.push(`Kalshi refresh still running; published partial plans after ${KALSHI_QUICK_WAIT_MS}ms`);
+      }
       const decisionMap = await this.buildModelDecisionMap(polyData, kalshiData, warnings);
+      console.log(`Model decisions returned: ${decisionMap.size}`);
 
-      let polyPlans: TradePlan[] = [];
-      if (polyResult.status === "fulfilled") {
-        const data = polyResult.value;
-        for (const arb of data.binaryArbs) {
-          const plan = this.buildPolymarketBinaryPlan(
-            arb,
-            decisionMap.get(`poly-binary-${arb.conditionId}`)
-          );
-          if (plan) polyPlans.push(plan);
-        }
-        for (const arb of data.negRiskArbs) {
-          const plan = this.buildPolymarketEventPlan(
-            arb,
-            decisionMap.get(`poly-event-${arb.negRiskMarketId}`)
-          );
-          if (plan) polyPlans.push(plan);
-        }
-      } else {
+      let polyPlans = polyData ? this.buildPolymarketPlans(polyData, decisionMap) : [];
+      if (polyResult.status === "rejected") {
         warnings.push(`Polymarket refresh failed: ${polyResult.reason?.message || polyResult.reason}`);
         polyPlans = priorPoly;
       }
 
-      let kalshiPlans: TradePlan[] = [];
+      let kalshiPlans: TradePlan[] = kalshiData ? this.buildKalshiPlans(kalshiData, decisionMap) : [];
       if (kalshiResult.status === "fulfilled") {
-        const data = kalshiResult.value;
-        for (const arb of data.binaryArbs) {
-          const plan = this.buildKalshiBinaryPlan(
-            arb,
-            decisionMap.get(`kalshi-binary-${arb.ticker}`)
-          );
-          if (plan) kalshiPlans.push(plan);
-        }
-        for (const arb of data.eventArbs) {
-          const plan = this.buildKalshiEventPlan(
-            arb,
-            decisionMap.get(`kalshi-event-${arb.eventTicker}`)
-          );
-          if (plan) kalshiPlans.push(plan);
-        }
-      } else {
+        const elapsedMs = Date.now() - kalshiCycleStartedAt;
+        console.log(
+          `Kalshi refresh cycle completed in ${elapsedMs}ms | binary=${kalshiData?.binaryArbs.length || 0}, event=${kalshiData?.eventArbs.length || 0}`
+        );
+      } else if (kalshiResult.status === "rejected") {
         warnings.push(`Kalshi refresh failed: ${kalshiResult.reason?.message || kalshiResult.reason}`);
+        kalshiPlans = priorKalshi;
+      } else if (kalshiResult.status === "pending" || kalshiResult.status === "skipped") {
         kalshiPlans = priorKalshi;
       }
 
-      const plans = [...polyPlans, ...kalshiPlans]
-        .sort((a, b) => b.expectedNetProfitUsd - a.expectedNetProfitUsd)
-        .slice(0, 60);
+      await this.applyPlanSet([...polyPlans, ...kalshiPlans], startedAt, warnings, true);
 
-      if (this.state.settings.mode === "PAPER") {
-        for (const plan of plans) {
-          if (this.paperExecutedPlanIds.has(plan.id) && plan.status === "READY") {
-            plan.status = "SKIPPED";
-            plan.reason = "Already paper-executed";
-          }
-        }
-      }
-
-      this.state.plans = plans;
-      this.state.lastRefreshAt = new Date(startedAt).toISOString();
-      this.state.refreshError = warnings.length > 0 ? warnings.join(" | ") : undefined;
-      this.state.liveReadiness = this.computeLiveReadiness();
-
-      if (this.state.settings.autoExecute) {
-        await this.executeTopPlans(3);
+      if (kalshiResult.status === "pending" && kalshiPromise) {
+        const bgPromise = kalshiPromise
+          .then(async (lateKalshiData) => {
+            if (this.state.refreshSeq !== refreshSeqAtStart) return;
+            const elapsedMs = Date.now() - kalshiCycleStartedAt;
+            console.log(
+              `Kalshi refresh cycle completed in ${elapsedMs}ms (background) | binary=${lateKalshiData.binaryArbs.length}, event=${lateKalshiData.eventArbs.length}`
+            );
+            const lateWarnings: string[] = [];
+            const lateDecisionMap = await this.buildModelDecisionMap(polyData, lateKalshiData, lateWarnings);
+            const latePolyPlans = polyData ? this.buildPolymarketPlans(polyData, lateDecisionMap) : priorPoly;
+            const lateKalshiPlans = this.buildKalshiPlans(lateKalshiData, lateDecisionMap);
+            await this.applyPlanSet([...latePolyPlans, ...lateKalshiPlans], startedAt, lateWarnings, false);
+            console.log(
+              `Applied late Kalshi update | binary=${lateKalshiData.binaryArbs.length}, event=${lateKalshiData.eventArbs.length}`
+            );
+          })
+          .catch((err: any) => {
+            if (this.state.refreshSeq !== refreshSeqAtStart) return;
+            const msg = err?.message || String(err);
+            console.warn(`Late Kalshi refresh failed: ${msg}`);
+          })
+          .finally(() => {
+            if (this.kalshiBackgroundInFlight === bgPromise) {
+              this.kalshiBackgroundInFlight = null;
+            }
+          });
+        this.kalshiBackgroundInFlight = bgPromise;
       }
     } catch (err: any) {
       this.state.refreshError = err?.message || "Failed to refresh opportunities";
+      console.error(`Execution refresh failed: ${this.state.refreshError}`);
     }
 
     return this.state;
+  }
+
+  private buildPolymarketPlans(
+    data: { binaryArbs: BinaryArbOpportunity[]; negRiskArbs: NegRiskArbOpportunity[] },
+    decisionMap: Map<string, ModelDecision>
+  ): TradePlan[] {
+    const plans: TradePlan[] = [];
+    for (const arb of data.binaryArbs) {
+      const plan = this.buildPolymarketBinaryPlan(arb, decisionMap.get(`poly-binary-${arb.conditionId}`));
+      if (plan) plans.push(plan);
+    }
+    for (const arb of data.negRiskArbs) {
+      const plan = this.buildPolymarketEventPlan(arb, decisionMap.get(`poly-event-${arb.negRiskMarketId}`));
+      if (plan) plans.push(plan);
+    }
+    return plans;
+  }
+
+  private buildKalshiPlans(
+    data: { binaryArbs: KalshiBinaryMispricing[]; eventArbs: KalshiEventGroupArb[] },
+    decisionMap: Map<string, ModelDecision>
+  ): TradePlan[] {
+    const plans: TradePlan[] = [];
+    for (const arb of data.binaryArbs) {
+      const plan = this.buildKalshiBinaryPlan(arb, decisionMap.get(`kalshi-binary-${arb.ticker}`));
+      if (plan) plans.push(plan);
+    }
+    for (const arb of data.eventArbs) {
+      const plan = this.buildKalshiEventPlan(arb, decisionMap.get(`kalshi-event-${arb.eventTicker}`));
+      if (plan) plans.push(plan);
+    }
+    return plans;
+  }
+
+  private async applyPlanSet(
+    incomingPlans: TradePlan[],
+    startedAt: number,
+    warnings: string[],
+    allowAutoExecute: boolean
+  ): Promise<void> {
+    const plans = [...incomingPlans]
+      .sort((a, b) => b.expectedNetProfitUsd - a.expectedNetProfitUsd)
+      .slice(0, 60);
+    const readyPlans = plans.filter((p) => p.status === "READY");
+    const skippedPlans = plans.filter((p) => p.status === "SKIPPED");
+    console.log(
+      `Plan synthesis complete | total=${plans.length}, ready=${readyPlans.length}, skipped=${skippedPlans.length}`
+    );
+    if (readyPlans.length > 0) {
+      const top = readyPlans[0];
+      console.log(
+        `Top ready plan | ${top.venue} ${top.strategy} | netEdge=${(top.expectedNetEdge * 100).toFixed(2)}% | estNet=${top.expectedNetProfitUsd.toFixed(2)}`
+      );
+    } else {
+      console.log("No READY plans produced in this refresh cycle");
+    }
+
+    if (this.state.settings.mode === "PAPER") {
+      for (const plan of plans) {
+        if (this.paperExecutedPlanIds.has(plan.id) && plan.status === "READY") {
+          plan.status = "SKIPPED";
+          plan.reason = "Already paper-executed";
+        }
+      }
+    }
+
+    this.state.plans = plans;
+    this.state.lastRefreshAt = new Date(startedAt).toISOString();
+    this.state.refreshError = warnings.length > 0 ? warnings.join(" | ") : undefined;
+    if (this.state.refreshError) {
+      console.warn(`Execution refresh warning: ${this.state.refreshError}`);
+    }
+    this.state.liveReadiness = this.computeLiveReadiness();
+
+    if (allowAutoExecute && this.state.settings.autoExecute) {
+      await this.executeTopPlans(3);
+    }
   }
 
   private async getPolymarketExecutionCandidates(): Promise<{
@@ -505,6 +647,10 @@ export class ArbitrageExecutionService {
   }
 
   private recordSnapshot(opportunityId: string, grossEdgePerDollar: number): RecentSnapshot[] {
+    if (!this.snapshots.has(opportunityId) && this.snapshots.size >= MAX_SNAPSHOT_KEYS) {
+      const oldestKey = this.snapshots.keys().next().value as string | undefined;
+      if (oldestKey) this.snapshots.delete(oldestKey);
+    }
     const current = this.snapshots.get(opportunityId) || [];
     current.push({ timestamp: new Date().toISOString(), grossEdgePerDollar });
     const trimmed = current.slice(-3);
@@ -525,7 +671,7 @@ export class ArbitrageExecutionService {
         const id = `poly-binary-${arb.conditionId}`;
         const sumAsks = arb.yesAsk + arb.noAsk;
         const grossEdge = (1 - sumAsks) / Math.max(sumAsks, 0.0001);
-        if (grossEdge <= 0) continue;
+        if (!isValidSumAsks(sumAsks) || !isValidGrossEdge(grossEdge)) continue;
         const snapshots = this.recordSnapshot(id, grossEdge);
         const topDepth = (arb.bidDepth || 0) + (arb.askDepth || 0);
         const profitableDepth = Math.min(arb.bidDepth || 0, arb.askDepth || 0);
@@ -560,7 +706,7 @@ export class ArbitrageExecutionService {
         if (outcomes.length < 2) continue;
         const id = `poly-event-${arb.negRiskMarketId}`;
         const grossEdge = (1 - arb.sumBestAsk) / Math.max(arb.sumBestAsk, 0.0001);
-        if (grossEdge <= 0) continue;
+        if (!isValidSumAsks(arb.sumBestAsk) || !isValidGrossEdge(grossEdge)) continue;
         const snapshots = this.recordSnapshot(id, grossEdge);
         const depthWithinBand = outcomes.reduce((sum, o) => sum + Math.max(0, Math.min(o.bestAsk, o.bestBid)), 0) * 1000;
         const topDepth = outcomes.reduce((sum, o) => sum + Math.max(o.bestAsk, o.bestBid) * 1000, 0);
@@ -596,7 +742,7 @@ export class ArbitrageExecutionService {
         const id = `kalshi-binary-${arb.ticker}`;
         const sumAsks = arb.yesAsk + arb.noAsk;
         const grossEdge = (1 - sumAsks) / Math.max(sumAsks, 0.0001);
-        if (grossEdge <= 0) continue;
+        if (!isValidSumAsks(sumAsks) || !isValidGrossEdge(grossEdge)) continue;
         const snapshots = this.recordSnapshot(id, grossEdge);
         items.push({
           id,
@@ -629,7 +775,7 @@ export class ArbitrageExecutionService {
         if (outcomes.length < 2) continue;
         const id = `kalshi-event-${arb.eventTicker}`;
         const grossEdge = (1 - arb.sumYesAsks) / Math.max(arb.sumYesAsks, 0.0001);
-        if (grossEdge <= 0) continue;
+        if (!isValidSumAsks(arb.sumYesAsks) || !isValidGrossEdge(grossEdge)) continue;
         const snapshots = this.recordSnapshot(id, grossEdge);
         items.push({
           id,
@@ -662,8 +808,29 @@ export class ArbitrageExecutionService {
     }
 
     try {
-      const decisions = await this.modelClient.evaluateBatch(items, this.state.settings.bankrollUsd);
-      return new Map(decisions.map((d) => [d.id, d.decision]));
+      // Keep bridge payload bounded; excessive candidates mostly add latency.
+      const limitedItems = items
+        .sort((a, b) => Number(b.opportunity_row.profitPerDollar || 0) - Number(a.opportunity_row.profitPerDollar || 0))
+        .slice(0, MAX_MODEL_ITEMS);
+      if (items.length > limitedItems.length) {
+        console.log(`Model candidate cap applied: ${limitedItems.length}/${items.length}`);
+      }
+      const decisions = await this.modelClient.evaluateBatch(limitedItems, this.state.settings.bankrollUsd);
+      const capLimit = this.state.settings.bankrollUsd * MAX_CAP_RATIO;
+      const sanitized = decisions
+        .map((d) => {
+          const next = d.decision;
+          if (!isSaneDecision(next)) return null;
+          const capped: ModelDecision = {
+            expected_slippage: Math.max(0, next.expected_slippage),
+            fill_prob_20s: clamp(next.fill_prob_20s, 0, 1),
+            expected_net_edge: clamp(next.expected_net_edge, -MAX_VALID_MODEL_NET_EDGE, MAX_VALID_MODEL_NET_EDGE),
+            recommended_cap: clamp(next.recommended_cap, 0, capLimit),
+          };
+          return [d.id, capped] as const;
+        })
+        .filter((row): row is readonly [string, ModelDecision] => Boolean(row));
+      return new Map(sanitized);
     } catch (err: any) {
       warnings.push(`Model v1 bridge failed: ${err?.message || err}`);
       return new Map<string, ModelDecision>();
@@ -674,8 +841,10 @@ export class ArbitrageExecutionService {
     if (arb.type !== "BUY_BOTH") return null;
     if (!arb.yesTokenId || !arb.noTokenId || arb.yesAsk <= 0 || arb.noAsk <= 0) return null;
 
-    const grossEdge = (1 - (arb.yesAsk + arb.noAsk)) / Math.max(arb.yesAsk + arb.noAsk, 0.0001);
-    if (grossEdge <= 0) return null;
+    const sumAsks = arb.yesAsk + arb.noAsk;
+    if (sumAsks < MIN_VALID_SUM_ASKS || sumAsks > MAX_VALID_SUM_ASKS) return null;
+    const grossEdge = (1 - sumAsks) / Math.max(sumAsks, 0.0001);
+    if (grossEdge <= 0 || grossEdge > MAX_VALID_GROSS_EDGE) return null;
 
     const id = `poly-binary-${arb.conditionId}`;
     const snapshots = this.snapshots.get(id) || [];
@@ -683,8 +852,9 @@ export class ArbitrageExecutionService {
     const profitableDepth = Math.min(arb.bidDepth || 0, arb.askDepth || 0);
     if (!decision) return null;
 
+    if (!isValidPrice(arb.yesAsk) || !isValidPrice(arb.noAsk)) return null;
     const recommendedCapUsd = decision.recommended_cap;
-    const contracts = roundContracts(recommendedCapUsd / (arb.yesAsk + arb.noAsk));
+    const contracts = roundContracts(recommendedCapUsd / sumAsks);
 
     const legs: TradeLeg[] = [
       {
@@ -692,6 +862,8 @@ export class ArbitrageExecutionService {
         side: "BUY",
         instrument: arb.market,
         outcome: "YES",
+        bestBid: arb.yesBid,
+        bestAsk: arb.yesAsk,
         price: arb.yesAsk,
         contracts,
         notionalUsd: contracts * arb.yesAsk,
@@ -703,6 +875,8 @@ export class ArbitrageExecutionService {
         side: "BUY",
         instrument: arb.market,
         outcome: "NO",
+        bestBid: arb.noBid,
+        bestAsk: arb.noAsk,
         price: arb.noAsk,
         contracts,
         notionalUsd: contracts * arb.noAsk,
@@ -717,6 +891,7 @@ export class ArbitrageExecutionService {
       strategy: "BINARY_BUY_BOTH",
       title: arb.market,
       contractUrl: arb.marketUrl || undefined,
+      expiryDate: arb.endDate,
       grossEdgePerDollar: grossEdge,
       decision,
       estimatedFeesUsd: 0,
@@ -733,11 +908,12 @@ export class ArbitrageExecutionService {
 
   private buildPolymarketEventPlan(arb: NegRiskArbOpportunity, decision?: ModelDecision): TradePlan | null {
     if (arb.type !== "BUY_ALL_YES") return null;
-    const outcomes = arb.outcomes.filter((o) => o.bestAsk > 0 && !!o.yesTokenId && !!o.conditionId);
+    const outcomes = arb.outcomes.filter((o) => isValidPrice(o.bestAsk) && !!o.yesTokenId && !!o.conditionId);
     if (outcomes.length < 2) return null;
 
+    if (arb.sumBestAsk < MIN_VALID_SUM_ASKS || arb.sumBestAsk > MAX_VALID_SUM_ASKS) return null;
     const grossEdge = (1 - arb.sumBestAsk) / Math.max(arb.sumBestAsk, 0.0001);
-    if (grossEdge <= 0) return null;
+    if (grossEdge <= 0 || grossEdge > MAX_VALID_GROSS_EDGE) return null;
 
     const id = `poly-event-${arb.negRiskMarketId}`;
     const snapshots = this.snapshots.get(id) || [];
@@ -755,6 +931,8 @@ export class ArbitrageExecutionService {
       side: "BUY",
       instrument: o.question,
       outcome: "YES",
+      bestBid: o.bestBid,
+      bestAsk: o.bestAsk,
       price: o.bestAsk,
       contracts,
       notionalUsd: contracts * o.bestAsk,
@@ -769,6 +947,7 @@ export class ArbitrageExecutionService {
       strategy: "EVENT_BUY_ALL_YES",
       title: arb.event,
       contractUrl: arb.eventUrl || outcomes[0]?.marketUrl || undefined,
+      expiryDate: arb.eventEndDate,
       grossEdgePerDollar: grossEdge,
       decision,
       estimatedFeesUsd: 0,
@@ -785,10 +964,12 @@ export class ArbitrageExecutionService {
 
   private buildKalshiBinaryPlan(arb: KalshiBinaryMispricing, decision?: ModelDecision): TradePlan | null {
     if (arb.type !== "BUY_BOTH") return null;
-    if (arb.yesAsk <= 0 || arb.noAsk <= 0) return null;
+    if (!isValidPrice(arb.yesAsk) || !isValidPrice(arb.noAsk)) return null;
 
-    const grossEdge = (1 - (arb.yesAsk + arb.noAsk)) / Math.max(arb.yesAsk + arb.noAsk, 0.0001);
-    if (grossEdge <= 0) return null;
+    const sumAsks = arb.yesAsk + arb.noAsk;
+    if (sumAsks < MIN_VALID_SUM_ASKS || sumAsks > MAX_VALID_SUM_ASKS) return null;
+    const grossEdge = (1 - sumAsks) / Math.max(sumAsks, 0.0001);
+    if (grossEdge <= 0 || grossEdge > MAX_VALID_GROSS_EDGE) return null;
 
     const id = `kalshi-binary-${arb.ticker}`;
     const snapshots = this.snapshots.get(id) || [];
@@ -796,7 +977,7 @@ export class ArbitrageExecutionService {
     if (!decision) return null;
 
     const recommendedCapUsd = decision.recommended_cap;
-    const contracts = roundContracts(recommendedCapUsd / (arb.yesAsk + arb.noAsk));
+    const contracts = roundContracts(recommendedCapUsd / sumAsks);
 
     const feeYes = calcKalshiFee(contracts, arb.yesAsk, this.state.settings.kalshiUseMakerFees);
     const feeNo = calcKalshiFee(contracts, arb.noAsk, this.state.settings.kalshiUseMakerFees);
@@ -808,6 +989,8 @@ export class ArbitrageExecutionService {
         side: "BUY",
         instrument: arb.market,
         outcome: "YES",
+        bestBid: arb.yesBid,
+        bestAsk: arb.yesAsk,
         price: arb.yesAsk,
         contracts,
         notionalUsd: contracts * arb.yesAsk,
@@ -818,6 +1001,8 @@ export class ArbitrageExecutionService {
         side: "BUY",
         instrument: arb.market,
         outcome: "NO",
+        bestBid: arb.noBid,
+        bestAsk: arb.noAsk,
         price: arb.noAsk,
         contracts,
         notionalUsd: contracts * arb.noAsk,
@@ -831,6 +1016,7 @@ export class ArbitrageExecutionService {
       strategy: "BINARY_BUY_BOTH",
       title: arb.market,
       contractUrl: arb.kalshiUrl || undefined,
+      expiryDate: arb.closeTime,
       grossEdgePerDollar: grossEdge,
       decision,
       estimatedFeesUsd,
@@ -847,11 +1033,12 @@ export class ArbitrageExecutionService {
 
   private buildKalshiEventPlan(arb: KalshiEventGroupArb, decision?: ModelDecision): TradePlan | null {
     if (arb.type !== "BUY_ALL_YES") return null;
-    const outcomes = arb.outcomes.filter((o) => o.yesAsk > 0 && !!o.ticker);
+    const outcomes = arb.outcomes.filter((o) => isValidPrice(o.yesAsk) && !!o.ticker);
     if (outcomes.length < 2) return null;
 
+    if (arb.sumYesAsks < MIN_VALID_SUM_ASKS || arb.sumYesAsks > MAX_VALID_SUM_ASKS) return null;
     const grossEdge = (1 - arb.sumYesAsks) / Math.max(arb.sumYesAsks, 0.0001);
-    if (grossEdge <= 0) return null;
+    if (grossEdge <= 0 || grossEdge > MAX_VALID_GROSS_EDGE) return null;
 
     const id = `kalshi-event-${arb.eventTicker}`;
     const snapshots = this.snapshots.get(id) || [];
@@ -869,6 +1056,8 @@ export class ArbitrageExecutionService {
       side: "BUY",
       instrument: o.title,
       outcome: "YES",
+      bestBid: o.yesBid,
+      bestAsk: o.yesAsk,
       price: o.yesAsk,
       contracts,
       notionalUsd: contracts * o.yesAsk,
@@ -888,6 +1077,7 @@ export class ArbitrageExecutionService {
       contractUrl: outcomes[0]?.ticker
         ? `https://kalshi.com/markets/${encodeURIComponent(outcomes[0].ticker)}`
         : undefined,
+      expiryDate: arb.eventCloseTime,
       grossEdgePerDollar: grossEdge,
       decision,
       estimatedFeesUsd,
@@ -908,6 +1098,7 @@ export class ArbitrageExecutionService {
     strategy: Strategy;
     title: string;
     contractUrl?: string;
+    expiryDate?: string;
     grossEdgePerDollar: number;
     decision: ModelDecision;
     estimatedFeesUsd: number;
@@ -915,10 +1106,13 @@ export class ArbitrageExecutionService {
     legs: TradeLeg[];
     modelInputs: TradePlan["modelInputs"];
   }): TradePlan {
-    const hasLegs = input.legs.length > 0 && input.legs.every((l) => l.contracts > 0 && l.price > 0);
-    const feePerDollar = input.estimatedFeesUsd / Math.max(input.recommendedCapUsd, 1);
-    const expectedNetEdge = input.decision.expected_net_edge - feePerDollar;
+    const capLimit = this.state.settings.bankrollUsd * MAX_CAP_RATIO;
+    const boundedCap = clamp(input.recommendedCapUsd, 0, capLimit);
+    const hasLegs = input.legs.length > 0 && input.legs.every((l) => l.contracts > 0 && isValidPrice(l.price));
+    const feePerDollar = input.estimatedFeesUsd / Math.max(boundedCap, 1);
+    const expectedNetEdge = clamp(input.decision.expected_net_edge - feePerDollar, -MAX_VALID_MODEL_NET_EDGE, MAX_VALID_MODEL_NET_EDGE);
     const thresholdOk = expectedNetEdge >= this.state.settings.minNetEdge;
+    const riskOk = input.grossEdgePerDollar > 0 && input.grossEdgePerDollar <= MAX_VALID_GROSS_EDGE;
 
     return {
       id: input.id,
@@ -926,22 +1120,23 @@ export class ArbitrageExecutionService {
       strategy: input.strategy,
       title: input.title,
       contractUrl: input.contractUrl,
+      expiryDate: input.expiryDate,
       createdAt: new Date().toISOString(),
-      status: hasLegs && thresholdOk ? "READY" : "SKIPPED",
+      status: hasLegs && thresholdOk && riskOk ? "READY" : "SKIPPED",
       executable: hasLegs,
       grossEdgePerDollar: input.grossEdgePerDollar,
       expectedSlippage: input.decision.expected_slippage,
       fillProb20s: input.decision.fill_prob_20s,
       expectedNetEdge,
       estimatedFeesUsd: input.estimatedFeesUsd,
-      expectedGrossProfitUsd: input.recommendedCapUsd * input.grossEdgePerDollar,
-      expectedNetProfitUsd: input.recommendedCapUsd * expectedNetEdge,
-      recommendedCapUsd: input.recommendedCapUsd,
+      expectedGrossProfitUsd: boundedCap * input.grossEdgePerDollar,
+      expectedNetProfitUsd: boundedCap * expectedNetEdge,
+      recommendedCapUsd: boundedCap,
       modelInputs: input.modelInputs,
       legs: input.legs,
       reason: hasLegs
         ? thresholdOk
-          ? undefined
+          ? (riskOk ? undefined : "Opportunity failed risk sanity checks")
           : "Net edge below configured threshold"
         : "Trade size rounds to zero; increase bankroll or lower min edge",
     };
@@ -1124,10 +1319,45 @@ export class ArbitrageExecutionService {
     return this.executionLogPath;
   }
 
+  getTradeLogPath(): string {
+    return this.tradeLogPath;
+  }
+
+  private sessionStamp(): string {
+    const d = new Date();
+    const y = d.getUTCFullYear();
+    const mo = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const da = String(d.getUTCDate()).padStart(2, "0");
+    const h = String(d.getUTCHours()).padStart(2, "0");
+    const mi = String(d.getUTCMinutes()).padStart(2, "0");
+    const s = String(d.getUTCSeconds()).padStart(2, "0");
+    const ms = String(d.getUTCMilliseconds()).padStart(3, "0");
+    return `${y}${mo}${da}-${h}${mi}${s}${ms}`;
+  }
+
+  private writeTradeLog(record: ExecutionRecord): void {
+    const plan = this.state.plans.find((p) => p.id === record.planId);
+    const line = [
+      `[${record.timestamp}]`,
+      `status=${record.status}`,
+      `mode=${record.mode}`,
+      `planId=${record.planId}`,
+      `venue=${plan?.venue || "UNKNOWN"}`,
+      `strategy=${plan?.strategy || "UNKNOWN"}`,
+      `legs=${plan?.legs.length ?? 0}`,
+      `expectedNet=${record.expectedNetProfitUsd.toFixed(2)}`,
+      `realized=${record.realizedProfitUsd.toFixed(2)}`,
+      `orders=${record.orderIds.join("|") || "-"}`,
+      `message=${record.message}`,
+    ].join(" ");
+    fs.appendFileSync(this.tradeLogPath, `${line}\n`, "utf8");
+  }
+
   private pushHistory(record: ExecutionRecord): ExecutionRecord {
     this.state.history = [record, ...this.state.history].slice(0, MAX_HISTORY);
     try {
       fs.appendFileSync(this.executionLogPath, `${JSON.stringify(record)}\n`, "utf8");
+      this.writeTradeLog(record);
     } catch {
       // best-effort logging; keep runtime execution path non-fatal
     }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSSE } from "../hooks/useSSE";
 
 interface KalshiSpread {
@@ -57,6 +57,8 @@ interface KalshiScreenerData {
   eventGroupArbs: KalshiEventArb[];
   marketsScanned: number;
   timestamp: string;
+  nextRefreshAt?: string;
+  refreshEverySeconds?: number;
 }
 
 function formatUsd(n: number): string {
@@ -70,8 +72,23 @@ export function KalshiPanel({ paused }: { paused: boolean }) {
   const { data, connected } = useSSE<KalshiScreenerData>("/api/kalshi/screener/stream", paused);
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
   const [section, setSection] = useState<"spreads" | "binary" | "events">("spreads");
+  const [secondsToRefresh, setSecondsToRefresh] = useState<number>(0);
 
   const screener = data;
+
+  useEffect(() => {
+    if (!screener?.nextRefreshAt) {
+      setSecondsToRefresh(0);
+      return;
+    }
+    const tick = () => {
+      const delta = Math.ceil((new Date(screener.nextRefreshAt as string).getTime() - Date.now()) / 1000);
+      setSecondsToRefresh(Math.max(0, delta));
+    };
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [screener?.nextRefreshAt]);
 
   const sections: { id: typeof section; label: string; count: number }[] = [
     { id: "spreads", label: "Top Spreads", count: screener?.topSpreads.length ?? 0 },
@@ -95,6 +112,8 @@ export function KalshiPanel({ paused }: { paused: boolean }) {
           {screener && (
             <span className="text-xs text-zinc-600">
               {screener.marketsScanned} markets scanned
+              {" | "}
+              next ping in {secondsToRefresh}s
             </span>
           )}
         </div>

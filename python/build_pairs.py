@@ -18,6 +18,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DEFAULT_OUTPUT = os.path.join(ROOT, "pairs.csv")
+MIN_SIMILARITY_SCORE = 0.32
+MAX_EXPIRY_GAP_HOURS = 96.0
 
 
 def get_json(url: str, params: Optional[Dict[str, Any]] = None) -> Any:
@@ -93,6 +95,20 @@ def similarity(a: str, b: str) -> float:
     return inter / union if union else 0.0
 
 
+def expiry_gap_hours(a: str, b: str) -> float:
+    pa = parse_time(a)
+    pb = parse_time(b)
+    if not pa or not pb:
+        # If one side is missing expiry, allow but do not award confidence.
+        return MAX_EXPIRY_GAP_HOURS
+    try:
+        da = dt.datetime.fromisoformat(pa.replace("Z", "+00:00"))
+        db = dt.datetime.fromisoformat(pb.replace("Z", "+00:00"))
+        return abs((da - db).total_seconds()) / 3600.0
+    except Exception:
+        return MAX_EXPIRY_GAP_HOURS
+
+
 def fetch_polymarket() -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
     base = "https://gamma-api.polymarket.com/markets"
@@ -151,12 +167,22 @@ def fetch_kalshi() -> List[Dict[str, Any]]:
 def best_match(poly: Dict[str, Any], kalshi: List[Dict[str, Any]]) -> Optional[Tuple[Dict[str, Any], float]]:
     best = None
     best_score = 0.0
+    poly_cat = category_tag(poly["title"])
     for km in kalshi:
+        if category_tag(km["title"]) != poly_cat:
+            continue
+        gap_h = expiry_gap_hours(poly.get("expiry", ""), km.get("expiry", ""))
+        if gap_h > MAX_EXPIRY_GAP_HOURS:
+            continue
         s = similarity(poly["title"], km["title"])
+        if gap_h <= 24:
+            s += 0.05
+        elif gap_h <= 48:
+            s += 0.02
         if s > best_score:
             best_score = s
             best = km
-    if best and best_score >= 0.12:
+    if best and best_score >= MIN_SIMILARITY_SCORE:
         return best, best_score
     return None
 
@@ -195,29 +221,8 @@ def main() -> int:
         if len(rows) >= args.min_pairs:
             break
 
-    if len(rows) < args.min_pairs:
-        for pm in polymarket:
-            for km in kalshi:
-                if km["id"] in used_kalshi:
-                    continue
-                score = similarity(pm["title"], km["title"])
-                if score < 0.05:
-                    continue
-                used_kalshi.add(km["id"])
-                rows.append({
-                    "pair_id": f"pair-{len(rows) + 1:04d}",
-                    "poly_market_id": pm["id"],
-                    "kalshi_market_id": km["id"],
-                    "title_clean": clean_title(pm["title"])[:120],
-                    "expiry_poly_utc": pm["expiry"],
-                    "expiry_kalshi_utc": km["expiry"],
-                    "similarity_score": f"{score:.4f}",
-                    "category_tag": category_tag(pm["title"]),
-                })
-                if len(rows) >= args.min_pairs:
-                    break
-            if len(rows) >= args.min_pairs:
-                break
+    # Intentionally avoid low-confidence fallback matching.
+    # For deployment safety, prefer fewer high-quality pairs over many weak pairs.
 
     os.makedirs(os.path.dirname(os.path.abspath(args.output)) or ".", exist_ok=True)
     fields = [
@@ -236,7 +241,12 @@ def main() -> int:
         writer.writerows(rows)
 
     print(f"Wrote {len(rows)} pairs to {args.output}")
-    return 0 if len(rows) >= args.min_pairs else 2
+    if len(rows) < args.min_pairs:
+        print(
+            f"WARNING: Only {len(rows)} high-confidence pairs found (< min-pairs {args.min_pairs}). "
+            "Proceeding without low-confidence fallback matches."
+        )
+    return 0
 
 
 if __name__ == "__main__":

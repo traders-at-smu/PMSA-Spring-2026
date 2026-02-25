@@ -53,6 +53,7 @@ export interface BinaryArbOpportunity {
   market: string;
   slug: string;
   marketUrl: string;
+  endDate?: string;
   conditionId: string;
   yesPrice: number;
   noPrice: number;
@@ -74,6 +75,7 @@ export interface BinaryArbOpportunity {
 export interface NegRiskArbOpportunity {
   event: string;
   eventUrl: string;
+  eventEndDate?: string;
   negRiskMarketId: string;
   numOutcomes: number;
   sumMidpoints: number;
@@ -86,6 +88,7 @@ export interface NegRiskArbOpportunity {
     question: string;
     slug: string;
     marketUrl: string;
+    endDate?: string;
     groupTitle: string;
     yesPrice: number;
     bestBid: number;
@@ -274,6 +277,7 @@ export class ArbitrageScreener {
           market: m.question,
           slug: m.slug || "",
           marketUrl: m.slug ? `https://polymarket.com/event/${m.slug}` : "",
+          endDate: m.endDate,
           conditionId: m.conditionId,
           yesPrice,
           noPrice,
@@ -339,6 +343,7 @@ export class ArbitrageScreener {
           question: m.question,
           slug: m.slug || "",
           marketUrl: m.slug ? `https://polymarket.com/event/${m.slug}` : "",
+          endDate: m.endDate,
           groupTitle: m.groupItemTitle || "",
           yesPrice,
           bestBid: m.bestBid || 0,
@@ -353,6 +358,10 @@ export class ArbitrageScreener {
         opportunities.push({
           event: groupMarkets[0].question.substring(0, 80),
           eventUrl: groupMarkets[0].slug ? `https://polymarket.com/event/${groupMarkets[0].slug}` : "",
+          eventEndDate: groupMarkets
+            .map((x) => x.endDate)
+            .filter((x): x is string => Boolean(x))
+            .sort()[0],
           negRiskMarketId: negRiskId,
           numOutcomes: groupMarkets.length,
           sumMidpoints: sumMid,
@@ -369,6 +378,10 @@ export class ArbitrageScreener {
         opportunities.push({
           event: groupMarkets[0].question.substring(0, 80),
           eventUrl: groupMarkets[0].slug ? `https://polymarket.com/event/${groupMarkets[0].slug}` : "",
+          eventEndDate: groupMarkets
+            .map((x) => x.endDate)
+            .filter((x): x is string => Boolean(x))
+            .sort()[0],
           negRiskMarketId: negRiskId,
           numOutcomes: groupMarkets.length,
           sumMidpoints: sumMid,

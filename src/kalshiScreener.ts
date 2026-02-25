@@ -162,6 +162,7 @@ export class KalshiScreener {
     opportunities.sort((a, b) => b.spread - a.spread);
     const top = opportunities.slice(0, count);
     top.forEach((o, i) => (o.rank = i + 1));
+    console.log(`Kalshi spread scan complete: ${opportunities.length} candidates, returning top ${top.length}`);
 
     // Enrich top results with orderbook depth
     for (const opp of top) {
@@ -209,6 +210,7 @@ export class KalshiScreener {
           ticker: m.ticker,
           market: m.title || m.subtitle || m.ticker,
           category: m.category || "",
+          closeTime: m.close_time || "",
           yesPrice: yesMid,
           noPrice: noMid,
           yesBid,
@@ -226,6 +228,7 @@ export class KalshiScreener {
     }
 
     opportunities.sort((a, b) => b.deviation - a.deviation);
+    console.log(`Kalshi binary scan complete: found ${opportunities.length} mispricing opportunities`);
     return opportunities;
   }
 
@@ -275,6 +278,7 @@ export class KalshiScreener {
         outcomeDetails.push({
           ticker: m.ticker,
           title: m.subtitle || m.title || m.ticker,
+          closeTime: m.close_time || "",
           yesPrice: yesMid,
           yesBid,
           yesAsk,
@@ -287,6 +291,10 @@ export class KalshiScreener {
         opportunities.push({
           eventTicker,
           eventTitle: (groupMarkets[0].title || eventTicker).substring(0, 80),
+          eventCloseTime: groupMarkets
+            .map((x) => x.close_time)
+            .filter((x): x is string => Boolean(x))
+            .sort()[0],
           numOutcomes: groupMarkets.length,
           sumYesMidpoints: sumMid,
           sumYesAsks: sumAsks,
@@ -302,6 +310,10 @@ export class KalshiScreener {
         opportunities.push({
           eventTicker,
           eventTitle: (groupMarkets[0].title || eventTicker).substring(0, 80),
+          eventCloseTime: groupMarkets
+            .map((x) => x.close_time)
+            .filter((x): x is string => Boolean(x))
+            .sort()[0],
           numOutcomes: groupMarkets.length,
           sumYesMidpoints: sumMid,
           sumYesAsks: sumAsks,
@@ -314,6 +326,7 @@ export class KalshiScreener {
     }
 
     opportunities.sort((a, b) => b.profitPerDollar - a.profitPerDollar);
+    console.log(`Kalshi event-group scan complete: found ${opportunities.length} opportunities`);
     return opportunities;
   }
 
@@ -438,6 +451,7 @@ export interface KalshiBinaryMispricing {
   ticker: string;
   market: string;
   category: string;
+  closeTime?: string;
   yesPrice: number;
   noPrice: number;
   yesBid: number;
@@ -455,6 +469,7 @@ export interface KalshiBinaryMispricing {
 export interface KalshiEventGroupArb {
   eventTicker: string;
   eventTitle: string;
+  eventCloseTime?: string;
   numOutcomes: number;
   sumYesMidpoints: number;
   sumYesAsks: number;
@@ -464,6 +479,7 @@ export interface KalshiEventGroupArb {
   outcomes: {
     ticker: string;
     title: string;
+    closeTime?: string;
     yesPrice: number;
     yesBid: number;
     yesAsk: number;

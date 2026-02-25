@@ -19,6 +19,13 @@ DEFAULT_PAIRS = os.path.join(ROOT, "pairs.csv")
 DEFAULT_QUOTES = os.path.join(ROOT, "python", "data", "live_quotes.csv")
 DEFAULT_OUT = os.path.join(ROOT, "opportunities_raw.csv")
 DEFAULT_SECTION_D = os.path.join(ROOT, "python", "data", "model_v1_section_d_input.json")
+MIN_PAIR_SIMILARITY = 0.32
+MIN_DAYS_TO_RESOLUTION = 0.1  # 2.4h
+MAX_DAYS_TO_RESOLUTION = 120.0
+MIN_ASK = 0.01
+MAX_ASK = 0.99
+MIN_BOX_COST = 0.50
+MAX_BOX_COST = 0.995
 
 
 def get_json(url: str, params: Optional[Dict[str, Any]] = None) -> Any:
@@ -41,6 +48,10 @@ def as_float(v: Any) -> float:
         return float(v)
     except Exception:
         return 0.0
+
+
+def in_range(v: float, lo: float, hi: float) -> bool:
+    return lo <= v <= hi
 
 
 def ceil_to_cent(value: float) -> float:
@@ -155,6 +166,9 @@ def main() -> int:
     for pair_id, history in by_pair.items():
         latest = history[-1]
         pair = pairs.get(pair_id, {})
+        sim_raw = (pair.get("similarity_score") or "").strip()
+        if sim_raw and as_float(sim_raw) < MIN_PAIR_SIMILARITY:
+            continue
 
         poly_yes_ask = as_float(latest.get("poly_yes_ask"))
         poly_no_ask = as_float(latest.get("poly_no_ask"))
@@ -162,7 +176,12 @@ def main() -> int:
         kal_no_ask = as_float(latest.get("kal_no_ask"))
 
         # Ask-only policy: require explicit ask prices for every leg we may trade.
-        if poly_yes_ask <= 0 or poly_no_ask <= 0 or kal_yes_ask <= 0 or kal_no_ask <= 0:
+        if (
+            not in_range(poly_yes_ask, MIN_ASK, MAX_ASK)
+            or not in_range(poly_no_ask, MIN_ASK, MAX_ASK)
+            or not in_range(kal_yes_ask, MIN_ASK, MAX_ASK)
+            or not in_range(kal_no_ask, MIN_ASK, MAX_ASK)
+        ):
             continue
 
         c = 1.0
@@ -189,12 +208,16 @@ def main() -> int:
         if best_cost_c1 >= 1.0:
             # No arbitrage per Trade Rules.
             continue
+        if best_cost_c1 < MIN_BOX_COST or best_cost_c1 > MAX_BOX_COST:
+            continue
 
         kp_c1 = best_cost_c1
         edge_dollar_c1 = c - kp_c1
         edge_per_contract = edge_dollar_c1 / c
         edge_pct = (edge_dollar_c1 / kp_c1) if kp_c1 > 0 else 0.0
         days_remaining = days_to_resolution(pair, now_utc)
+        if days_remaining < MIN_DAYS_TO_RESOLUTION or days_remaining > MAX_DAYS_TO_RESOLUTION:
+            continue
         annualized_edge = (edge_pct * 365 / days_remaining) if days_remaining > 0 else 0.0
 
         pdepth = poly_depth(pair.get("poly_market_id", latest.get("poly_market_id", "")))

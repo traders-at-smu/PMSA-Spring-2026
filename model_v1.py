@@ -48,6 +48,9 @@ MODEL_MAX_CAP_RATIO = 0.20      # max fraction of bankroll per trade
 DEFAULT_BANKROLL_USD = 10_000   # default bankroll
 RULES_DEFAULT_KP_MAX = float(os.getenv("MODEL_RULE_KP_MAX", "1.0"))
 RULES_DEFAULT_A_MIN = float(os.getenv("MODEL_RULE_A_MIN", "0.0"))
+MODEL_MIN_SUM_ASKS = float(os.getenv("MODEL_MIN_SUM_ASKS", "0.2"))
+MODEL_MAX_SUM_ASKS = float(os.getenv("MODEL_MAX_SUM_ASKS", "1.2"))
+MODEL_MAX_EXPECTED_NET_EDGE = float(os.getenv("MODEL_MAX_EXPECTED_NET_EDGE", "0.5"))
 
 
 # ---------- Helpers ----------
@@ -256,6 +259,18 @@ def model_decision(
     """
     # --- Step 1: Gross edge ---
     sum_asks = float(opportunity_row.get("sumAsks", 0))
+    if sum_asks < MODEL_MIN_SUM_ASKS or sum_asks > MODEL_MAX_SUM_ASKS:
+        return {
+            "expected_slippage": 0.0,
+            "fill_prob_20s": 0.05,
+            "expected_net_edge": 0.0,
+            "recommended_cap": 0.0,
+            "trade_rules_passed": False,
+            "trade_rules": {
+                "pass": False,
+                "reason": f"sumAsks out of range [{MODEL_MIN_SUM_ASKS}, {MODEL_MAX_SUM_ASKS}]",
+            },
+        }
     gross_edge = calc_gross_edge(sum_asks)
 
     # --- Step 2: Edge persistence ---
@@ -284,6 +299,7 @@ def model_decision(
 
     # --- Step 8: Net edge after slippage ---
     expected_net_edge = gross_edge - expected_slippage
+    expected_net_edge = clamp(expected_net_edge, -MODEL_MAX_EXPECTED_NET_EDGE, MODEL_MAX_EXPECTED_NET_EDGE)
 
     # --- Step 9: Edge strength normalized to 5% baseline ---
     edge_strength_scaled = clamp(expected_net_edge / 0.05, 0, 1)
