@@ -35,6 +35,19 @@ Environment variable overrides:
 - `MIGUEL_POLL_INTERVAL_SEC`
 - `MIGUEL_MIN_PAIRS`
 
+Additional model rule environment variables (read directly by `model_v1.py`):
+
+- `MODEL_RULE_KP_MAX` (default `1.0`)
+- `MODEL_RULE_A_MIN` (default `0.0`)
+
+These are used in the Python decision gate:
+
+- `KP(c_new) < c_new`
+- `KP(c) < KP_max`
+- `A_e(c_new) >= A_min`
+
+If any condition fails, model output sets `recommended_cap = 0`.
+
 ## Quick start
 
 1. Copy `settings.local.example.json` to `settings.local.json`.

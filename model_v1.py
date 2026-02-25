@@ -46,6 +46,8 @@ import os
 # ---------- Constants (match TypeScript exactly) ----------
 MODEL_MAX_CAP_RATIO = 0.20      # max fraction of bankroll per trade
 DEFAULT_BANKROLL_USD = 10_000   # default bankroll
+RULES_DEFAULT_KP_MAX = float(os.getenv("MODEL_RULE_KP_MAX", "1.0"))
+RULES_DEFAULT_A_MIN = float(os.getenv("MODEL_RULE_A_MIN", "0.0"))
 
 
 # ---------- Helpers ----------
@@ -60,6 +62,13 @@ def ceil_to_cent(value: float) -> float:
     return math.ceil(value * 100) / 100
 
 
+def as_float(value: object, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except Exception:
+        return default
+
+
 def calc_kalshi_fee(contracts: float, price: float, maker: bool = False) -> float:
     """
     Kalshi fee formula (from Information/Execution Fees.md, owner: Quang):
@@ -69,6 +78,22 @@ def calc_kalshi_fee(contracts: float, price: float, maker: bool = False) -> floa
     """
     k = 0.0175 if maker else 0.07
     return ceil_to_cent(k * contracts * price * (1 - price))
+
+
+def calc_trade_rule_kalshi_fee(contracts: float, price: float) -> float:
+    """
+    Trade Rules fee schedule:
+      Fee = roundup(0.007 * C * Ask_K* * (1-Ask_K*))
+    """
+    return ceil_to_cent(0.007 * contracts * price * (1 - price))
+
+
+def calc_trade_rule_kp(contracts: float, kalshi_ask: float, polymarket_ask: float) -> float:
+    return (
+        contracts * kalshi_ask
+        + contracts * polymarket_ask
+        + calc_trade_rule_kalshi_fee(contracts, kalshi_ask)
+    )
 
 
 def calc_gross_edge(sum_asks: float) -> float:
@@ -130,6 +155,10 @@ def describe_legs(row: dict) -> str:
     Human-readable leg routing for demo output.
     """
     direction = str(row.get("best_direction", "")).upper()
+    if direction == "BUY_KY_PN":
+        return "KAL YES + POLY NO"
+    if direction == "BUY_KN_PY":
+        return "KAL NO + POLY YES"
     if direction == "POLY_YES_KAL_NO":
         return "POLY YES + KAL NO"
     if direction == "POLY_NO_KAL_YES":
@@ -145,6 +174,58 @@ def describe_legs(row: dict) -> str:
     if strategy == "EVENT_BUY_ALL_YES":
         return "ALL YES OUTCOMES"
     return "N/A"
+
+
+def evaluate_trade_rules(opportunity_row: dict, recommended_cap: float) -> dict:
+    """
+    Required trade gates:
+      1) KP(c_new) < c_new
+      2) KP(c) < KP_max
+      3) A_e(c_new) >= A_min
+    """
+    sum_asks = max(as_float(opportunity_row.get("sumAsks"), 0.0), 0.000001)
+    c_existing = max(as_float(opportunity_row.get("c"), 1.0), 1.0)
+    c_new = max(recommended_cap / sum_asks, 0.0)
+
+    selected_kal_ask = as_float(opportunity_row.get("selected_kal_ask"), 0.0)
+    selected_poly_ask = as_float(opportunity_row.get("selected_poly_ask"), 0.0)
+
+    if selected_kal_ask > 0 and selected_poly_ask > 0:
+        kp_c = calc_trade_rule_kp(c_existing, selected_kal_ask, selected_poly_ask)
+        kp_c_new = calc_trade_rule_kp(c_new, selected_kal_ask, selected_poly_ask)
+    else:
+        # Fallback when venue-split asks are unavailable.
+        kp_c = c_existing * sum_asks
+        kp_c_new = c_new * sum_asks
+
+    kp_max = as_float(opportunity_row.get("kp_max"), RULES_DEFAULT_KP_MAX)
+    a_min = as_float(opportunity_row.get("a_min"), RULES_DEFAULT_A_MIN)
+    days_to_resolution = max(
+        as_float(
+            opportunity_row.get("days_to_resolution", opportunity_row.get("daysToResolution")),
+            365.0,
+        ),
+        0.000001,
+    )
+
+    cond_1 = c_new > 0 and kp_c_new < c_new
+    cond_2 = kp_c < kp_max
+    edge_pct_c_new = ((c_new - kp_c_new) / kp_c_new) if kp_c_new > 0 else -1.0
+    annualized_edge = (edge_pct_c_new * 365.0) / days_to_resolution
+    cond_3 = annualized_edge >= a_min
+
+    return {
+        "pass": bool(cond_1 and cond_2 and cond_3),
+        "kp_c": kp_c,
+        "kp_c_new": kp_c_new,
+        "c_new": c_new,
+        "kp_max": kp_max,
+        "a_min": a_min,
+        "annualized_edge_c_new": annualized_edge,
+        "cond_kp_cnew_lt_cnew": cond_1,
+        "cond_kp_c_lt_kpmax": cond_2,
+        "cond_annualized_edge_ge_amin": cond_3,
+    }
 
 
 # ---------- Core Decision Function ----------
@@ -213,11 +294,17 @@ def model_decision(
         fill_prob * edge_strength_scaled,
     )
 
+    trade_rules = evaluate_trade_rules(opportunity_row, recommended_cap)
+    if not trade_rules["pass"]:
+        recommended_cap = 0.0
+
     return {
         "expected_slippage": max(0.0, expected_slippage),
         "fill_prob_20s": fill_prob,
         "expected_net_edge": expected_net_edge,
         "recommended_cap": max(0.0, recommended_cap),
+        "trade_rules_passed": trade_rules["pass"],
+        "trade_rules": trade_rules,
     }
 
 

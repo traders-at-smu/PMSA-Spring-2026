@@ -2,6 +2,32 @@
 
 Cross-venue arbitrage scanner/executor with a React dashboard, TypeScript backend, and a Python decision-model bridge (`model_v1.py`).
 
+## Trading policy (current)
+
+- Ask-only execution logic: opportunities are computed from ask prices only. The pipeline does not synthesize asks from bid prices.
+- Cross-venue binary strategies evaluated per pair:
+  - `BUY_KY_PN` = buy Kalshi YES ask + Polymarket NO ask
+  - `BUY_KN_PY` = buy Kalshi NO ask + Polymarket YES ask
+- Kalshi fee in raw opportunity math uses Trade Rules formula:
+  - `roundup(0.007 * C * Ask_K * (1 - Ask_K))`
+- Opportunities are emitted only when arbitrage condition holds for at least one strategy:
+  - `KP(c=1) < 1`
+
+## Model trade gating (required rules)
+
+`model_v1.py` now enforces these gates before allowing size (`recommended_cap > 0`):
+
+- `KP(c_new) < c_new`
+- `KP(c) < KP_max`
+- `A_e(c_new) >= A_min`
+
+If any rule fails, `recommended_cap` is forced to `0`.
+
+Optional environment variables for model defaults:
+
+- `MODEL_RULE_KP_MAX` (default: `1.0`)
+- `MODEL_RULE_A_MIN` (default: `0.0`)
+
 ## Current architecture
 
 - Node/TypeScript API server: `src/dashboard/server.ts`
@@ -69,7 +95,8 @@ npm run dashboard:dev
 npm run build
 npm run dashboard:build
 npm run dashboard:smoke
-python -m py_compile model_v1.py python/model_v1_bridge.py python/build_pairs.py python/live_quotes.py python/raw_boxed_filter.py
+python -m py_compile model_v1.py python/model_v1_bridge.py python/build_pairs.py python/live_quotes.py python/raw_boxed_filter.py python/test_trade_rules.py python/test_model_trade_rules.py
+python -m unittest python/test_trade_rules.py python/test_model_trade_rules.py -v
 ```
 
 ## Python model usage

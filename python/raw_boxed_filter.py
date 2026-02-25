@@ -43,13 +43,54 @@ def as_float(v: Any) -> float:
         return 0.0
 
 
+def ceil_to_cent(value: float) -> float:
+    return (int((value * 100) + 0.9999999999)) / 100
+
+
+def calc_kalshi_fee(contracts: float, ask_price: float) -> float:
+    # Trade Rules: Fee_K*(C) = roundup(0.007 * C * Ask_K* * (1 - Ask_K*))
+    return ceil_to_cent(0.007 * max(0.0, contracts) * max(0.0, ask_price) * (1 - max(0.0, ask_price)))
+
+
+def calc_strategy_total_cost(
+    contracts: float,
+    kalshi_ask: float,
+    polymarket_ask: float,
+) -> float:
+    return (contracts * kalshi_ask) + (contracts * polymarket_ask) + calc_kalshi_fee(contracts, kalshi_ask)
+
+
+def parse_utc_iso(raw: str) -> Optional[dt.datetime]:
+    if not raw:
+        return None
+    try:
+        normalized = raw[:-1] + "+00:00" if raw.endswith("Z") else raw
+        parsed = dt.datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=dt.timezone.utc)
+        return parsed.astimezone(dt.timezone.utc)
+    except Exception:
+        return None
+
+
+def days_to_resolution(pair: Dict[str, str], now_utc: dt.datetime) -> float:
+    poly_exp = parse_utc_iso(pair.get("expiry_poly_utc", ""))
+    kal_exp = parse_utc_iso(pair.get("expiry_kalshi_utc", ""))
+    expiries = [d for d in [poly_exp, kal_exp] if d is not None]
+    if not expiries:
+        return 0.0
+    min_days = min((d - now_utc).total_seconds() / 86400 for d in expiries)
+    return max(0.0, min_days)
+
+
 def compute_recent_edges(history: List[Dict[str, str]]) -> List[Dict[str, Any]]:
     snaps = []
     for row in history[-3:]:
-        cost1 = as_float(row.get("poly_yes_ask")) + as_float(row.get("kal_no_ask"))
-        cost2 = as_float(row.get("poly_no_ask")) + as_float(row.get("kal_yes_ask"))
-        best_cost = min(cost1, cost2) if cost1 > 0 and cost2 > 0 else max(cost1, cost2)
-        edge = 1 - best_cost
+        c = 1.0
+        kypn = calc_strategy_total_cost(c, as_float(row.get("kal_yes_ask")), as_float(row.get("poly_no_ask")))
+        knpy = calc_strategy_total_cost(c, as_float(row.get("kal_no_ask")), as_float(row.get("poly_yes_ask")))
+        best_cost = min(kypn, knpy) if kypn > 0 and knpy > 0 else max(kypn, knpy)
+        edge = c - best_cost
         snaps.append({"timestamp": row.get("timestamp", ""), "grossEdgePerDollar": edge})
     return snaps
 
@@ -109,6 +150,7 @@ def main() -> int:
 
     rows: List[Dict[str, Any]] = []
     now = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+    now_utc = dt.datetime.now(dt.timezone.utc)
 
     for pair_id, history in by_pair.items():
         latest = history[-1]
@@ -119,14 +161,41 @@ def main() -> int:
         kal_yes_ask = as_float(latest.get("kal_yes_ask"))
         kal_no_ask = as_float(latest.get("kal_no_ask"))
 
-        cost1 = poly_yes_ask + kal_no_ask
-        cost2 = poly_no_ask + kal_yes_ask
-        if cost1 <= 0 and cost2 <= 0:
+        # Ask-only policy: require explicit ask prices for every leg we may trade.
+        if poly_yes_ask <= 0 or poly_no_ask <= 0 or kal_yes_ask <= 0 or kal_no_ask <= 0:
             continue
 
-        best_cost = min(c for c in [cost1, cost2] if c > 0)
-        best_dir = "POLY_YES_KAL_NO" if best_cost == cost1 else "POLY_NO_KAL_YES"
-        edge_raw = 1 - best_cost
+        c = 1.0
+        fee_ky = calc_kalshi_fee(c, kal_yes_ask)
+        fee_kn = calc_kalshi_fee(c, kal_no_ask)
+        # Trade Rules:
+        # KYPN = Ask_KY + Ask_PN + Fee_KY(C=1) + Fee_PN(0)
+        # KNPY = Ask_KN + Ask_PY + Fee_KN(C=1) + Fee_PY(0)
+        kypn_cost_c1 = calc_strategy_total_cost(c, kal_yes_ask, poly_no_ask)
+        knpy_cost_c1 = calc_strategy_total_cost(c, kal_no_ask, poly_yes_ask)
+
+        if kypn_cost_c1 <= 0 and knpy_cost_c1 <= 0:
+            continue
+
+        strategy_options = []
+        if kypn_cost_c1 > 0:
+            strategy_options.append(("BUY_KY_PN", kypn_cost_c1, kal_yes_ask, poly_no_ask, fee_ky))
+        if knpy_cost_c1 > 0:
+            strategy_options.append(("BUY_KN_PY", knpy_cost_c1, kal_no_ask, poly_yes_ask, fee_kn))
+        if not strategy_options:
+            continue
+
+        best_direction, best_cost_c1, best_kal_ask, best_poly_ask, best_kal_fee_c1 = min(strategy_options, key=lambda x: x[1])
+        if best_cost_c1 >= 1.0:
+            # No arbitrage per Trade Rules.
+            continue
+
+        kp_c1 = best_cost_c1
+        edge_dollar_c1 = c - kp_c1
+        edge_per_contract = edge_dollar_c1 / c
+        edge_pct = (edge_dollar_c1 / kp_c1) if kp_c1 > 0 else 0.0
+        days_remaining = days_to_resolution(pair, now_utc)
+        annualized_edge = (edge_pct * 365 / days_remaining) if days_remaining > 0 else 0.0
 
         pdepth = poly_depth(pair.get("poly_market_id", latest.get("poly_market_id", "")))
         kdepth = kalshi_depth(pair.get("kalshi_market_id", latest.get("kalshi_market_id", "")))
@@ -148,25 +217,44 @@ def main() -> int:
             "bidDepth": pdepth["bidDepth"],
             "askDepth": pdepth["askDepth"],
             "liquidity": kdepth["top"],
-            "profitPerDollar": edge_raw,
+            "profitPerDollar": edge_per_contract,
             "numOutcomes": 2,
-            "sumAsks": best_cost,
+            "sumAsks": best_cost_c1,
             "pair_id": pair_id,
             "poly_market_id": pair.get("poly_market_id", latest.get("poly_market_id", "")),
             "kalshi_market_id": pair.get("kalshi_market_id", latest.get("kalshi_market_id", "")),
             "timestamp": now,
-            "cost1": cost1,
-            "cost2": cost2,
-            "best_cost": best_cost,
-            "best_direction": best_dir,
-            "edge_raw": edge_raw,
+            # Legacy columns retained for dashboard compatibility.
+            "cost1": knpy_cost_c1,
+            "cost2": kypn_cost_c1,
+            "best_cost": best_cost_c1,
+            "best_direction": best_direction,
+            "edge_raw": edge_per_contract,
+            # Trade Rules columns.
+            "ask_py": poly_yes_ask,
+            "ask_pn": poly_no_ask,
+            "ask_ky": kal_yes_ask,
+            "ask_kn": kal_no_ask,
+            "fee_ky_c1": fee_ky,
+            "fee_kn_c1": fee_kn,
+            "kypn_cost_c1": kypn_cost_c1,
+            "knpy_cost_c1": knpy_cost_c1,
+            "selected_kal_ask": best_kal_ask,
+            "selected_poly_ask": best_poly_ask,
+            "selected_kal_fee_c1": best_kal_fee_c1,
+            "kp_c1": kp_c1,
+            "edge_dollar_c1": edge_dollar_c1,
+            "edge_per_contract_c1": edge_per_contract,
+            "edge_pct_c1": edge_pct,
+            "days_to_resolution": days_remaining,
+            "annualized_edge_c1": annualized_edge,
             "topBookDepthUsd": top_book_depth,
             "depthWithinProfitableBandUsd": profitable_depth,
             "edgePersistence": edge_persistence,
             "recentSnapshotsJson": json.dumps(recent),
         })
 
-    rows.sort(key=lambda r: as_float(r.get("edge_raw")), reverse=True)
+    rows.sort(key=lambda r: as_float(r.get("edge_pct_c1")), reverse=True)
 
     os.makedirs(os.path.dirname(os.path.abspath(args.out)) or ".", exist_ok=True)
     fields = [
@@ -174,6 +262,11 @@ def main() -> int:
         "profitPerDollar", "numOutcomes", "sumAsks", "pair_id", "poly_market_id", "kalshi_market_id", "timestamp",
         "cost1", "cost2", "best_cost", "best_direction", "edge_raw", "topBookDepthUsd",
         "depthWithinProfitableBandUsd", "edgePersistence", "recentSnapshotsJson",
+        "ask_py", "ask_pn", "ask_ky", "ask_kn",
+        "fee_ky_c1", "fee_kn_c1", "kypn_cost_c1", "knpy_cost_c1",
+        "selected_kal_ask", "selected_poly_ask", "selected_kal_fee_c1",
+        "kp_c1", "edge_dollar_c1", "edge_per_contract_c1", "edge_pct_c1",
+        "days_to_resolution", "annualized_edge_c1",
     ]
     with open(args.out, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fields)

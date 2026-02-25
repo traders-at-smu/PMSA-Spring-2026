@@ -27,6 +27,25 @@ def get_json(url: str, params: Optional[Dict[str, Any]] = None) -> Any:
         return json.loads(resp.read().decode("utf-8"))
 
 
+def parse_outcome_prices(raw: Any) -> List[float]:
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except Exception:
+            return []
+    if not isinstance(raw, list):
+        return []
+    out: List[float] = []
+    for v in raw:
+        try:
+            out.append(float(v))
+        except Exception:
+            out.append(0.0)
+    return out
+
+
 def load_pairs(path: str, limit: int) -> List[Dict[str, str]]:
     with open(path, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
@@ -41,10 +60,18 @@ def poly_quote(market_id: str) -> Dict[str, float]:
         arr = get_json("https://gamma-api.polymarket.com/markets", {"id": market_id, "limit": 1})
         m = arr[0] if arr else {}
 
+    outcome_prices = parse_outcome_prices(m.get("outcomePrices"))
     yes_ask = float(m.get("bestAsk") or 0)
     yes_bid = float(m.get("bestBid") or 0)
-    no_ask = 1 - yes_bid if yes_bid > 0 else 0.0
-    no_bid = 1 - yes_ask if yes_ask > 0 else 0.0
+
+    # Ask-only policy:
+    # Do not synthesize NO ask from YES bid. Use explicit NO ask fields if present,
+    # then fall back to outcomePrices[1] as a weak ask proxy.
+    no_ask = float(m.get("noAsk") or m.get("bestNoAsk") or 0)
+    if no_ask <= 0 and len(outcome_prices) > 1:
+        no_ask = float(outcome_prices[1] or 0)
+
+    no_bid = float(m.get("noBid") or m.get("bestNoBid") or 0)
     return {
         "poly_yes_ask": max(0.0, min(1.0, yes_ask)),
         "poly_no_ask": max(0.0, min(1.0, no_ask)),
