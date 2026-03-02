@@ -2,15 +2,17 @@
 
 Monorepo for cross-venue trading/arbitrage tooling across Polymarket and Kalshi.
 
-This repository currently contains two implementations:
+This repository currently contains the following components:
 
 - `V1`: TypeScript + React dashboard + Python model bridge.
 - `V2`: Python-first bot + Streamlit dashboard with live safety controls.
+- `Polytoken`: Link-to-pair mapping utility for Polymarket/Kalshi.
 
 ## Repository layout
 
 ```text
 .
+|-- Polytoken/  # Polymarket/Kalshi mapping row generator
 |-- V1/   # TypeScript backend + React dashboard + Python model bridge
 |-- V2/   # Python bot + Streamlit dashboard
 `-- README.md
@@ -20,6 +22,7 @@ This repository currently contains two implementations:
 
 - Use `V1` if you want the Node/TypeScript service stack with a React UI and Python scoring bridge.
 - Use `V2` if you want a pure Python workflow with CLI commands and Streamlit dashboard.
+- Use `Polytoken` if you want to generate mapping rows from Polymarket + Kalshi links.
 
 ## Shared prerequisites
 
@@ -125,6 +128,49 @@ python -m src.main --config config/config.json dashboard
 ```
 
 Details: see `V2/README.md`.
+
+---
+
+## Polytoken Utility (Link -> Mapping Rows)
+
+`Polytoken/polytoken.py` converts Polymarket + Kalshi links into mapping CSV rows.
+
+### 1) Install Python deps
+
+```powershell
+pip install requests openpyxl
+```
+
+`openpyxl` is only required for `.xlsx` input.
+
+### 2) Run (interactive mode)
+
+```powershell
+cd Polytoken
+python polytoken.py
+```
+
+The script prompts for:
+- Polymarket link
+- Kalshi link
+- subcontract selection
+
+Then writes one CSV row to stdout.
+
+### 3) Run (batch mode from `.csv` or `.xlsx`)
+
+```powershell
+cd Polytoken
+python polytoken.py links.csv
+python polytoken.py links.xlsx
+```
+
+Input format:
+- Column 1: Polymarket link
+- Column 2: Kalshi link
+- Optional header row is supported (e.g. `polymarket,kalshi`)
+
+Batch mode processes each row through the same CLI flow and prompts for selections when needed. Failed rows are reported to stderr and processing continues.
 
 ---
 
