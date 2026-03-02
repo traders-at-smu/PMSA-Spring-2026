@@ -7,6 +7,7 @@ import requests
 
 # API Constants
 KALSHI_BASE = "https://api.elections.kalshi.com/trade-api/v2"
+POLY_GAMMA_BASE = "https://gamma-api.polymarket.com"
 HTTP_TIMEOUT_SEC = 10
 
 def get_next_pair_id():
@@ -29,6 +30,75 @@ def extract_poly_slug(url):
         return parts[-1]
     except Exception:
         return None
+
+
+def _poly_display_name(market):
+    """Human-readable Polymarket market label."""
+    if not isinstance(market, dict):
+        return "Unknown market"
+    question = str(market.get("question", "")).strip()
+    slug = str(market.get("slug", "")).strip()
+    if question and slug:
+        return f"{question} [{slug}]"
+    if question:
+        return question
+    if slug:
+        return slug
+    return str(market.get("conditionId", "Unknown market"))
+
+
+def resolve_polymarket_market(poly_slug):
+    """
+    Resolves a Polymarket market from either:
+    - direct market slug (/market/<slug>)
+    - event slug (/event/<slug> or /sports/.../<slug>)
+    """
+    slug = str(poly_slug or "").strip()
+    if not slug:
+        raise RuntimeError("Polymarket slug is empty")
+
+    market_resp = requests.get(
+        f"{POLY_GAMMA_BASE}/markets",
+        params={"slug": slug},
+        timeout=HTTP_TIMEOUT_SEC,
+    )
+    market_resp.raise_for_status()
+    market_rows = market_resp.json()
+    if isinstance(market_rows, list) and market_rows:
+        return market_rows[0]
+    if isinstance(market_rows, dict) and market_rows.get("conditionId"):
+        return market_rows
+
+    event_resp = requests.get(
+        f"{POLY_GAMMA_BASE}/events",
+        params={"slug": slug},
+        timeout=HTTP_TIMEOUT_SEC,
+    )
+    event_resp.raise_for_status()
+    event_rows = event_resp.json()
+    if not isinstance(event_rows, list) or not event_rows:
+        raise RuntimeError(f"No Polymarket market or event found for slug: {slug}")
+
+    event = event_rows[0]
+    raw_markets = event.get("markets", [])
+    markets = [m for m in raw_markets if isinstance(m, dict)]
+    if not markets:
+        raise RuntimeError(f"Event has no markets for slug: {slug}")
+
+    active_markets = [m for m in markets if bool(m.get("active")) and not bool(m.get("closed"))]
+    candidates = active_markets or markets
+
+    if len(candidates) == 1:
+        return candidates[0]
+
+    print("\nMultiple Polymarket markets found for this event. Pick one:")
+    for i, market in enumerate(candidates, 1):
+        print(f"{i}) {_poly_display_name(market)}")
+
+    choice = int(input("\nEnter Polymarket choice number: ")) - 1
+    if choice < 0 or choice >= len(candidates):
+        raise RuntimeError("Polymarket choice out of range")
+    return candidates[choice]
 
 
 def extract_kalshi_market_like(url_or_ticker):
@@ -154,11 +224,8 @@ def main():
     if not poly_slug:
         raise RuntimeError("Could not extract Polymarket slug from URL")
 
-    poly_api = f"https://gamma-api.polymarket.com/markets?slug={poly_slug}"
-    poly_resp = requests.get(poly_api, timeout=HTTP_TIMEOUT_SEC).json()
-    if isinstance(poly_resp, list) and not poly_resp:
-        raise RuntimeError(f"No Polymarket market found for slug: {poly_slug}")
-    poly_data = poly_resp[0] if isinstance(poly_resp, list) else poly_resp
+    poly_data = resolve_polymarket_market(poly_slug)
+    poly_market_slug = str(poly_data.get("slug", "")).strip() or poly_slug
 
     kalshi_url = input("Paste Kalshi link: ").strip()
     kalshi_market_like = extract_kalshi_market_like(kalshi_url)
@@ -185,8 +252,8 @@ def main():
         "category_tag": "default",
         "similarity_score": "1.0",
         "poly_market_id": poly_data.get("conditionId", "N/A"),
-        "poly_slug": poly_slug,
-        "poly_url": f"https://polymarket.com/market/{poly_slug}",
+        "poly_slug": poly_market_slug,
+        "poly_url": f"https://polymarket.com/market/{poly_market_slug}",
         "kalshi_market_id": selected["ticker"],
         "kalshi_url": f"https://kalshi.com/markets/{selected['ticker']}",
     }
