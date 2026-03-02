@@ -1,0 +1,43 @@
+{
+  "name": "polymarket-copy-trading-bot",
+  "version": "1.0.0",
+  "description": "Polymarket copy trading bot that mirrors a target trader's positions",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "screener": "tsx src/screener.ts",
+    "dashboard": "npm run dashboard:build && npm run dashboard:server",
+    "dashboard:server": "tsx src/dashboard/server.ts",
+    "dashboard:build": "cd src/dashboard-ui && npx vite build",
+    "dashboard:dev": "cd src/dashboard-ui && npx vite",
+    "dashboard:smoke": "tsx src/scripts/smokeDashboard.ts",
+    "kalshi-screener": "tsx src/kalshiScreener.ts",
+    "miguel:pairs": "python python/build_pairs.py --output pairs.csv --min-pairs 50",
+    "miguel:quotes:once": "python python/live_quotes.py --pairs pairs.csv --out python/data/live_quotes.csv --once",
+    "miguel:quotes": "python python/live_quotes.py --pairs pairs.csv --out python/data/live_quotes.csv --interval 30",
+    "miguel:raw": "python python/raw_boxed_filter.py --pairs pairs.csv --quotes python/data/live_quotes.csv --out opportunities_raw.csv"
+  },
+  "dependencies": {
+    "@ethersproject/bignumber": "^5.7.0",
+    "@ethersproject/constants": "^5.7.0",
+    "@ethersproject/contracts": "^5.7.0",
+    "@ethersproject/providers": "^5.7.0",
+    "@ethersproject/wallet": "^5.7.0",
+    "@polymarket/clob-client": "^5.2.4",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "axios": "^1.7.0",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.0",
+    "express": "^5.2.1",
+    "mongoose": "^8.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "ts-node": "^10.9.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.5.0"
+  }
+}

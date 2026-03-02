@@ -1,0 +1,31 @@
+{
+  "execution": {
+    "mode": "PAPER",
+    "autoExecute": false,
+    "bankrollUsd": 25000
+  },
+  "apiKeys": {
+    "polymarket": {
+      "privateKey": "0xYOUR_PRIVATE_KEY",
+      "proxyWalletAddress": "0xYOUR_PROXY_WALLET_ADDRESS",
+      "rpcUrl": "https://polygon-mainnet.infura.io/v3/YOUR_PROJECT_ID"
+    },
+    "kalshi": {
+      "tradingApiUrl": "https://api.elections.kalshi.com/trade-api/v2",
+      "apiKey": "YOUR_KALSHI_KEY",
+      "apiSecret": "YOUR_KALSHI_SECRET",
+      "apiPassphrase": "",
+      "bearerToken": "",
+      "orderEndpoint": ""
+    }
+  },
+  "python": {
+    "pythonExecutable": "python",
+    "modelBridgePath": "python/model_v1_bridge.py",
+    "miguelScriptsDir": "python",
+    "miguel": {
+      "pollIntervalSec": 30,
+      "minPairs": 50
+    }
+  }
+}
