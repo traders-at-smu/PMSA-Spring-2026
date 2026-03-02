@@ -1,0 +1,17 @@
+[
+  "tests/test_config_credentials.py::test_live_credentials_required",
+  "tests/test_config_credentials.py::test_paper_config_loads_without_credentials_file",
+  "tests/test_execution_guards.py::test_live_guard_blocks_when_not_armed",
+  "tests/test_kalshi_market_resolution.py::test_event_ticker_from_market_like",
+  "tests/test_kalshi_market_resolution.py::test_event_ticker_from_slug_path",
+  "tests/test_kalshi_market_resolution.py::test_ticker_from_kalshi_url",
+  "tests/test_kalshi_market_resolution.py::test_ticker_from_nested_market_url_path",
+  "tests/test_kalshi_market_resolution.py::test_title_similarity_prefers_token_overlap",
+  "tests/test_mapping_loader.py::test_mapping_loader_csv_ok",
+  "tests/test_mapping_loader.py::test_mapping_loader_missing_column",
+  "tests/test_mapping_loader_alt.py::test_mapping_loader_alt_schema_ok",
+  "tests/test_strategy_model.py::test_depth_walk_sizes_contracts_until_arb_ends",
+  "tests/test_strategy_model.py::test_kalshi_fee_ceil_cent",
+  "tests/test_strategy_model.py::test_pair_evaluation_returns_two_strategies",
+  "tests/test_strategy_model.py::test_polymarket_fee_positive"
+]
