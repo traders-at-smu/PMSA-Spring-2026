@@ -7,3 +7,8 @@ rpcUrls.json
 config/settings.local.json
 
 .vercel/
+.DS_Store
+*.zip
+.next/
+*.csv
+logs/
