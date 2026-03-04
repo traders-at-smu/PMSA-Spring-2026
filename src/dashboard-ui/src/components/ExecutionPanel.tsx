@@ -14,8 +14,8 @@ interface ExecutionSettings {
 
 interface TradePlan {
   id: string;
-  venue: "POLYMARKET" | "KALSHI";
-  strategy: "BINARY_BUY_BOTH" | "EVENT_BUY_ALL_YES";
+  venue: "POLYMARKET" | "KALSHI" | "CROSS";
+  strategy: "BINARY_BUY_BOTH" | "EVENT_BUY_ALL_YES" | "CROSS_PLATFORM";
   title: string;
   contractUrl?: string;
   status: PlanStatus;

@@ -4,10 +4,11 @@ import {
   KalshiMarket,
   KalshiSpreadOpportunity,
   KalshiScreenerResults,
+  KalshiNewMarket,
 } from "./types";
 
 const MIN_LIQUIDITY = parseInt(process.env.KALSHI_MIN_LIQUIDITY || "100000");
-const RATE_LIMIT_DELAY = 500; // ms between requests to avoid aggressive polling/rate limits
+const RATE_LIMIT_DELAY = 100; // ms between requests
 
 // ---- Screener ----
 
@@ -16,7 +17,7 @@ export class KalshiScreener {
   private cachedMarkets: KalshiMarket[] | null = null;
   private cacheExpiry: number = 0;
   private fetchInFlight: Promise<KalshiMarket[]> | null = null;
-  private readonly CACHE_TTL = 60_000; // 60 seconds
+  private readonly CACHE_TTL = 300_000; // 5 min – full fetch takes ~6 min, no point expiring sooner
   private readonly MAX_RETRIES = 5;
 
   constructor() {
@@ -43,33 +44,44 @@ export class KalshiScreener {
   }
 
   private async fetchAllActiveMarketsInternal(): Promise<KalshiMarket[]> {
+    // Use the /events endpoint with nested markets to avoid fetching 470k+ sports
+    // parlay markets from /markets. The events endpoint returns ~31k real markets
+    // in ~14 seconds vs ~341 seconds for the full /markets crawl.
     const allMarkets: KalshiMarket[] = [];
     let cursor: string | undefined = undefined;
+    let pages = 0;
+    const t0 = Date.now();
 
     while (true) {
       const params: Record<string, any> = {
         limit: 200,
         status: "open",
+        with_nested_markets: true,
       };
       if (cursor) params.cursor = cursor;
 
-      const data: any = await this.getWithRetry(`${this.apiUrl}/markets`, { params });
-      const markets: KalshiMarket[] = data?.markets || [];
+      const data: any = await this.getWithRetry(`${this.apiUrl}/events`, { params });
+      const events: any[] = data?.events || [];
       const nextCursor: string | undefined = data?.cursor;
 
-      if (markets.length === 0) break;
-      allMarkets.push(...markets);
+      if (events.length === 0) break;
+      pages++;
+
+      for (const event of events) {
+        const markets: KalshiMarket[] = event.markets || [];
+        allMarkets.push(...markets);
+      }
 
       if (!nextCursor || nextCursor === cursor) break;
       cursor = nextCursor;
 
-      // Rate limiting
+      // Yield to event loop between pages
       await new Promise((r) => setTimeout(r, RATE_LIMIT_DELAY));
     }
 
     this.cachedMarkets = allMarkets;
     this.cacheExpiry = Date.now() + this.CACHE_TTL;
-    console.log(`  Fetched ${allMarkets.length} active Kalshi markets`);
+    console.log(`  Fetched ${allMarkets.length} active Kalshi markets in ${((Date.now() - t0) / 1000).toFixed(1)}s (${pages} pages via /events)`);
     return this.cachedMarkets;
   }
 
@@ -315,6 +327,49 @@ export class KalshiScreener {
 
     opportunities.sort((a, b) => b.profitPerDollar - a.profitPerDollar);
     return opportunities;
+  }
+
+  // ---- 4. New Markets ----
+
+  async findNewMarkets(limit: number = 20): Promise<KalshiNewMarket[]> {
+    try {
+      // Fetch first page of markets — Kalshi API doesn't support sort by created_time,
+      // so we fetch a batch and sort client-side
+      const params: Record<string, any> = {
+        limit: 200,
+        status: "open",
+      };
+
+      const data: any = await this.getWithRetry(`${this.apiUrl}/markets`, { params });
+      const markets: KalshiMarket[] = data?.markets || [];
+
+      // Sort by created_time descending (newest first)
+      const sorted = markets
+        .filter((m) => m.created_time)
+        .sort((a, b) => {
+          const ta = Date.parse(a.created_time || "") || 0;
+          const tb = Date.parse(b.created_time || "") || 0;
+          return tb - ta;
+        })
+        .slice(0, limit);
+
+      return sorted.map((m) => ({
+        ticker: m.ticker,
+        title: m.title || m.subtitle || m.ticker,
+        category: m.category || "",
+        createdTime: m.created_time || "",
+        openTime: m.open_time || "",
+        closeTime: m.close_time || "",
+        yesBid: this.centsToNorm(m.yes_bid_dollars || 0),
+        yesAsk: this.centsToNorm(m.yes_ask_dollars || 0),
+        volume24h: (m.volume_24h_fp || 0) / 100,
+        liquidity: m.liquidity_dollars || 0,
+        kalshiUrl: `https://kalshi.com/markets/${encodeURIComponent(m.ticker)}`,
+      }));
+    } catch (err: any) {
+      console.error("Error fetching new Kalshi markets:", err.message);
+      return [];
+    }
   }
 
   // ---- JSON Data (for API) ----

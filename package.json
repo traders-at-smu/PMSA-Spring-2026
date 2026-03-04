@@ -17,7 +17,8 @@
     "miguel:pairs": "python python/build_pairs.py --output pairs.csv --min-pairs 50",
     "miguel:quotes:once": "python python/live_quotes.py --pairs pairs.csv --out python/data/live_quotes.csv --once",
     "miguel:quotes": "python python/live_quotes.py --pairs pairs.csv --out python/data/live_quotes.csv --interval 30",
-    "miguel:raw": "python python/raw_boxed_filter.py --pairs pairs.csv --quotes python/data/live_quotes.csv --out opportunities_raw.csv"
+    "miguel:raw": "python python/raw_boxed_filter.py --pairs pairs.csv --quotes python/data/live_quotes.csv --out opportunities_raw.csv",
+    "postinstall": "cd src/dashboard-ui && npm install"
   },
   "dependencies": {
     "@ethersproject/bignumber": "^5.7.0",
@@ -36,6 +37,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.14.0",
+    "@vercel/node": "^3.2.29",
     "ts-node": "^10.9.0",
     "tsx": "^4.21.0",
     "typescript": "^5.5.0"

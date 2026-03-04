@@ -5,8 +5,10 @@ import { TradeAlerts } from "./components/TradeAlerts";
 import { ArbitragePanel } from "./components/ArbitragePanel";
 import { KalshiPanel } from "./components/KalshiPanel";
 import { ExecutionPanel } from "./components/ExecutionPanel";
+import { NewMarketsPanel } from "./components/NewMarketsPanel";
+import { CrossPlatformPanel } from "./components/CrossPlatformPanel";
 
-type Tab = "traders" | "alerts" | "arbitrage" | "kalshi" | "execution";
+type Tab = "traders" | "alerts" | "arbitrage" | "kalshi" | "execution" | "new" | "cross";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("traders");
@@ -19,6 +21,8 @@ export default function App() {
       {tab === "arbitrage" && <ArbitragePanel paused={paused} />}
       {tab === "kalshi" && <KalshiPanel paused={paused} />}
       {tab === "execution" && <ExecutionPanel paused={paused} />}
+      {tab === "new" && <NewMarketsPanel paused={paused} />}
+      {tab === "cross" && <CrossPlatformPanel paused={paused} />}
     </Layout>
   );
 }

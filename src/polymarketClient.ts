@@ -7,6 +7,7 @@ import { config } from "./config";
 import { logger } from "./logger";
 import { RpcRotator } from "./rpcRotator";
 import { TargetPosition, MyPosition, MarketInfo } from "./types";
+import { getCopyTarget } from "./services/copyTargetService";
 
 const ERC20_ABI = [
   "function approve(address spender, uint256 amount) returns (bool)",
@@ -159,10 +160,12 @@ export class PolymarketClient {
   // ---- Target User Position Monitoring ----
 
   async getTargetPositions(): Promise<TargetPosition[]> {
+    const dynamicTarget = getCopyTarget();
+    const targetAddress = dynamicTarget?.address || config.targetUserAddress;
     const url = `${config.dataApiUrl}/positions`;
     const resp = await axios.get(url, {
       params: {
-        user: config.targetUserAddress,
+        user: targetAddress,
         sizeThreshold: 0,
         limit: 500,
         sortBy: "TOKENS",

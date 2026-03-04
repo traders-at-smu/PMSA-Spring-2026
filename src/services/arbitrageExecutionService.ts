@@ -3,14 +3,15 @@ import fs from "fs";
 import path from "path";
 import { ArbitrageScreener, BinaryArbOpportunity, NegRiskArbOpportunity } from "../screener";
 import { KalshiBinaryMispricing, KalshiEventGroupArb, KalshiScreener } from "../kalshiScreener";
+import { CrossPlatformScreener, CrossPlatformArb } from "../crossPlatformScreener";
 import { getSettings, validateSettingsForMode } from "../runtimeSettings";
 import { ModelBatchItem, PythonModelClient } from "./pythonModelClient";
 
 const MAX_HISTORY = 25;
-const REFRESH_TIMEOUT_MS = 90_000;
+const REFRESH_TIMEOUT_MS = 120_000; // 2 min – events-based Kalshi fetch takes ~15s
 
-type Venue = "POLYMARKET" | "KALSHI";
-type Strategy = "BINARY_BUY_BOTH" | "EVENT_BUY_ALL_YES";
+type Venue = "POLYMARKET" | "KALSHI" | "CROSS";
+type Strategy = "BINARY_BUY_BOTH" | "EVENT_BUY_ALL_YES" | "CROSS_PLATFORM";
 export type ExecutionMode = "PAPER" | "LIVE";
 export type PlanStatus = "READY" | "EXECUTED" | "FAILED" | "SKIPPED";
 
@@ -168,6 +169,7 @@ export class ArbitrageExecutionService {
   private modelClient = new PythonModelClient();
   private snapshots = new Map<string, RecentSnapshot[]>();
   private paperExecutedPlanIds = new Set<string>();
+  private crossPlatformScreener: CrossPlatformScreener | null = null;
   private polymarketClientPromise: Promise<PolymarketClientLike | null> | null = null;
   private refreshInFlight: Promise<ExecutionState> | null = null;
   private executionLogPath: string;
@@ -206,6 +208,10 @@ export class ArbitrageExecutionService {
       },
     };
     this.state.liveReadiness = this.computeLiveReadiness();
+  }
+
+  setCrossPlatformScreener(screener: CrossPlatformScreener): void {
+    this.crossPlatformScreener = screener;
   }
 
   getState(): ExecutionState {
@@ -258,13 +264,15 @@ export class ArbitrageExecutionService {
     const priorPlans = this.state.plans;
     const priorPoly = priorPlans.filter((p) => p.venue === "POLYMARKET");
     const priorKalshi = priorPlans.filter((p) => p.venue === "KALSHI");
+    const priorCross = priorPlans.filter((p) => p.venue === "CROSS");
     const warnings: string[] = [];
 
     try {
-      const [polyResult, kalshiResult] = await withTimeout(
+      const [polyResult, kalshiResult, crossResult] = await withTimeout(
         Promise.allSettled([
           withTimeout(this.getPolymarketExecutionCandidates(), 60_000, "Polymarket refresh"),
-          withTimeout(this.getKalshiExecutionCandidates(), 60_000, "Kalshi refresh"),
+          withTimeout(this.getKalshiExecutionCandidates(), 90_000, "Kalshi refresh"),
+          withTimeout(this.getCrossPlatformExecutionCandidates(), 90_000, "Cross-platform refresh"),
         ]),
         REFRESH_TIMEOUT_MS,
         "Execution refresh"
@@ -318,7 +326,18 @@ export class ArbitrageExecutionService {
         kalshiPlans = priorKalshi;
       }
 
-      const plans = [...polyPlans, ...kalshiPlans]
+      let crossPlans: TradePlan[] = [];
+      if (crossResult.status === "fulfilled") {
+        for (const arb of crossResult.value) {
+          const plan = this.buildCrossPlatformPlan(arb);
+          if (plan) crossPlans.push(plan);
+        }
+      } else {
+        warnings.push(`Cross-platform refresh failed: ${(crossResult as PromiseRejectedResult).reason?.message || (crossResult as PromiseRejectedResult).reason}`);
+        crossPlans = priorCross;
+      }
+
+      const plans = [...polyPlans, ...kalshiPlans, ...crossPlans]
         .sort((a, b) => b.expectedNetProfitUsd - a.expectedNetProfitUsd)
         .slice(0, 60);
 
@@ -366,6 +385,20 @@ export class ArbitrageExecutionService {
       this.kalshiScreener.findEventGroupArbitrage(),
     ]);
     return { binaryArbs, eventArbs };
+  }
+
+  private async getCrossPlatformExecutionCandidates(): Promise<CrossPlatformArb[]> {
+    if (!this.crossPlatformScreener) return [];
+    const results = await this.crossPlatformScreener.getResults();
+    return results.arbs.filter(
+      (a) =>
+        a.netProfit > 0.001 &&    // At least 0.1 cent net profit
+        a.polyYesTokenId &&
+        a.buyYesPrice >= 0.01 &&  // Min 1 cent per leg
+        a.buyNoPrice >= 0.01 &&
+        (a.buyYesPrice + a.buyNoPrice) >= 0.10 && // Min 10 cents total cost
+        a.similarityScore >= 0.25  // High-confidence match
+    );
   }
 
   async executePlan(planId: string): Promise<ExecutionRecord> {
@@ -443,7 +476,11 @@ export class ArbitrageExecutionService {
     }
 
     const readiness = this.computeLiveReadiness();
-    if ((plan.venue === "POLYMARKET" && !readiness.polymarketReady) || (plan.venue === "KALSHI" && !readiness.kalshiReady)) {
+    const venueNotReady =
+      (plan.venue === "POLYMARKET" && !readiness.polymarketReady) ||
+      (plan.venue === "KALSHI" && !readiness.kalshiReady) ||
+      (plan.venue === "CROSS" && (!readiness.polymarketReady || !readiness.kalshiReady));
+    if (venueNotReady) {
       plan.status = "FAILED";
       return this.pushHistory({
         planId: plan.id,
@@ -497,7 +534,8 @@ export class ArbitrageExecutionService {
 
   async executeTopPlans(limit: number): Promise<ExecutionRecord[]> {
     const records: ExecutionRecord[] = [];
-    for (const plan of this.state.plans.slice(0, limit)) {
+    for (const plan of this.state.plans) {
+      if (records.length >= limit) break;
       if (plan.status !== "READY") continue;
       records.push(await this.executePlan(plan.id));
     }
@@ -900,6 +938,96 @@ export class ArbitrageExecutionService {
         edgePersistence: snapshots.filter((s) => s.grossEdgePerDollar > 0).length / Math.max(1, snapshots.length),
       },
     });
+  }
+
+  private buildCrossPlatformPlan(arb: CrossPlatformArb): TradePlan | null {
+    if (arb.netProfit <= 0) return null;
+
+    const totalCostPerContract = arb.buyYesPrice + arb.buyNoPrice;
+    if (totalCostPerContract <= 0) return null;
+
+    const id = `cross-${arb.polymarketSlug}-${arb.kalshiTicker}`;
+    const grossEdge = arb.grossProfit / totalCostPerContract;
+
+    // Size: how many contracts can we buy with our bankroll?
+    const contracts = roundContracts(this.state.settings.bankrollUsd / totalCostPerContract);
+    if (contracts <= 0) return null;
+
+    // Determine which outcome to buy on each venue
+    const polyOutcome = arb.buyYesVenue === "POLYMARKET" ? "YES" : "NO";
+    const kalshiOutcome = arb.buyYesVenue === "KALSHI" ? "YES" : "NO";
+    const polyPrice = arb.buyYesVenue === "POLYMARKET" ? arb.buyYesPrice : arb.buyNoPrice;
+    const kalshiPrice = arb.buyYesVenue === "KALSHI" ? arb.buyYesPrice : arb.buyNoPrice;
+
+    // Token ID: if buying YES on Poly, use yesTokenId; if buying NO, use noTokenId
+    const polyTokenId = polyOutcome === "YES" ? arb.polyYesTokenId : arb.polyNoTokenId;
+    if (!polyTokenId || !arb.kalshiTicker) return null;
+
+    // Calculate fees
+    const polyFee = polyPrice * 0.001 * contracts; // Polymarket 0.1% taker
+    const kalshiFee = calcKalshiFee(contracts, kalshiPrice, this.state.settings.kalshiUseMakerFees);
+    const estimatedFeesUsd = polyFee + kalshiFee;
+
+    const expectedNetProfitUsd = contracts * arb.netProfit;
+    const expectedGrossProfitUsd = contracts * arb.grossProfit;
+
+    const legs: TradeLeg[] = [
+      {
+        venue: "POLYMARKET",
+        side: "BUY",
+        instrument: arb.event,
+        outcome: polyOutcome,
+        price: polyPrice,
+        contracts,
+        notionalUsd: contracts * polyPrice,
+        tokenId: polyTokenId,
+        conditionId: arb.polyConditionId,
+        negRisk: arb.polyNegRisk,
+      },
+      {
+        venue: "KALSHI",
+        side: "BUY",
+        instrument: arb.event,
+        outcome: kalshiOutcome,
+        price: kalshiPrice,
+        contracts,
+        notionalUsd: contracts * kalshiPrice,
+        ticker: arb.kalshiTicker,
+      },
+    ];
+
+    const hasLegs = legs.every((l) => l.contracts > 0 && l.price > 0);
+
+    return {
+      id,
+      venue: "CROSS",
+      strategy: "CROSS_PLATFORM",
+      title: `${arb.event} (${arb.buyYesVenue} YES / ${arb.buyNoVenue} NO)`,
+      contractUrl: arb.polymarketUrl || arb.kalshiUrl || undefined,
+      createdAt: new Date().toISOString(),
+      status: hasLegs && expectedNetProfitUsd > 0 ? "READY" : "SKIPPED",
+      executable: hasLegs,
+      grossEdgePerDollar: grossEdge,
+      expectedSlippage: 0,
+      fillProb20s: 1,
+      expectedNetEdge: arb.netProfit / totalCostPerContract,
+      estimatedFeesUsd,
+      expectedGrossProfitUsd,
+      expectedNetProfitUsd,
+      recommendedCapUsd: contracts * totalCostPerContract,
+      modelInputs: {
+        snapshots: 0,
+        topBookDepthUsd: 0,
+        profitableDepthUsd: 0,
+        edgePersistence: 0,
+      },
+      legs,
+      reason: hasLegs
+        ? expectedNetProfitUsd > 0
+          ? undefined
+          : "Net profit negative after fees"
+        : "Missing execution data (tokenId or ticker)",
+    };
   }
 
   private finalizePlan(input: {

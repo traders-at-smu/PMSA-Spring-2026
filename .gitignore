@@ -6,3 +6,4 @@ rpcUrls.json
 
 config/settings.local.json
 
+.vercel/

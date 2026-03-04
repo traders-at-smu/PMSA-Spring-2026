@@ -4,12 +4,14 @@ import path from "path";
 import os from "os";
 import { getRedactedSettings, getSettings, getSettingsWithMeta, validateSettingsForMode } from "../runtimeSettings";
 import { getTopTraders, getTraderProfile } from "../services/traderService";
-import { getTradeAlerts, getAlertHistory } from "../services/tradeAlertService";
+import { getTradeAlerts, getAlertHistory, getRecentLargeTrades, getAggregatedAlerts } from "../services/tradeAlertService";
 import { ArbitrageScreener } from "../screener";
 import { KalshiScreener } from "../kalshiScreener";
 import { ArbitrageExecutionService } from "../services/arbitrageExecutionService";
 import { PythonModelClient } from "../services/pythonModelClient";
 import { MiguelService } from "../services/miguelService";
+import { CrossPlatformScreener } from "../crossPlatformScreener";
+import { getCopyTarget, setCopyTarget, clearCopyTarget } from "../services/copyTargetService";
 
 const app = express();
 const runtime = getSettings();
@@ -52,6 +54,8 @@ const KALSHI_SCREENER_TTL = 60 * 1000; // 60s
 const executionService = new ArbitrageExecutionService();
 const modelClient = new PythonModelClient();
 const miguelService = new MiguelService(modelClient);
+const crossPlatformScreener = new CrossPlatformScreener(screener, kalshiScreener);
+executionService.setCrossPlatformScreener(crossPlatformScreener);
 
 function getLocalIpv4Urls(port: number): string[] {
   const interfaces = os.networkInterfaces();
@@ -110,8 +114,12 @@ app.get("/api/traders/:address", async (req, res) => {
 // Trade alerts (snapshot)
 app.get("/api/alerts", async (req, res) => {
   try {
-    const alerts = await getTradeAlerts();
-    res.json(alerts);
+    const [alerts, recent, aggregated] = await Promise.all([
+      getTradeAlerts(),
+      getRecentLargeTrades(),
+      getAggregatedAlerts(),
+    ]);
+    res.json({ alerts, recent, aggregated });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -169,6 +177,76 @@ app.get("/api/screener/stream", (req, res) => {
   send();
   const interval = setInterval(send, 60_000);
   req.on("close", () => clearInterval(interval));
+});
+
+// New Markets — Polymarket (lightweight, fast-polling)
+app.get("/api/screener/new-markets", async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+    const markets = await screener.findNewMarkets(limit);
+    res.json({ markets, timestamp: new Date().toISOString() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// New Markets — Kalshi (lightweight, fast-polling)
+app.get("/api/kalshi/screener/new-markets", async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 50);
+    const markets = await kalshiScreener.findNewMarkets(limit);
+    res.json({ markets, timestamp: new Date().toISOString() });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cross-Platform Arbitrage Scanner
+app.get("/api/cross-platform/arbs", async (_req, res) => {
+  try {
+    const results = await crossPlatformScreener.getResults();
+    res.json({
+      arbs: results.arbs,
+      matchedPairs: results.matchedPairs,
+      polymarketsScanned: results.polymarketsScanned,
+      kalshiMarketsScanned: results.kalshiMarketsScanned,
+      timestamp: results.timestamp,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/cross-platform/pairs", async (req, res) => {
+  try {
+    const results = await crossPlatformScreener.getResults();
+    const filter = (req.query.filter as string) || "all"; // all | arb | no-arb
+    let pairs = results.pairs;
+    if (filter === "arb") pairs = pairs.filter(p => p.hasArb);
+    else if (filter === "no-arb") pairs = pairs.filter(p => !p.hasArb);
+    res.json({
+      pairs,
+      total: results.pairs.length,
+      filtered: pairs.length,
+      timestamp: results.timestamp,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/cross-platform/diffs", async (_req, res) => {
+  try {
+    const results = await crossPlatformScreener.getResults();
+    res.json({
+      diffs: results.diffs,
+      volumes: results.volumes,
+      matchedPairs: results.matchedPairs,
+      timestamp: results.timestamp,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Kalshi Screener (snapshot)
@@ -246,7 +324,7 @@ app.post("/api/arbitrage/execution/execute/:planId", async (req, res) => {
 app.post("/api/arbitrage/execution/execute-top", async (req, res) => {
   try {
     const limitRaw = parseInt(req.body?.limit ?? "3");
-    const limit = Math.min(Math.max(limitRaw, 1), 10);
+    const limit = Math.min(Math.max(limitRaw, 1), 100);
     const records = await executionService.executeTopPlans(limit);
     res.json(records);
   } catch (err: any) {
@@ -403,6 +481,26 @@ app.get("/api/health", (_req, res) => {
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err.message });
   }
+});
+
+// ---- Copy Trading Target ----
+
+app.get("/api/copy-trading/target", (_req, res) => {
+  res.json({ target: getCopyTarget() });
+});
+
+app.post("/api/copy-trading/target", (req, res) => {
+  const { address, name } = req.body || {};
+  if (!address || typeof address !== "string") {
+    return res.status(400).json({ error: "address is required" });
+  }
+  const target = setCopyTarget(address, name || "");
+  res.json({ target });
+});
+
+app.delete("/api/copy-trading/target", (_req, res) => {
+  clearCopyTarget();
+  res.json({ target: null });
 });
 
 // ---- Static files (React SPA) ----

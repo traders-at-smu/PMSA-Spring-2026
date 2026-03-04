@@ -136,6 +136,14 @@ export interface TradeAlert {
   accountAgeDays: number;
   isFirstLargeBet: boolean;
   transactionHash: string;
+  /** Aggregation fields — present when multiple smaller trades are grouped */
+  isAggregated?: boolean;
+  tradeCount?: number;
+  avgPrice?: number;
+  /** Insider-suspicion score 0–100, computed from heuristic signals */
+  suspicionScore?: number;
+  /** Breakdown of which signals fired */
+  suspicionSignals?: string[];
 }
 
 export interface ScreenerResults {
@@ -219,6 +227,8 @@ export interface KalshiMarket {
   liquidity_dollars: number;
   close_time: string;
   latest_expiration_time: string;
+  created_time?: string;
+  open_time?: string;
 }
 
 export interface KalshiSpreadOpportunity {
@@ -281,5 +291,86 @@ export interface KalshiScreenerResults {
   binaryMispricing: KalshiBinaryMispricing[];
   eventGroupArbs: KalshiEventGroupArb[];
   marketsScanned: number;
+  timestamp: string;
+}
+
+export interface KalshiNewMarket {
+  ticker: string;
+  title: string;
+  category: string;
+  createdTime: string;
+  openTime: string;
+  closeTime: string;
+  yesBid: number;
+  yesAsk: number;
+  volume24h: number;
+  liquidity: number;
+  kalshiUrl: string;
+}
+
+// ---- Cross-Platform Types ----
+
+export interface CrossPlatformArb {
+  event: string;
+  outcome: string;
+  polymarketSlug: string;
+  kalshiTicker: string;
+  polyYesBid: number;
+  polyYesAsk: number;
+  kalshiYesBid: number;
+  kalshiYesAsk: number;
+  buyYesVenue: "POLYMARKET" | "KALSHI";
+  buyYesPrice: number;
+  buyNoVenue: "POLYMARKET" | "KALSHI";
+  buyNoPrice: number;
+  grossProfit: number;
+  netProfit: number;
+  roi: number;
+  priceDiff: number;
+  polymarketUrl: string;
+  kalshiUrl: string;
+  similarityScore: number;
+  category: string;
+  // Execution data for Polymarket leg
+  polyConditionId: string;
+  polyYesTokenId: string;
+  polyNoTokenId: string;
+  polyNegRisk: boolean;
+}
+
+export interface PriceDiff {
+  event: string;
+  outcome: string;
+  kalshiPrice: number;
+  polymarketPrice: number;
+  diff: number;
+  diffPct: number;
+  polymarketUrl: string;
+  kalshiUrl: string;
+  category: string;
+}
+
+export interface VolumePair {
+  event: string;
+  kalshiTicker: string;
+  polymarketSlug: string;
+  kalshiVolume24h: number;
+  polymarketVolume24h: number;
+  kalshiLiquidity: number;
+  polymarketLiquidity: number;
+  volumeDiff: number;
+  polymarketUrl: string;
+  kalshiUrl: string;
+  category: string;
+  similarityScore: number;
+}
+
+export interface CrossPlatformResults {
+  arbs: CrossPlatformArb[];
+  diffs: PriceDiff[];
+  volumes: VolumePair[];
+  matchedPairs: number;
+  polymarketsScanned: number;
+  kalshiMarketsScanned: number;
   timestamp: string;
 }

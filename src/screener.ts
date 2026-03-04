@@ -30,6 +30,26 @@ interface GammaMarket {
   volume24hr: number;
   liquidity: string;
   endDate?: string;
+  createdAt?: string;
+  startDate?: string;
+  acceptingOrdersTimestamp?: string;
+}
+
+export interface NewPolymarketMarket {
+  question: string;
+  conditionId: string;
+  slug: string;
+  createdAt: string;
+  startDate?: string;
+  acceptingOrdersTimestamp?: string;
+  endDate?: string;
+  liquidity: number;
+  volume24hr: number;
+  bestBid: number;
+  bestAsk: number;
+  spread: number;
+  outcomes: string[];
+  marketUrl: string;
 }
 
 interface SpreadOpportunity {
@@ -383,6 +403,57 @@ export class ArbitrageScreener {
 
     opportunities.sort((a, b) => b.profitPerDollar - a.profitPerDollar);
     return opportunities;
+  }
+
+  // ---- 4. New Markets ----
+
+  async findNewMarkets(limit: number = 20): Promise<NewPolymarketMarket[]> {
+    try {
+      const resp = await axios.get(`${this.gammaApiUrl}/markets`, {
+        params: {
+          active: true,
+          closed: false,
+          limit,
+          order: "createdAt",
+          ascending: false,
+        },
+      });
+
+      if (!resp.data || !Array.isArray(resp.data)) return [];
+
+      const results: NewPolymarketMarket[] = [];
+
+      for (const m of resp.data) {
+        if (typeof m.outcomePrices === "string") {
+          try { m.outcomePrices = JSON.parse(m.outcomePrices); } catch { m.outcomePrices = []; }
+        }
+        if (typeof m.clobTokenIds === "string") {
+          try { m.clobTokenIds = JSON.parse(m.clobTokenIds); } catch { m.clobTokenIds = []; }
+        }
+
+        results.push({
+          question: m.question || "",
+          conditionId: m.conditionId || "",
+          slug: m.slug || "",
+          createdAt: m.createdAt || "",
+          startDate: m.startDate,
+          acceptingOrdersTimestamp: m.acceptingOrdersTimestamp,
+          endDate: m.endDate,
+          liquidity: parseFloat(m.liquidity || "0"),
+          volume24hr: m.volume24hr || 0,
+          bestBid: m.bestBid || 0,
+          bestAsk: m.bestAsk || 0,
+          spread: m.spread || 0,
+          outcomes: m.outcomes || [],
+          marketUrl: m.slug ? `https://polymarket.com/event/${m.slug}` : "",
+        });
+      }
+
+      return results;
+    } catch (err: any) {
+      console.error("Error fetching new Polymarket markets:", err.message);
+      return [];
+    }
   }
 
   // ---- JSON Data (for API) ----
