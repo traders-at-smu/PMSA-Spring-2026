@@ -1,0 +1,227 @@
+[
+  {
+    "polymarketTitle": "Mikal Bridges: Rebounds O/U 3.5",
+    "kalshiTitle": "Mikal Bridges: Rebounds O/U 3.5",
+    "polymarketSlug": "nba-okc-nyk-2026-03-04-rebounds-mikal-bridges-3pt5",
+    "kalshiTicker": "KXNBAREB-26MAR04OKCNYK-NYKMBRIDGES25-8",
+    "label": "correct",
+    "category": "sports",
+    "notes": "Perfect NBA player prop match — same player, same stat, same threshold"
+  },
+  {
+    "polymarketTitle": "LaMelo Ball: Rebounds O/U 4.5",
+    "kalshiTitle": "LaMelo Ball: Rebounds O/U 4.5",
+    "polymarketSlug": "nba-cha-bos-2026-03-04-rebounds-lamelo-ball-4pt5",
+    "kalshiTicker": "KXNBAREB-26MAR04CHABOS-CHALBALL1-2",
+    "label": "correct",
+    "category": "sports",
+    "notes": "Perfect NBA player prop match"
+  },
+  {
+    "polymarketTitle": "Moussa Diabaté: Rebounds O/U 9.5",
+    "kalshiTitle": "Moussa Diabaté: Rebounds O/U 9.5",
+    "polymarketSlug": "nba-cha-bos-2026-03-04-rebounds-moussa-diabate-9pt5",
+    "kalshiTicker": "KXNBAREB-26MAR04CHABOS-CHAMDIABATE14-8",
+    "label": "correct",
+    "category": "sports",
+    "notes": "Perfect NBA player prop match"
+  },
+  {
+    "polymarketTitle": "Onyeka Okongwu: Assists O/U 2.5",
+    "kalshiTitle": "Onyeka Okongwu: Assists O/U 2.5",
+    "polymarketSlug": "nba-atl-mil-2026-03-04-assists-onyeka-okongwu-2pt5",
+    "kalshiTicker": "KXNBAAST-26MAR04ATLMIL-ATLOOKONGWU17-4",
+    "label": "correct",
+    "category": "sports",
+    "notes": "Perfect NBA player prop match"
+  },
+  {
+    "polymarketTitle": "Shai Gilgeous-Alexander: Rebounds O/U 4.5",
+    "kalshiTitle": "Shai Gilgeous-Alexander: Rebounds O/U 4.5",
+    "polymarketSlug": "nba-okc-nyk-2026-03-04-rebounds-shai-gilgeous-alexander-4pt5",
+    "kalshiTicker": "KXNBAREB-26MAR04OKCNYK-OKCSGILGEOUSALEXANDER2-8",
+    "label": "correct",
+    "category": "sports",
+    "notes": "Perfect NBA player prop match"
+  },
+  {
+    "polymarketTitle": "CJ McCollum: Assists O/U 3.5",
+    "kalshiTitle": "CJ McCollum: Assists O/U 3.5",
+    "polymarketSlug": "nba-atl-mil-2026-03-04-assists-cj-mccollum-3pt5",
+    "kalshiTicker": "KXNBAAST-26MAR04ATLMIL-ATLCMCCOLLUM3-8",
+    "label": "correct",
+    "category": "sports",
+    "notes": "Good NBA player prop match"
+  },
+  {
+    "polymarketTitle": "Will Willie Preston be the Democratic Nominee for IL-02?",
+    "kalshiTitle": "Will Willie Preston be the Democratic Nominee for IL-02?",
+    "polymarketSlug": "will-willie-preston-be-the-democratic-nominee-for-il-02-448",
+    "kalshiTicker": "KXILPRIMARY-02D26-WPRE",
+    "label": "correct",
+    "category": "politics",
+    "notes": "Political market — same candidate, same race"
+  },
+  {
+    "polymarketTitle": "Will \"Marty Supreme\" win exactly 5 awards at the Oscars?",
+    "kalshiTitle": "How many Oscars will Marty Supreme win? (exactly 5)",
+    "polymarketSlug": "will-marty-supreme-win-exactly-5-awards-at-the-oscars",
+    "kalshiTicker": "KXOSCARCOUNT-26-MAR-5",
+    "label": "correct",
+    "category": "entertainment",
+    "notes": "Same event + same count threshold, different phrasing"
+  },
+  {
+    "polymarketTitle": "Will the upper bound of the target federal funds rate be 4.25% at the end of 2026?",
+    "kalshiTitle": "Fed Funds Rate at 4.25% end of 2026",
+    "polymarketSlug": "will-the-upper-bound-of-the-target-federal-funds-rate-be-4pt25-at-the-end-of-2026-984",
+    "kalshiTicker": "KXFED-26DEC-T4.25",
+    "label": "correct",
+    "category": "macro",
+    "notes": "Macro market — same rate, same deadline, different phrasing"
+  },
+  {
+    "polymarketTitle": "NEC vs. FC Volendam: Both Teams to Score",
+    "kalshiTitle": "Arsenal vs Leverkusen: BTTS",
+    "polymarketSlug": "ere-nec-vol-2026-03-08-btts",
+    "kalshiTicker": "KXUCLBTTS-26MAR17ARSLEV",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — completely different soccer matches matched on generic BTTS tokens"
+  },
+  {
+    "polymarketTitle": "Fenerbahçe SK vs. Samsunspor: Both Teams to Score",
+    "kalshiTitle": "Liverpool vs Tottenham: BTTS",
+    "polymarketSlug": "tur-fen-sam-2026-03-08-btts",
+    "kalshiTicker": "KXEPLBTTS-26MAR15LFCTOT",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — Turkish league match matched to EPL Liverpool vs Tottenham"
+  },
+  {
+    "polymarketTitle": "Bayer 04 Leverkusen vs. Arsenal FC: Both Teams to Score",
+    "kalshiTitle": "Hamburg vs Leverkusen: BTTS",
+    "polymarketSlug": "ucl-lev-ars-2026-03-11-btts",
+    "kalshiTicker": "KXBUNDESLIGABTTS-26MAR04HSVLEV",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — UCL Leverkusen vs Arsenal matched to Bundesliga Hamburg vs Leverkusen. Leverkusen in both but different opponents + different competitions"
+  },
+  {
+    "polymarketTitle": "West Ham United FC vs. Brentford FC: Both Teams to Score",
+    "kalshiTitle": "Fulham vs West Ham: BTTS",
+    "polymarketSlug": "efa-whu-bre1-2026-03-07-btts",
+    "kalshiTicker": "KXEPLBTTS-26MAR04FULWHU",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — West Ham appears in both but different opponents (Brentford vs Fulham)"
+  },
+  {
+    "polymarketTitle": "Manchester City FC vs. Real Madrid CF: Both Teams to Score",
+    "kalshiTitle": "Manchester City vs Nottingham Forest: BTTS",
+    "polymarketSlug": "ucl-mnc1-rma1-2026-03-17-btts",
+    "kalshiTicker": "KXEPLBTTS-26MAR04MCINFO",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — Man City in both but paired with Real Madrid vs Nottingham Forest"
+  },
+  {
+    "polymarketTitle": "Arsenal WFC vs. Chelsea FC: Both Teams to Score",
+    "kalshiTitle": "Brighton vs Arsenal: BTTS",
+    "polymarketSlug": "uwcl-ars-che-2026-03-24-btts",
+    "kalshiTicker": "KXEPLBTTS-26MAR04BRIARS",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — Arsenal in both but Women's CL vs EPL, different opponents"
+  },
+  {
+    "polymarketTitle": "Lille OSC vs. Aston Villa FC: O/U 1.5",
+    "kalshiTitle": "Aston Villa vs Chelsea: Total Goals O/U",
+    "polymarketSlug": "uel-lil-ast4-2026-03-12-total-1pt5",
+    "kalshiTicker": "KXEPLTOTAL-26MAR04AVLCFC-1",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — Aston Villa in both but different matches (vs Lille in UEL vs vs Chelsea in EPL)"
+  },
+  {
+    "polymarketTitle": "Spread: Aston Villa FC (-2.5)",
+    "kalshiTitle": "Aston Villa vs Chelsea: Spread",
+    "polymarketSlug": "uel-lil-ast4-2026-03-12-spread-away-2pt5",
+    "kalshiTicker": "KXEPLTOTAL-26MAR04AVLCFC-2",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — Aston Villa spread but different match (Lille UEL vs Chelsea EPL)"
+  },
+  {
+    "polymarketTitle": "Spread: Manchester City FC (-1.5)",
+    "kalshiTitle": "Manchester City vs Nottingham Forest: Spread",
+    "polymarketSlug": "epl-wes-mac-2026-03-14-spread-away-1pt5",
+    "kalshiTicker": "KXEPLTOTAL-26MAR04MCINFO-3",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — Man City spread but poly slug says West Ham vs Man City, Kalshi is Man City vs Nottm Forest"
+  },
+  {
+    "polymarketTitle": "Spread: Manchester City FC (-1.5)",
+    "kalshiTitle": "Manchester City vs Nottingham Forest: Spread",
+    "polymarketSlug": "ucl-rma1-mnc1-2026-03-11-spread-away-1pt5",
+    "kalshiTicker": "KXEPLTOTAL-26MAR04MCINFO-1",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — UCL Real Madrid vs Man City matched to EPL Man City vs Nottm Forest"
+  },
+  {
+    "polymarketTitle": "Spread: Real Sociedad de Fútbol (-1.5)",
+    "kalshiTitle": "Real Sociedad vs Athletic Bilbao: Copa del Rey Spread",
+    "polymarketSlug": "lal-rso-osa-2026-03-15-spread-home-1pt5",
+    "kalshiTicker": "KXCOPADELREYTOTAL-26MAR04RSOATH-3",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — Real Sociedad in both but Poly is vs Osasuna in La Liga, Kalshi is vs Athletic Bilbao in Copa del Rey"
+  },
+  {
+    "polymarketTitle": "Spread: Manchester United WFC (-1.5)",
+    "kalshiTitle": "Newcastle vs Manchester United: Spread",
+    "polymarketSlug": "uwcl-mcu-bm-2026-03-25-spread-home-1pt5",
+    "kalshiTicker": "KXEPLTOTAL-26MAR04NEWMUN-1",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — Man Utd Women's CL matched to EPL Newcastle vs Man Utd"
+  },
+  {
+    "polymarketTitle": "Spread: Los Angeles FC (-2.5)",
+    "kalshiTitle": "Los Angeles weather/rain market",
+    "polymarketSlug": "mls-aus-laf-2026-03-21-spread-away-2pt5",
+    "kalshiTicker": "KXRAINLAXM-26MAR-5",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — LAFC soccer spread matched to LA weather/rain market!"
+  },
+  {
+    "polymarketTitle": "Austin FC vs. Los Angeles FC: O/U 1.5",
+    "kalshiTitle": "Los Angeles weather/rain market",
+    "polymarketSlug": "mls-aus-laf-2026-03-21-total-1pt5",
+    "kalshiTicker": "KXRAINLAXM-26MAR-7",
+    "label": "incorrect",
+    "category": "sports",
+    "notes": "FALSE POSITIVE — MLS soccer match matched to LA rain forecast market"
+  },
+  {
+    "polymarketTitle": "Will \"Nuremberg\" be the top US Netflix movie this week?",
+    "kalshiTitle": "Netflix top movie ranking",
+    "polymarketSlug": "will-nuremberg-be-the-top-us-netflix-movie-this-week",
+    "kalshiTicker": "KXNETFLIXRANKMOVIE-26MAR09-THEO",
+    "label": "incorrect",
+    "category": "entertainment",
+    "notes": "FALSE POSITIVE — Different movies (Nuremberg vs some other title encoded as THEO)"
+  },
+  {
+    "polymarketTitle": "Will \"Vladimir\" be the top US Netflix show this week?",
+    "kalshiTitle": "Netflix top show ranking",
+    "polymarketSlug": "will-vladimir-be-the-top-us-netflix-show-this-week",
+    "kalshiTicker": "KXNETFLIXRANKSHOW-26MAR09-LOV",
+    "label": "incorrect",
+    "category": "entertainment",
+    "notes": "FALSE POSITIVE — Different shows (Vladimir vs some title encoded as LOV)"
+  }
+]

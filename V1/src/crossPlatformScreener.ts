@@ -1,6 +1,7 @@
 import { ArbitrageScreener } from "./screener";
 import { KalshiScreener } from "./kalshiScreener";
 import { KalshiMarket } from "./types";
+import { EmbeddingService } from "./services/embeddingService";
 
 // ---- Types ----
 
@@ -25,6 +26,13 @@ export interface CrossPlatformArb {
   kalshiUrl: string;
   similarityScore: number;
   category: string;
+  // Liquidity data
+  polymarketLiquidity: number;
+  kalshiLiquidity: number;
+  polymarketVolume24h: number;
+  kalshiVolume24h: number;
+  // Resolution
+  endDate: string;
   // Execution data for Polymarket leg
   polyConditionId: string;
   polyYesTokenId: string;
@@ -611,9 +619,17 @@ function calcPolymarketFee(price: number): number {
 const PRIMARY_THRESHOLD = 0.40;
 const FALLBACK_THRESHOLD = 0.25;
 
+// Embedding re-ranker thresholds
+const EMBEDDING_RERANK_LOW = 0.20;   // Below this: reject regardless of embedding score
+const EMBEDDING_RERANK_HIGH = 0.60;  // Above this: accept regardless (text score is confident enough)
+const TEXT_WEIGHT = 0.55;            // Weight for text-based score in combined scoring
+const EMBEDDING_WEIGHT = 0.45;      // Weight for embedding cosine similarity
+const COMBINED_THRESHOLD = 0.45;    // Threshold for combined score in ambiguous zone
+
 export class CrossPlatformScreener {
   private polyScreener: ArbitrageScreener;
   private kalshiScreener: KalshiScreener;
+  private embeddingService: EmbeddingService | null = null;
   private cachedResults: CrossPlatformResults | null = null;
   private cacheExpiry = 0;
   private fetchInFlight: Promise<CrossPlatformResults> | null = null;
@@ -622,6 +638,20 @@ export class CrossPlatformScreener {
   constructor(polyScreener?: ArbitrageScreener, kalshiScreener?: KalshiScreener) {
     this.polyScreener = polyScreener || new ArbitrageScreener();
     this.kalshiScreener = kalshiScreener || new KalshiScreener();
+
+    // Initialize embedding re-ranker if OpenAI key is available
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (openaiKey) {
+      this.embeddingService = new EmbeddingService(openaiKey);
+      console.log("  Embedding re-ranker: ENABLED");
+    } else {
+      console.log("  Embedding re-ranker: DISABLED (no OPENAI_API_KEY)");
+    }
+  }
+
+  invalidateCache(): void {
+    this.cachedResults = null;
+    this.cacheExpiry = 0;
   }
 
   async getResults(): Promise<CrossPlatformResults> {
@@ -792,8 +822,8 @@ export class CrossPlatformScreener {
         noBid,
         noAsk,
         volume24h: (m.volume_24h_fp || 0) / 100,
-        liquidity: m.liquidity_dollars || 0,
-        url: `https://kalshi.com/markets/${encodeURIComponent(m.ticker)}`,
+        liquidity: Number(m.liquidity_dollars) || 0,
+        url: `https://kalshi.com/markets/${(m.event_ticker || m.ticker).toLowerCase()}`,
         slug: m.ticker,
         venue: "KALSHI",
         category: categoryTag(title),
@@ -828,6 +858,11 @@ export class CrossPlatformScreener {
     const pairs: MatchedPair[] = [];
     const usedKalshi = new Set<string>();
     const matchedPoly = new Set<string>();
+    const ambiguousCandidates: Array<{
+      polymarket: NormalizedMarket;
+      kalshi: NormalizedMarket;
+      textScore: number;
+    }> = [];
     let processed = 0;
 
     // Primary pass: enhanced similarity with threshold 0.15
@@ -873,14 +908,103 @@ export class CrossPlatformScreener {
         }
       }
 
-      if (bestMatch && bestScore >= PRIMARY_THRESHOLD) {
-        usedKalshi.add(bestMatch.id);
-        matchedPoly.add(pm.id);
-        pairs.push({
-          polymarket: pm,
-          kalshi: bestMatch,
-          similarityScore: bestScore,
-        });
+      if (bestMatch && bestScore >= EMBEDDING_RERANK_LOW) {
+        if (bestScore >= EMBEDDING_RERANK_HIGH) {
+          // High-confidence text match — accept directly
+          usedKalshi.add(bestMatch.id);
+          matchedPoly.add(pm.id);
+          pairs.push({
+            polymarket: pm,
+            kalshi: bestMatch,
+            similarityScore: bestScore,
+          });
+        } else {
+          // Ambiguous zone — collect for embedding re-ranking
+          ambiguousCandidates.push({
+            polymarket: pm,
+            kalshi: bestMatch,
+            textScore: bestScore,
+          });
+        }
+      }
+    }
+
+    // ---- Embedding re-rank for ambiguous candidates ----
+    if (this.embeddingService && ambiguousCandidates.length > 0) {
+      // Batch-embed all unique titles
+      const titlesToEmbed = new Set<string>();
+      for (const c of ambiguousCandidates) {
+        titlesToEmbed.add(c.polymarket.title);
+        titlesToEmbed.add(c.kalshi.title);
+      }
+
+      try {
+        const vectors = await this.embeddingService.batchEmbed([...titlesToEmbed]);
+        const stats = this.embeddingService.getCacheStats();
+        console.log(
+          `  Embedding re-rank: ${ambiguousCandidates.length} candidates, ` +
+            `${titlesToEmbed.size} titles embedded (cache: ${stats.size} vectors, ${(stats.hitRate * 100).toFixed(0)}% hit)`
+        );
+
+        for (const c of ambiguousCandidates) {
+          const vecA = vectors.get(c.polymarket.title);
+          const vecB = vectors.get(c.kalshi.title);
+
+          if (vecA && vecB) {
+            const embSim = EmbeddingService.cosineSimilarity(vecA, vecB);
+            const combined = TEXT_WEIGHT * c.textScore + EMBEDDING_WEIGHT * embSim;
+
+            if (combined >= COMBINED_THRESHOLD) {
+              if (!usedKalshi.has(c.kalshi.id)) {
+                usedKalshi.add(c.kalshi.id);
+                matchedPoly.add(c.polymarket.id);
+                pairs.push({
+                  polymarket: c.polymarket,
+                  kalshi: c.kalshi,
+                  similarityScore: combined,
+                });
+              }
+            }
+          } else {
+            // Embedding failed — fall back to text-only threshold
+            if (c.textScore >= PRIMARY_THRESHOLD && !usedKalshi.has(c.kalshi.id)) {
+              usedKalshi.add(c.kalshi.id);
+              matchedPoly.add(c.polymarket.id);
+              pairs.push({
+                polymarket: c.polymarket,
+                kalshi: c.kalshi,
+                similarityScore: c.textScore,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        // Embedding service failed entirely — fall back to text-only for all ambiguous
+        console.warn("  Embedding re-rank failed, falling back to text-only:", (err as Error).message);
+        for (const c of ambiguousCandidates) {
+          if (c.textScore >= PRIMARY_THRESHOLD && !usedKalshi.has(c.kalshi.id)) {
+            usedKalshi.add(c.kalshi.id);
+            matchedPoly.add(c.polymarket.id);
+            pairs.push({
+              polymarket: c.polymarket,
+              kalshi: c.kalshi,
+              similarityScore: c.textScore,
+            });
+          }
+        }
+      }
+    } else if (ambiguousCandidates.length > 0) {
+      // No embedding service — fall back to text-only threshold
+      for (const c of ambiguousCandidates) {
+        if (c.textScore >= PRIMARY_THRESHOLD && !usedKalshi.has(c.kalshi.id)) {
+          usedKalshi.add(c.kalshi.id);
+          matchedPoly.add(c.polymarket.id);
+          pairs.push({
+            polymarket: c.polymarket,
+            kalshi: c.kalshi,
+            similarityScore: c.textScore,
+          });
+        }
       }
     }
 
@@ -903,7 +1027,7 @@ export class CrossPlatformScreener {
         let bestScore = 0;
 
         for (const km of candidateMap.values()) {
-          const catMatch = pm.category === km.category || (pm.category === "other" && km.category === "other");
+          const catMatch = km.category === pm.category || (pm.category === "other" && km.category === "other");
           const catMultiplier = catMatch ? 1.0 : 0.5;
           const score = enhancedSimilarity(
             pm.tokens, km.tokens,
@@ -937,11 +1061,15 @@ export class CrossPlatformScreener {
 
   private findArbitrage(pairs: MatchedPair[]): CrossPlatformArb[] {
     const arbs: CrossPlatformArb[] = [];
+    const MIN_LIQUIDITY = 500; // Skip markets with <$500 liquidity (likely stale/illiquid)
 
     for (const { polymarket: pm, kalshi: km, similarityScore } of pairs) {
       // Skip if no price data on either side
       if (pm.yesBid <= 0 && pm.yesAsk <= 0) continue;
       if (km.yesBid <= 0 && km.yesAsk <= 0) continue;
+
+      // Skip illiquid markets — these produce phantom arbs that can't be executed
+      if (pm.liquidity < MIN_LIQUIDITY && km.liquidity < MIN_LIQUIDITY) continue;
 
       // Strategy 1: Buy YES on cheaper venue, Buy NO on the other
       // If Polymarket YES is cheaper, buy YES there, buy NO (= sell YES) on Kalshi
@@ -973,6 +1101,11 @@ export class CrossPlatformScreener {
           kalshiUrl: km.url,
           similarityScore,
           category: pm.category,
+          polymarketLiquidity: pm.liquidity,
+          kalshiLiquidity: km.liquidity,
+          polymarketVolume24h: pm.volume24h,
+          kalshiVolume24h: km.volume24h,
+          endDate: km.endDate || pm.endDate || "",
           polyConditionId: pm.conditionId || "",
           polyYesTokenId: pm.clobTokenIds?.[0] || "",
           polyNoTokenId: pm.clobTokenIds?.[1] || "",
@@ -1006,8 +1139,8 @@ export class CrossPlatformScreener {
       roi: number;
     }> = [];
 
-    // Minimum price to consider (1 cent) — anything below is likely illiquid/stale
-    const MIN_PRICE = 0.01;
+    // Minimum price to consider — anything below 5¢ is likely illiquid/stale
+    const MIN_PRICE = 0.05;
 
     // Strategy A: Buy YES on Polymarket (at ask), Buy NO on Kalshi (at ask)
     if (pm.yesAsk >= MIN_PRICE && km.noAsk >= MIN_PRICE) {

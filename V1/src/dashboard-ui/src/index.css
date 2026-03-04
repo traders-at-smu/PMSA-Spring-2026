@@ -2,7 +2,10 @@
 
 @theme {
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+  --font-serif: "DM Serif Display", Georgia, serif;
+  --font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, monospace;
+  --color-smu-red: #CC0035;
+  --color-smu-red-light: rgba(204, 0, 53, 0.12);
 }
 
 /* ---- Base ---- */

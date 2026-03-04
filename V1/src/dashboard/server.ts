@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import os from "os";
-import { getRedactedSettings, getSettings, getSettingsWithMeta, validateSettingsForMode } from "../runtimeSettings";
+import { getRedactedSettings, getSettings, getSettingsWithMeta, validateSettingsForMode, saveSettings } from "../runtimeSettings";
 import { getTopTraders, getTraderProfile } from "../services/traderService";
 import { getTradeAlerts, getAlertHistory, getRecentLargeTrades, getAggregatedAlerts } from "../services/tradeAlertService";
 import { ArbitrageScreener } from "../screener";
@@ -12,6 +12,8 @@ import { PythonModelClient } from "../services/pythonModelClient";
 import { MiguelService } from "../services/miguelService";
 import { CrossPlatformScreener } from "../crossPlatformScreener";
 import { getCopyTarget, setCopyTarget, clearCopyTarget } from "../services/copyTargetService";
+import { SignalTrackerService } from "../services/signalTrackerService";
+import { PaperAccountService } from "../services/paperAccountService";
 
 const app = express();
 const runtime = getSettings();
@@ -56,6 +58,9 @@ const modelClient = new PythonModelClient();
 const miguelService = new MiguelService(modelClient);
 const crossPlatformScreener = new CrossPlatformScreener(screener, kalshiScreener);
 executionService.setCrossPlatformScreener(crossPlatformScreener);
+const signalTracker = new SignalTrackerService();
+const paperAccount = new PaperAccountService();
+executionService.setPaperAccount(paperAccount);
 
 function getLocalIpv4Urls(port: number): string[] {
   const interfaces = os.networkInterfaces();
@@ -201,10 +206,29 @@ app.get("/api/kalshi/screener/new-markets", async (req, res) => {
   }
 });
 
+// Cross-Platform: force re-scan (invalidate cache)
+app.post("/api/cross-platform/refresh", async (_req, res) => {
+  try {
+    crossPlatformScreener.invalidateCache();
+    const results = await crossPlatformScreener.getResults();
+    signalTracker.tick(results.arbs);
+    res.json({
+      arbs: results.arbs.length,
+      matchedPairs: results.matchedPairs,
+      polymarketsScanned: results.polymarketsScanned,
+      kalshiMarketsScanned: results.kalshiMarketsScanned,
+      timestamp: results.timestamp,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // Cross-Platform Arbitrage Scanner
 app.get("/api/cross-platform/arbs", async (_req, res) => {
   try {
     const results = await crossPlatformScreener.getResults();
+    signalTracker.tick(results.arbs);
     res.json({
       arbs: results.arbs,
       matchedPairs: results.matchedPairs,
@@ -242,6 +266,110 @@ app.get("/api/cross-platform/diffs", async (_req, res) => {
       diffs: results.diffs,
       volumes: results.volumes,
       matchedPairs: results.matchedPairs,
+      timestamp: results.timestamp,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/cross-platform/signals", async (_req, res) => {
+  try {
+    const results = await crossPlatformScreener.getResults();
+    signalTracker.tick(results.arbs);
+    res.json(signalTracker.getState());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Paper Account
+app.get("/api/paper-account/state", async (_req, res) => {
+  try {
+    // Resolve any expired positions first
+    paperAccount.resolveExpired();
+
+    // Auto-execute available arbs into the paper account
+    const results = await crossPlatformScreener.getResults();
+    paperAccount.resetCycleDedup();
+    for (const arb of results.arbs) {
+      paperAccount.executeTrade(arb);
+    }
+    res.json(paperAccount.getState());
+  } catch (err: any) {
+    res.json(paperAccount.getState());
+  }
+});
+
+app.post("/api/paper-account/reset", (_req, res) => {
+  paperAccount.reset();
+  res.json({ success: true, state: paperAccount.getState() });
+});
+
+// Overview — aggregated dashboard summary
+app.get("/api/overview", async (_req, res) => {
+  try {
+    const results = await crossPlatformScreener.getResults();
+    signalTracker.tick(results.arbs);
+    const signals = signalTracker.getState();
+    paperAccount.resolveExpired();
+    const account = paperAccount.getState();
+
+    // Top 3 arbs by ROI
+    const topArbs = [...results.arbs]
+      .sort((a, b) => b.roi - a.roi)
+      .slice(0, 3)
+      .map((a) => ({
+        event: a.event,
+        roi: a.roi,
+        netProfit: a.netProfit,
+        buyYesVenue: a.buyYesVenue,
+        buyYesPrice: a.buyYesPrice,
+        buyNoVenue: a.buyNoVenue,
+        buyNoPrice: a.buyNoPrice,
+        polymarketLiquidity: a.polymarketLiquidity,
+        kalshiLiquidity: a.kalshiLiquidity,
+        category: a.category,
+      }));
+
+    // Total liquidity across all arbs
+    const totalLiquidity = results.arbs.reduce(
+      (sum, a) => sum + (a.polymarketLiquidity || 0) + (a.kalshiLiquidity || 0),
+      0
+    );
+
+    res.json({
+      marketsScanned: {
+        polymarket: results.polymarketsScanned,
+        kalshi: results.kalshiMarketsScanned,
+      },
+      matchedPairs: results.matchedPairs,
+      liveArbs: results.arbs.length,
+      liveSignals: signals.stats.currentLive,
+      totalSignalsEver: signals.stats.totalSignalsEver,
+      avgSignalDuration: signals.stats.avgDurationSec,
+      avgPeakRoi: signals.stats.avgPeakRoi,
+      topArbs,
+      totalLiquidity,
+      account: {
+        availableBalance: account.availableBalance,
+        portfolioValue: account.portfolioValue,
+        lockedCapital: account.lockedCapital,
+        unrealizedProfit: account.unrealizedProfit,
+        realizedProfit: account.realizedProfit,
+        startingBalance: account.startingBalance,
+        totalTrades: account.totalTrades,
+        openPositionCount: account.openPositionCount,
+        resolvedTradeCount: account.resolvedTradeCount,
+        winRate: account.winRate,
+        maxDrawdown: account.maxDrawdown,
+        annualizedRoi: account.annualizedRoi,
+        avgHoldDays: account.avgHoldDays,
+        equityCurve: account.equityCurve,
+        recentOpenPositions: account.openPositions.slice(0, 5),
+        recentResolvedTrades: account.resolvedTrades.slice(0, 5),
+      },
+      uptimeMs: Date.now() - BOOT_AT,
       timestamp: results.timestamp,
     });
   } catch (err: any) {
@@ -503,6 +631,30 @@ app.delete("/api/copy-trading/target", (_req, res) => {
   res.json({ target: null });
 });
 
+// ---- Settings ----
+
+app.get("/api/settings", (_req, res) => {
+  try {
+    res.json(getRedactedSettings());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/settings", (req, res) => {
+  try {
+    const updates = req.body;
+    if (!updates || typeof updates !== "object") {
+      return res.status(400).json({ error: "Request body must be a JSON object" });
+    }
+    const saved = saveSettings(updates);
+    // Return redacted version so secrets aren't leaked
+    res.json(getRedactedSettings());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---- Static files (React SPA) ----
 const staticDir = path.join(__dirname, "../dashboard-ui/dist");
 app.use(express.static(staticDir));
@@ -526,6 +678,13 @@ app.listen(PORT, BIND_HOST, () => {
   if (runtime.dashboard.refreshIntervalMs > 0) {
     setInterval(() => executionService.refreshPlansInBackground(), runtime.dashboard.refreshIntervalMs);
   }
+  // Pre-warm cross-platform screener cache so first page load is instant
+  crossPlatformScreener.getResults().then((r) => {
+    console.log(`Cross-platform cache warmed: ${r.matchedPairs} pairs, ${r.arbs.length} arbs`);
+  }).catch((err) => {
+    console.log(`Cross-platform pre-warm failed (will retry on first request): ${err.message}`);
+  });
+
   const localUrls = getLocalIpv4Urls(PORT);
   console.log(`Dashboard running at http://localhost:${PORT}`);
   if (localUrls.length > 0) {

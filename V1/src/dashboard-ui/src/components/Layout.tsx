@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from "react";
 
-type Tab = "traders" | "alerts" | "arbitrage" | "kalshi" | "execution" | "new" | "cross";
+export type Tab = "overview" | "scanner" | "execution" | "analytics" | "settings";
 
 interface LayoutProps {
   activeTab: Tab;
@@ -10,15 +10,30 @@ interface LayoutProps {
   children: ReactNode;
 }
 
-const tabs: { id: Tab; label: string; badge: string; accent: string }[] = [
-  { id: "traders", label: "Top Traders", badge: "LB", accent: "from-emerald-400 to-emerald-600" },
-  { id: "alerts", label: "Smart Money", badge: "SM", accent: "from-amber-400 to-orange-500" },
-  { id: "arbitrage", label: "Polymarket", badge: "PM", accent: "from-violet-400 to-fuchsia-500" },
-  { id: "kalshi", label: "Kalshi", badge: "KA", accent: "from-cyan-400 to-teal-500" },
-  { id: "execution", label: "Execution", badge: "EX", accent: "from-rose-400 to-pink-500" },
-  { id: "new", label: "New Markets", badge: "NW", accent: "from-lime-400 to-green-500" },
-  { id: "cross", label: "Cross-Arb", badge: "XA", accent: "from-orange-400 to-amber-500" },
+const tabs: { id: Tab; label: string; desc: string }[] = [
+  { id: "overview", label: "Overview", desc: "Executive summary" },
+  { id: "scanner", label: "Scanner", desc: "Cross-platform arb detection" },
+  { id: "execution", label: "Execution", desc: "Trade plans & paper account" },
+  { id: "analytics", label: "Analytics", desc: "Market intelligence" },
+  { id: "settings", label: "Settings", desc: "Configuration" },
 ];
+
+// Candlestick logo SVG matching pitch.html
+function Logo() {
+  return (
+    <svg viewBox="0 0 60 28" fill="none" xmlns="http://www.w3.org/2000/svg" className="h-6 w-auto">
+      <rect x="4" y="8" width="3" height="12" rx="1" fill="#CC0035" />
+      <line x1="5.5" y1="4" x2="5.5" y2="8" stroke="#CC0035" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="5.5" y1="20" x2="5.5" y2="24" stroke="#CC0035" strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="14" y="4" width="3" height="16" rx="1" fill="#e4e4e7" />
+      <line x1="15.5" y1="1" x2="15.5" y2="4" stroke="#e4e4e7" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="15.5" y1="20" x2="15.5" y2="26" stroke="#e4e4e7" strokeWidth="1.5" strokeLinecap="round" />
+      <rect x="24" y="10" width="3" height="8" rx="1" fill="#CC0035" />
+      <line x1="25.5" y1="6" x2="25.5" y2="10" stroke="#CC0035" strokeWidth="1.5" strokeLinecap="round" />
+      <line x1="25.5" y1="18" x2="25.5" y2="22" stroke="#CC0035" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 export function Layout({ activeTab, onTabChange, paused, onTogglePause, children }: LayoutProps) {
   const [clock, setClock] = useState(new Date());
@@ -28,8 +43,6 @@ export function Layout({ activeTab, onTabChange, paused, onTogglePause, children
     return () => clearInterval(t);
   }, []);
 
-  const activeAccent = tabs.find((t) => t.id === activeTab)?.accent ?? "from-violet-400 to-fuchsia-500";
-
   return (
     <div className="min-h-screen noise-bg">
       {/* ── Header ── */}
@@ -38,22 +51,30 @@ export function Layout({ activeTab, onTabChange, paused, onTogglePause, children
           {/* Top bar */}
           <div className="flex items-center justify-between h-14">
             {/* Brand */}
-            <div className="flex items-center gap-3.5">
-              <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${activeAccent} flex items-center justify-center font-bold text-[13px] text-white shadow-lg shadow-violet-500/20 transition-all duration-500`}>
-                PM
-              </div>
+            <div className="flex items-center gap-3">
+              <Logo />
               <div>
-                <h1 className="text-[15px] font-semibold tracking-tight text-zinc-100 leading-tight">
-                  Polymarket Intelligence
+                <h1 className="text-[16px] font-serif tracking-tight text-zinc-100 leading-tight">
+                  Traders<span className="text-[#CC0035]">@</span>SMU
                 </h1>
-                <p className="text-[10px] text-zinc-500 font-medium tracking-wide uppercase">
-                  Market Screener & Trader Analytics
+                <p className="text-[9px] text-zinc-500 font-medium tracking-[0.12em] uppercase">
+                  Prediction Market Spatial Arbitrage
                 </p>
               </div>
             </div>
 
             {/* Right controls */}
             <div className="flex items-center gap-5">
+              {/* Mode badge */}
+              <div className="px-2.5 py-1 rounded-md bg-[#CC0035]/10 border border-[#CC0035]/20">
+                <span className="text-[9px] font-bold tracking-[0.1em] uppercase text-[#CC0035]">
+                  Paper Mode
+                </span>
+              </div>
+
+              {/* Separator */}
+              <div className="w-px h-5 bg-zinc-800" />
+
               {/* Status */}
               <button
                 onClick={onTogglePause}
@@ -67,7 +88,7 @@ export function Layout({ activeTab, onTabChange, paused, onTogglePause, children
                   />
                 </div>
                 <span
-                  className={`text-xs font-medium tracking-wide transition-colors ${
+                  className={`text-[10px] font-semibold tracking-[0.08em] transition-colors ${
                     paused
                       ? "text-amber-400/80 group-hover:text-amber-300"
                       : "text-emerald-400/80 group-hover:text-emerald-300"
@@ -81,42 +102,35 @@ export function Layout({ activeTab, onTabChange, paused, onTogglePause, children
               <div className="w-px h-5 bg-zinc-800" />
 
               {/* Clock */}
-              <div className="text-xs text-zinc-500 font-mono tabular-nums tracking-tight">
+              <div className="text-[11px] text-zinc-500 font-mono tabular-nums tracking-tight">
                 {clock.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </div>
+
+              {/* Spring 2026 */}
+              <div className="text-[9px] text-zinc-600 tracking-[0.08em] uppercase font-medium">
+                Spring 2026
               </div>
             </div>
           </div>
 
           {/* Tab nav */}
-          <nav className="flex gap-0.5 -mb-px">
+          <nav className="flex gap-1 -mb-px">
             {tabs.map((t) => {
               const isActive = activeTab === t.id;
               return (
                 <button
                   key={t.id}
                   onClick={() => onTabChange(t.id)}
-                  className={`relative px-4 py-2.5 flex items-center gap-2.5 text-[13px] font-medium rounded-t-lg transition-all duration-200 ${
+                  className={`relative px-5 py-2.5 text-[13px] font-medium rounded-t-lg transition-all duration-200 ${
                     isActive
                       ? "text-zinc-100 bg-white/[0.04]"
                       : "text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.02]"
                   }`}
                 >
-                  {/* Badge */}
-                  <span
-                    className={`w-6 h-5 rounded-[5px] flex items-center justify-center text-[9px] font-bold tracking-widest transition-all duration-300 ${
-                      isActive
-                        ? `bg-gradient-to-br ${t.accent} text-white shadow-sm`
-                        : "bg-zinc-800/80 text-zinc-500"
-                    }`}
-                  >
-                    {t.badge}
-                  </span>
                   {t.label}
-                  {/* Active indicator line */}
+                  {/* Active indicator — SMU red */}
                   {isActive && (
-                    <div
-                      className={`absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-gradient-to-r ${t.accent}`}
-                    />
+                    <div className="absolute bottom-0 left-3 right-3 h-[2px] rounded-full bg-[#CC0035]" />
                   )}
                 </button>
               );
@@ -124,7 +138,7 @@ export function Layout({ activeTab, onTabChange, paused, onTogglePause, children
           </nav>
         </div>
 
-        {/* Gradient separator */}
+        {/* Separator */}
         <div className="h-px bg-gradient-to-r from-transparent via-zinc-700/50 to-transparent" />
       </header>
 

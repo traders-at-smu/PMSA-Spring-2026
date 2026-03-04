@@ -286,6 +286,18 @@ function mask(value: string): string {
   return `${value.slice(0, 3)}***${value.slice(-3)}`;
 }
 
+export function saveSettings(updates: Record<string, unknown>): RuntimeSettings {
+  // Read existing settings file
+  const existing = readJson(SETTINGS_PATH, true);
+  // Deep merge updates into existing
+  const merged = deepMerge(existing, updates) as Record<string, unknown>;
+  // Write back
+  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(merged, null, 2) + "\n", "utf8");
+  // Invalidate cache so next getSettings() picks up changes
+  cached = null;
+  return getSettings();
+}
+
 export function getRedactedSettings(): RuntimeSettings {
   const s = getSettings();
   return {

@@ -4,6 +4,7 @@ import path from "path";
 import { ArbitrageScreener, BinaryArbOpportunity, NegRiskArbOpportunity } from "../screener";
 import { KalshiBinaryMispricing, KalshiEventGroupArb, KalshiScreener } from "../kalshiScreener";
 import { CrossPlatformScreener, CrossPlatformArb } from "../crossPlatformScreener";
+import { PaperAccountService } from "./paperAccountService";
 import { getSettings, validateSettingsForMode } from "../runtimeSettings";
 import { ModelBatchItem, PythonModelClient } from "./pythonModelClient";
 
@@ -170,6 +171,7 @@ export class ArbitrageExecutionService {
   private snapshots = new Map<string, RecentSnapshot[]>();
   private paperExecutedPlanIds = new Set<string>();
   private crossPlatformScreener: CrossPlatformScreener | null = null;
+  private paperAccount: PaperAccountService | null = null;
   private polymarketClientPromise: Promise<PolymarketClientLike | null> | null = null;
   private refreshInFlight: Promise<ExecutionState> | null = null;
   private executionLogPath: string;
@@ -212,6 +214,14 @@ export class ArbitrageExecutionService {
 
   setCrossPlatformScreener(screener: CrossPlatformScreener): void {
     this.crossPlatformScreener = screener;
+  }
+
+  setPaperAccount(account: PaperAccountService): void {
+    this.paperAccount = account;
+  }
+
+  getPaperAccount(): PaperAccountService | null {
+    return this.paperAccount;
   }
 
   getState(): ExecutionState {
@@ -463,6 +473,21 @@ export class ArbitrageExecutionService {
       const realized = plan.expectedNetProfitUsd;
       this.state.paperPnlUsd += realized;
       this.paperExecutedPlanIds.add(plan.id);
+
+      // Delegate CROSS trades to paper account for full simulation
+      if (plan.venue === "CROSS" && this.paperAccount && this.crossPlatformScreener) {
+        try {
+          const results = await this.crossPlatformScreener.getResults();
+          const arb = results.arbs.find(
+            (a) => `cross-${a.polymarketSlug}-${a.kalshiTicker}` === plan.id
+          );
+          if (arb) {
+            this.paperAccount.executeTrade(arb);
+            this.state.paperPnlUsd = this.paperAccount.getState().realizedProfit;
+          }
+        } catch (_) {}
+      }
+
       return this.pushHistory({
         planId: plan.id,
         timestamp: new Date().toISOString(),

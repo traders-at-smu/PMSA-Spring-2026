@@ -166,7 +166,7 @@ export class KalshiScreener {
         volume24h: (m.volume_24h_fp || 0) / 100, // cents to dollars
         liquidity: m.liquidity_dollars || 0,
         closeTime: m.close_time || "",
-        kalshiUrl: `https://kalshi.com/markets/${encodeURIComponent(m.ticker)}`,
+        kalshiUrl: `https://kalshi.com/markets/${(m.event_ticker || m.ticker).toLowerCase()}`,
       });
     }
 
@@ -234,7 +234,7 @@ export class KalshiScreener {
           type: sum < 1.0 ? "BUY_BOTH" : "SELL_BOTH",
           profitPerDollar: sum < 1.0 ? (1.0 - sum) / sum : (sum - 1.0) / sum,
           liquidity: m.liquidity_dollars || 0,
-          kalshiUrl: `https://kalshi.com/markets/${encodeURIComponent(m.ticker)}`,
+          kalshiUrl: `https://kalshi.com/markets/${(m.event_ticker || m.ticker).toLowerCase()}`,
         });
       }
     }
@@ -377,7 +377,7 @@ export class KalshiScreener {
         yesAsk: this.centsToNorm(m.yes_ask_dollars || 0),
         volume24h: (m.volume_24h_fp || 0) / 100,
         liquidity: m.liquidity_dollars || 0,
-        kalshiUrl: `https://kalshi.com/markets/${encodeURIComponent(m.ticker)}`,
+        kalshiUrl: `https://kalshi.com/markets/${(m.event_ticker || m.ticker).toLowerCase()}`,
       }));
     } catch (err: any) {
       console.error("Error fetching new Kalshi markets:", err.message);

@@ -1,28 +1,22 @@
 import { useState } from "react";
-import { Layout } from "./components/Layout";
-import { TopTraders } from "./components/TopTraders";
-import { TradeAlerts } from "./components/TradeAlerts";
-import { ArbitragePanel } from "./components/ArbitragePanel";
-import { KalshiPanel } from "./components/KalshiPanel";
-import { ExecutionPanel } from "./components/ExecutionPanel";
-import { NewMarketsPanel } from "./components/NewMarketsPanel";
+import { Layout, type Tab } from "./components/Layout";
+import { OverviewPanel } from "./components/OverviewPanel";
 import { CrossPlatformPanel } from "./components/CrossPlatformPanel";
-
-type Tab = "traders" | "alerts" | "arbitrage" | "kalshi" | "execution" | "new" | "cross";
+import { ExecutionPanel } from "./components/ExecutionPanel";
+import { AnalyticsPanel } from "./components/AnalyticsPanel";
+import { SettingsPanel } from "./components/SettingsPanel";
 
 export default function App() {
-  const [tab, setTab] = useState<Tab>("traders");
+  const [tab, setTab] = useState<Tab>("overview");
   const [paused, setPaused] = useState(false);
 
   return (
     <Layout activeTab={tab} onTabChange={setTab} paused={paused} onTogglePause={() => setPaused(!paused)}>
-      {tab === "traders" && <TopTraders />}
-      {tab === "alerts" && <TradeAlerts paused={paused} />}
-      {tab === "arbitrage" && <ArbitragePanel paused={paused} />}
-      {tab === "kalshi" && <KalshiPanel paused={paused} />}
+      {tab === "overview" && <OverviewPanel paused={paused} />}
+      {tab === "scanner" && <CrossPlatformPanel paused={paused} />}
       {tab === "execution" && <ExecutionPanel paused={paused} />}
-      {tab === "new" && <NewMarketsPanel paused={paused} />}
-      {tab === "cross" && <CrossPlatformPanel paused={paused} />}
+      {tab === "analytics" && <AnalyticsPanel paused={paused} />}
+      {tab === "settings" && <SettingsPanel />}
     </Layout>
   );
 }
