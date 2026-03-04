@@ -14,6 +14,7 @@ import { CrossPlatformScreener } from "../crossPlatformScreener";
 import { getCopyTarget, setCopyTarget, clearCopyTarget } from "../services/copyTargetService";
 import { SignalTrackerService } from "../services/signalTrackerService";
 import { PaperAccountService } from "../services/paperAccountService";
+import { TelegramService } from "../services/telegramService";
 
 const app = express();
 const runtime = getSettings();
@@ -58,7 +59,8 @@ const modelClient = new PythonModelClient();
 const miguelService = new MiguelService(modelClient);
 const crossPlatformScreener = new CrossPlatformScreener(screener, kalshiScreener);
 executionService.setCrossPlatformScreener(crossPlatformScreener);
-const signalTracker = new SignalTrackerService();
+const telegramService = new TelegramService();
+const signalTracker = new SignalTrackerService(telegramService);
 const paperAccount = new PaperAccountService();
 executionService.setPaperAccount(paperAccount);
 
@@ -639,6 +641,29 @@ app.get("/api/settings", (_req, res) => {
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ---- Telegram Notifications ----
+app.get("/api/telegram/status", (_req, res) => {
+  res.json(telegramService.getStatus());
+});
+
+app.post("/api/telegram/test", async (_req, res) => {
+  try {
+    const result = await telegramService.sendTest();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+app.post("/api/telegram/toggle", (req, res) => {
+  const { enabled } = req.body ?? {};
+  if (typeof enabled !== "boolean") {
+    return res.status(400).json({ error: "enabled (boolean) is required" });
+  }
+  telegramService.setEnabled(enabled);
+  res.json(telegramService.getStatus());
 });
 
 app.post("/api/settings", (req, res) => {

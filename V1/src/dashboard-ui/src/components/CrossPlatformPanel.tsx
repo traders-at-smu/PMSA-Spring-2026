@@ -451,6 +451,8 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
   const [resetting, setResetting] = useState(false);
   const [notificationsOn, setNotificationsOn] = useState(false);
   const [lastNotifiedArbs, setLastNotifiedArbs] = useState<Set<string>>(new Set());
+  const [telegramStatus, setTelegramStatus] = useState<{ configured: boolean; enabled: boolean; chatId: string } | null>(null);
+  const [telegramTesting, setTelegramTesting] = useState(false);
 
   const arbData = usePolling<ArbResponse>("/api/cross-platform/arbs", 30_000, paused);
   const diffData = usePolling<DiffResponse>("/api/cross-platform/diffs", 30_000, paused);
@@ -528,6 +530,47 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
 
     setLastNotifiedArbs(currentKeys);
   }, [arbData.data, notificationsOn]);
+
+  // Telegram status polling
+  useEffect(() => {
+    const fetchStatus = () =>
+      fetch("/api/telegram/status")
+        .then((r) => r.json())
+        .then(setTelegramStatus)
+        .catch(() => {});
+    fetchStatus();
+    const t = setInterval(fetchStatus, 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const handleTelegramTest = async () => {
+    setTelegramTesting(true);
+    try {
+      const resp = await fetch("/api/telegram/test", { method: "POST" });
+      const data = await resp.json();
+      if (data.ok) {
+        alert("Test message sent! Check your Telegram.");
+      } else {
+        alert(`Telegram test failed: ${data.error || "Unknown error"}`);
+      }
+    } catch (err) {
+      alert("Failed to send test message");
+    }
+    setTelegramTesting(false);
+  };
+
+  const handleTelegramToggle = async () => {
+    if (!telegramStatus?.configured) return;
+    try {
+      const resp = await fetch("/api/telegram/toggle", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !telegramStatus.enabled }),
+      });
+      const data = await resp.json();
+      setTelegramStatus(data);
+    } catch (_) {}
+  };
 
   const handleToggleNotifications = async () => {
     if (!notificationsOn) {
@@ -634,6 +677,46 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
             </svg>
             {notificationsOn ? "Alerts On" : "Alerts"}
           </button>
+
+          {/* Telegram indicator */}
+          {telegramStatus && (
+            <div className="flex items-center gap-1">
+              <button
+                onClick={telegramStatus.configured ? handleTelegramToggle : undefined}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-all ${
+                  telegramStatus.configured && telegramStatus.enabled
+                    ? "bg-[#0088cc]/15 text-[#29b6f6] border border-[#0088cc]/20"
+                    : telegramStatus.configured
+                    ? "bg-zinc-800/80 text-zinc-500 hover:bg-zinc-700/80 hover:text-zinc-300"
+                    : "bg-zinc-800/40 text-zinc-600 cursor-default"
+                }`}
+                title={
+                  telegramStatus.configured
+                    ? telegramStatus.enabled
+                      ? `Telegram ON (chat ${telegramStatus.chatId}) — click to disable`
+                      : "Telegram OFF — click to enable"
+                    : "Add TELEGRAM_BOT_TOKEN & TELEGRAM_CHAT_ID to .env"
+                }
+              >
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
+                </svg>
+                {telegramStatus.configured
+                  ? telegramStatus.enabled ? "TG On" : "TG Off"
+                  : "TG"}
+              </button>
+              {telegramStatus.configured && telegramStatus.enabled && (
+                <button
+                  onClick={handleTelegramTest}
+                  disabled={telegramTesting}
+                  className="px-2 py-1.5 rounded-lg text-[10px] font-semibold bg-zinc-800/80 text-zinc-500 hover:bg-zinc-700/80 hover:text-zinc-300 transition-all"
+                  title="Send test message to Telegram"
+                >
+                  {telegramTesting ? "..." : "Test"}
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="w-px h-4 bg-zinc-800" />
 

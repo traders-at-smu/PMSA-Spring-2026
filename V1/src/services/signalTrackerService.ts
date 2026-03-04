@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { CrossPlatformArb } from "../crossPlatformScreener";
+import { TelegramService } from "./telegramService";
 
 // ---- Types ----
 
@@ -57,11 +58,13 @@ export class SignalTrackerService {
   private totalSignalsEver = 0;
   private lastTickAt: number = 0;
   private logPath: string;
+  private telegram: TelegramService | null = null;
 
-  constructor() {
+  constructor(telegram?: TelegramService) {
     const logDir = path.resolve(process.cwd(), "logs");
     fs.mkdirSync(logDir, { recursive: true });
     this.logPath = path.join(logDir, "signal-history.jsonl");
+    this.telegram = telegram ?? null;
     this.loadFromDisk();
   }
 
@@ -120,6 +123,23 @@ export class SignalTrackerService {
         };
         this.liveMap.set(key, signal);
         this.totalSignalsEver++;
+
+        // Fire Telegram notification for new signal
+        if (this.telegram) {
+          this.telegram.notifyNewArbs([{
+            event: arb.event,
+            buyYesVenue: arb.buyYesVenue,
+            buyYesPrice: arb.buyYesPrice,
+            buyNoVenue: arb.buyNoVenue,
+            buyNoPrice: arb.buyNoPrice,
+            roi: arb.roi,
+            netProfit: arb.netProfit,
+            similarityScore: arb.similarityScore,
+            category: arb.category,
+            polymarketUrl: arb.polymarketUrl,
+            kalshiUrl: arb.kalshiUrl,
+          }]).catch(() => {}); // fire-and-forget
+        }
       }
     }
 
