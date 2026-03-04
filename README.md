@@ -1,170 +1,191 @@
-# Polymarket + Kalshi Arbitrage Dashboard
+# Polymarket Copy Trading Bot
 
-Cross-venue arbitrage scanner/executor with a React dashboard, TypeScript backend, and a Python decision-model bridge (`model_v1.py`).
+Monorepo for cross-venue trading/arbitrage tooling across Polymarket and Kalshi.
 
-## Trading policy (current)
+This repository currently contains the following components:
 
-- Ask-only execution logic: opportunities are computed from ask prices only. The pipeline does not synthesize asks from bid prices.
-- Cross-venue binary strategies evaluated per pair:
-  - `BUY_KY_PN` = buy Kalshi YES ask + Polymarket NO ask
-  - `BUY_KN_PY` = buy Kalshi NO ask + Polymarket YES ask
-- Kalshi fee in raw opportunity math uses Trade Rules formula:
-  - `roundup(0.007 * C * Ask_K * (1 - Ask_K))`
-- Opportunities are emitted only when arbitrage condition holds for at least one strategy:
-  - `KP(c=1) < 1`
+- `V1`: TypeScript + React dashboard + Python model bridge.
+- `V2`: Python-first bot + Streamlit dashboard with live safety controls.
+- `Polytoken`: Link-to-pair mapping utility for Polymarket/Kalshi.
 
-## Model trade gating (required rules)
+## Repository layout
 
-`model_v1.py` now enforces these gates before allowing size (`recommended_cap > 0`):
+```text
+.
+|-- Polytoken/  # Polymarket/Kalshi mapping row generator
+|-- V1/   # TypeScript backend + React dashboard + Python model bridge
+|-- V2/   # Python bot + Streamlit dashboard
+`-- README.md
+```
 
-- `KP(c_new) < c_new`
-- `KP(c) < KP_max`
-- `A_e(c_new) >= A_min`
+## Which version should you use?
 
-If any rule fails, `recommended_cap` is forced to `0`.
+- Use `V1` if you want the Node/TypeScript service stack with a React UI and Python scoring bridge.
+- Use `V2` if you want a pure Python workflow with CLI commands and Streamlit dashboard.
+- Use `Polytoken` if you want to generate mapping rows from Polymarket + Kalshi links.
 
-Optional environment variables for model defaults:
+## Shared prerequisites
 
-- `MODEL_RULE_KP_MAX` (default: `1.0`)
-- `MODEL_RULE_A_MIN` (default: `0.0`)
+- Git
+- Internet access for Kalshi/Polymarket APIs
+- API credentials if running live trading (paper mode works with limited/no private keys depending on command)
 
-## Current architecture
+---
 
-- Node/TypeScript API server: `src/dashboard/server.ts`
-- React dashboard (Vite): `src/dashboard-ui/`
-- Execution planner + executor: `src/services/arbitrageExecutionService.ts`
-- Python model bridge client: `src/services/pythonModelClient.ts`
-- Miguel pipeline service (pairs/quotes/raw opportunities): `src/services/miguelService.ts`
-- Python scripts:
-  - `model_v1.py` (standalone demo + core model function)
-  - `python/model_v1_bridge.py` (JSON stdin/stdout bridge used by backend)
-  - `python/build_pairs.py`
-  - `python/live_quotes.py`
-  - `python/raw_boxed_filter.py`
+## V1 Quick Start (TypeScript + React + Python bridge)
 
-## Requirements
+### 1) Install dependencies
 
-- Node.js 18+
-- npm
-- Python 3.11+ on PATH as `python` (or configure `python.pythonExecutable`)
-- Internet access to Polymarket/Kalshi APIs
-
-## Setup
-
-1. Install dependencies:
-
-```bash
+```powershell
+cd V1
 npm install
-cd src/dashboard-ui && npm install
+cd src/dashboard-ui
+npm install
 cd ../..
 ```
 
-2. Configure runtime settings:
+### 2) Configure runtime settings
 
-- Base defaults: `config/settings.json`
-- Local overrides/secrets: `config/settings.local.json` (gitignored)
-- Copy starter template from `config/settings.local.example.json`
+```powershell
+Copy-Item config/settings.local.example.json config/settings.local.json
+```
 
-Precedence:
+Fill `V1/config/settings.local.json` with local credentials/secrets.
 
-`defaults < config/settings.json < config/settings.local.json < env vars`
+### 3) Run
 
-## Run
-
-### Dashboard (API + built UI)
-
-```bash
+```powershell
 npm run dashboard
 ```
 
-### Backend only
+Useful commands:
 
-```bash
+```powershell
 npm run dashboard:server
-```
-
-### Frontend dev server
-
-```bash
 npm run dashboard:dev
-```
-
-## Build and validation
-
-```bash
 npm run build
-npm run dashboard:build
 npm run dashboard:smoke
-python -m py_compile model_v1.py python/model_v1_bridge.py python/build_pairs.py python/live_quotes.py python/raw_boxed_filter.py python/test_trade_rules.py python/test_model_trade_rules.py
-python -m unittest python/test_trade_rules.py python/test_model_trade_rules.py -v
-```
-
-## Python model usage
-
-### Standalone console demo
-
-```bash
-python model_v1.py
-```
-
-Reads `opportunities_raw.csv` and prints model outputs (`expected_slippage`, `fill_prob_20s`, `expected_net_edge`, `recommended_cap`).
-
-### Backend model authority
-
-Execution planning calls Python through `python/model_v1_bridge.py`. Health/status exposed in API and execution state.
-
-## Miguel pipeline commands
-
-```bash
 npm run miguel:pairs
 npm run miguel:quotes:once
 npm run miguel:quotes
 npm run miguel:raw
 ```
 
-Output files:
+Details: see `V1/README.md`.
 
-- `pairs.csv`
-- `python/data/live_quotes.csv`
-- `opportunities_raw.csv`
-- `python/data/model_v1_section_d.json`
+---
 
-## API endpoints (current)
+## V2 Quick Start (Python + Streamlit)
 
-### Core health
+### 1) Create venv and install dependencies
 
-- `GET /api/health`
-- `GET /api/arbitrage/execution/health`
+```powershell
+cd V2
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
 
-### Execution
+### 2) Configure
 
-- `GET /api/arbitrage/execution/state`
-- `POST /api/arbitrage/execution/settings`
-- `POST /api/arbitrage/execution/refresh`
-- `POST /api/arbitrage/execution/execute/:planId`
-- `POST /api/arbitrage/execution/execute-top`
-- `GET /api/arbitrage/execution/export/plans.csv`
-- `GET /api/arbitrage/execution/export/history.csv`
-- `GET /api/arbitrage/execution/export/history.json`
-- `GET /api/arbitrage/execution/export/history.jsonl`
+```powershell
+Copy-Item config/config.example.json config/config.json
+Copy-Item credentials.example.json credentials.json
+```
 
-### Model v1 (Python bridge)
+Update `V2/config/config.json` and `V2/credentials.json`.
 
-- `GET /api/model-v1/health`
-- `POST /api/model-v1/evaluate`
+### 3) Run commands
 
-### Miguel pipeline
+Validate config:
 
-- `GET /api/miguel/status`
-- `POST /api/miguel/pairs/rebuild`
-- `POST /api/miguel/live-quotes/start`
-- `POST /api/miguel/live-quotes/stop`
-- `POST /api/miguel/opportunities/rebuild`
-- `GET /api/miguel/opportunities/latest`
-- `GET /api/miguel/model-v1/top?limit=3`
+```powershell
+python -m src.main --config config/config.json validate-config
+```
+
+Scan once:
+
+```powershell
+python -m src.main --config config/config.json scan
+```
+
+Trade cycle (paper):
+
+```powershell
+python -m src.main --config config/config.json trade-once --mode paper
+```
+
+Continuous loop:
+
+```powershell
+python -m src.main --config config/config.json run --execute --mode paper
+```
+
+Dashboard:
+
+```powershell
+python -m src.main --config config/config.json dashboard
+```
+
+Details: see `V2/README.md`.
+
+---
+
+## Polytoken Utility (Link -> Mapping Rows)
+
+`Polytoken/polytoken.py` converts Polymarket + Kalshi links into mapping CSV rows.
+
+### 1) Install Python deps
+
+```powershell
+pip install requests openpyxl
+```
+
+`openpyxl` is only required for `.xlsx` input.
+
+### 2) Run (interactive mode)
+
+```powershell
+cd Polytoken
+python polytoken.py
+```
+
+The script prompts for:
+- Polymarket link
+- Kalshi link
+- subcontract selection
+
+Then writes one CSV row to stdout.
+
+### 3) Run (batch mode from `.csv` or `.xlsx`)
+
+```powershell
+cd Polytoken
+python polytoken.py links.csv
+python polytoken.py links.xlsx
+```
+
+Input format:
+- Column 1: Polymarket link
+- Column 2: Kalshi link
+- Optional header row is supported (e.g. `polymarket,kalshi`)
+
+Batch mode processes each row through the same CLI flow and prompts for selections when needed. Failed rows are reported to stderr and processing continues.
+
+---
+
+## Safety and secrets
+
+- Start in paper mode before attempting live mode.
+- Never commit secrets (`settings.local.json`, `credentials.json`, private keys, `.env` files).
+- Both `V1` and `V2` include version-specific `.gitignore` files to keep runtime artifacts out of git.
+
+## Testing and validation
+
+- `V1`: use npm build/smoke scripts and Python unit tests described in `V1/README.md`.
+- `V2`: run `pytest -q`.
 
 ## Notes
 
-- Start in `PAPER` mode before enabling `LIVE`.
-- Keep real keys in `config/settings.local.json` only.
-- Persistent execution log path: `logs/execution-history.jsonl`.
+- `V1` and `V2` are intentionally separate codepaths with different runtime models.
+- Keep dependencies and configs isolated per version for predictable behavior.
