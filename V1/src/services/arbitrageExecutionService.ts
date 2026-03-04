@@ -949,7 +949,7 @@ export class ArbitrageExecutionService {
       strategy: "EVENT_BUY_ALL_YES",
       title: arb.eventTitle,
       contractUrl: outcomes[0]?.ticker
-        ? `https://kalshi.com/markets/${encodeURIComponent(outcomes[0].ticker)}`
+        ? `https://kalshi.com/markets/${outcomes[0].ticker.split("-")[0].toLowerCase()}`
         : undefined,
       grossEdgePerDollar: grossEdge,
       decision,

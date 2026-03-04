@@ -614,6 +614,33 @@ function calcPolymarketFee(price: number): number {
   return price * 0.001;
 }
 
+/** Build a working Kalshi web URL from available ticker data.
+ *  Kalshi URL format: /markets/{series_ticker}/{slug}/{event_ticker}
+ *  We don't have the slug, so we link to the series page: /markets/{series_ticker}
+ *  which shows all events in the series. */
+function buildKalshiUrl(
+  seriesTicker: string | undefined,
+  eventTicker: string | undefined,
+  ticker: string
+): string {
+  const series = (seriesTicker || "").toLowerCase();
+  if (series) {
+    return `https://kalshi.com/markets/${series}`;
+  }
+  // Fallback: derive series from event_ticker by stripping date suffix
+  // e.g., KXFED-26DEC → kxfed
+  const et = (eventTicker || ticker).toLowerCase();
+  const dashIdx = et.indexOf("-");
+  if (dashIdx > 0) {
+    // Check if suffix after dash starts with a year digit (2x) — that's a date
+    const suffix = et.slice(dashIdx + 1);
+    if (/^2[0-9]/.test(suffix)) {
+      return `https://kalshi.com/markets/${et.slice(0, dashIdx)}`;
+    }
+  }
+  return `https://kalshi.com/markets/${et}`;
+}
+
 // ---- Screener ----
 
 const PRIMARY_THRESHOLD = 0.40;
@@ -823,7 +850,7 @@ export class CrossPlatformScreener {
         noAsk,
         volume24h: (m.volume_24h_fp || 0) / 100,
         liquidity: Number(m.liquidity_dollars) || 0,
-        url: `https://kalshi.com/markets/${(m.event_ticker || m.ticker).toLowerCase()}`,
+        url: buildKalshiUrl(m.series_ticker, m.event_ticker, m.ticker),
         slug: m.ticker,
         venue: "KALSHI",
         category: categoryTag(title),

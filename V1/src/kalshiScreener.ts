@@ -8,6 +8,19 @@ import {
 } from "./types";
 
 const MIN_LIQUIDITY = parseInt(process.env.KALSHI_MIN_LIQUIDITY || "100000");
+
+/** Build a working Kalshi web URL. Links to the series page. */
+function kalshiWebUrl(m: KalshiMarket): string {
+  const series = (m.series_ticker || "").toLowerCase();
+  if (series) return `https://kalshi.com/markets/${series}`;
+  // Derive series from event_ticker: KXFED-26DEC → kxfed
+  const et = (m.event_ticker || m.ticker).toLowerCase();
+  const dashIdx = et.indexOf("-");
+  if (dashIdx > 0 && /^2[0-9]/.test(et.slice(dashIdx + 1))) {
+    return `https://kalshi.com/markets/${et.slice(0, dashIdx)}`;
+  }
+  return `https://kalshi.com/markets/${et}`;
+}
 const RATE_LIMIT_DELAY = 100; // ms between requests
 
 // ---- Screener ----
@@ -69,6 +82,10 @@ export class KalshiScreener {
 
       for (const event of events) {
         const markets: KalshiMarket[] = event.markets || [];
+        const seriesTicker: string = event.series_ticker || "";
+        for (const m of markets) {
+          m.series_ticker = seriesTicker;
+        }
         allMarkets.push(...markets);
       }
 
@@ -166,7 +183,7 @@ export class KalshiScreener {
         volume24h: (m.volume_24h_fp || 0) / 100, // cents to dollars
         liquidity: m.liquidity_dollars || 0,
         closeTime: m.close_time || "",
-        kalshiUrl: `https://kalshi.com/markets/${(m.event_ticker || m.ticker).toLowerCase()}`,
+        kalshiUrl: kalshiWebUrl(m),
       });
     }
 
@@ -234,7 +251,7 @@ export class KalshiScreener {
           type: sum < 1.0 ? "BUY_BOTH" : "SELL_BOTH",
           profitPerDollar: sum < 1.0 ? (1.0 - sum) / sum : (sum - 1.0) / sum,
           liquidity: m.liquidity_dollars || 0,
-          kalshiUrl: `https://kalshi.com/markets/${(m.event_ticker || m.ticker).toLowerCase()}`,
+          kalshiUrl: kalshiWebUrl(m),
         });
       }
     }
@@ -377,7 +394,7 @@ export class KalshiScreener {
         yesAsk: this.centsToNorm(m.yes_ask_dollars || 0),
         volume24h: (m.volume_24h_fp || 0) / 100,
         liquidity: m.liquidity_dollars || 0,
-        kalshiUrl: `https://kalshi.com/markets/${(m.event_ticker || m.ticker).toLowerCase()}`,
+        kalshiUrl: kalshiWebUrl(m),
       }));
     } catch (err: any) {
       console.error("Error fetching new Kalshi markets:", err.message);

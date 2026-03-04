@@ -213,6 +213,7 @@ export interface ScreenerResults {
 export interface KalshiMarket {
   ticker: string;
   event_ticker: string;
+  series_ticker?: string; // Stamped from parent event during fetch
   title: string;
   subtitle: string;
   category: string;
