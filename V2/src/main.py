@@ -100,6 +100,23 @@ def cmd_run(args) -> int:
         time.sleep(service.config["scan_interval_seconds"])
 
 
+def cmd_copy_scan(args) -> int:
+    config, _, _, service = build_runtime(args.config, args.credentials)
+    result = service.run_copy_cycle()
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def cmd_copy_run(args) -> int:
+    config, _, _, service = build_runtime(args.config, args.credentials)
+    print("Copy trading monitor running. Press Ctrl+C to stop.")
+    while True:
+        result = service.run_copy_cycle()
+        if result["signals_found"] > 0:
+            print(json.dumps(result, indent=2))
+        time.sleep(service.copy_trading.poll_interval)
+
+
 def cmd_dashboard(args) -> int:
     cmd = [
         sys.executable,
@@ -141,6 +158,12 @@ def parser() -> argparse.ArgumentParser:
     s_run.add_argument("--arm-live", action="store_true")
     s_run.add_argument("--confirm-token", default=None)
     s_run.set_defaults(func=cmd_run)
+
+    s_copy_scan = sub.add_parser("copy-scan")
+    s_copy_scan.set_defaults(func=cmd_copy_scan)
+
+    s_copy_run = sub.add_parser("copy-run")
+    s_copy_run.set_defaults(func=cmd_copy_run)
 
     s_dashboard = sub.add_parser("dashboard")
     s_dashboard.set_defaults(func=cmd_dashboard)

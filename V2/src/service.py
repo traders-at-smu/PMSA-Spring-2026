@@ -6,7 +6,11 @@ from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from src.copy_trading import CopyTradingService
 from src.mapping_loader import load_mapping
+from src.notifications import NotificationService
+from src.portfolio import PortfolioTracker
+from src.risk import RiskManager
 from src.strategy_model import find_mispricing
 
 
@@ -24,6 +28,15 @@ class BotService:
         self.kalshi = kalshi_client
         self.poly = polymarket_client
         self.execution = execution_engine
+        self.portfolio = PortfolioTracker(state_store)
+        self.notifier = NotificationService(config)
+        self.risk_manager = RiskManager(config, state_store, self.portfolio)
+
+        self.copy_trading = CopyTradingService(config, state_store)
+
+        # Wire risk manager and notifier into execution engine
+        self.execution.risk_manager = self.risk_manager
+        self.execution.notifier = self.notifier
 
     def collect_snapshots(self) -> tuple[list[dict[str, Any]], dict[str, Any], dict[str, Any], list[dict[str, Any]]]:
         mappings = load_mapping(self.config["paths"]["mapping_file"])
@@ -156,6 +169,12 @@ class BotService:
         execution_results = []
         if execute_trades:
             execution_results = self.execution.execute(cycle_id=cycle_id, decisions=decisions, mode=mode, typed_confirm=typed_confirm)
+            # Sync positions from orders after execution
+            self.portfolio.sync_positions_from_orders()
+
+        # Update mark-to-market prices for open positions
+        if snapshots:
+            self.portfolio.update_mark_prices(snapshots)
 
         return {
             "cycle_id": cycle_id,
@@ -164,4 +183,36 @@ class BotService:
             "execution": execution_results,
             "mode": mode,
             "errors": errors,
+            "portfolio": self.portfolio.get_portfolio_summary(),
+        }
+
+    def run_copy_cycle(self) -> dict[str, Any]:
+        """Run one copy trading poll cycle. Independent from arb cycle."""
+        signals = self.copy_trading.detect_copy_opportunities()
+
+        # Notify on high-suspicion signals
+        for sig in signals:
+            if sig.suspicion_score >= self.copy_trading.suspicion_threshold and self.notifier:
+                self.notifier.notify_copy_signal({
+                    "trader_name": sig.trader_name,
+                    "trader_address": sig.trader_address,
+                    "market_title": sig.market_title,
+                    "side": sig.side,
+                    "cash_value": sig.cash_value,
+                    "suspicion_score": sig.suspicion_score,
+                })
+
+        return {
+            "signals_found": len(signals),
+            "signals": [
+                {
+                    "trader": s.trader_name,
+                    "market": s.market_title,
+                    "side": s.side,
+                    "cash_value": s.cash_value,
+                    "suspicion_score": s.suspicion_score,
+                    "suspicion_signals": s.suspicion_signals,
+                }
+                for s in signals
+            ],
         }

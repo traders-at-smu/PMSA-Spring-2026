@@ -11,22 +11,10 @@ from typing import Any
 
 try:
     from src.models import OpportunityDecision
+    from src.fees import compute_kalshi_fee, compute_polymarket_fee
 except ModuleNotFoundError:  # Allows direct execution: python src/strategy_model.py
     from models import OpportunityDecision
-
-
-def compute_kalshi_fee(c: int, p: float, rate: float = 0.07, round_mode: str = "ceil_cent") -> float:
-    fee = rate * c * p * (1.0 - p)
-    if round_mode == "ceil_cent":
-        return math.ceil(fee * 100.0) / 100.0
-    if round_mode == "round_cent":
-        return round(fee, 2)
-    return fee
-
-
-def compute_polymarket_fee(c: int, p: float, fee_rate: float, exponent: float) -> float:
-    fee = c * fee_rate * ((p * (1.0 - p)) ** exponent)
-    return max(0.0, fee)
+    from fees import compute_kalshi_fee, compute_polymarket_fee
 
 
 def _safe_div(a: float, b: float) -> float:
@@ -119,6 +107,7 @@ def _position_metrics(
             avg_p_price,
             fee_rate=float(category_fee.get("fee_rate", 0.0)),
             exponent=float(category_fee.get("exponent", 1.0)),
+            maker_rebate=float(category_fee.get("maker_rebate", 0.0)),
         )
 
     kp_cost = kalshi_spend + polymarket_spend + kalshi_fee + polymarket_fee

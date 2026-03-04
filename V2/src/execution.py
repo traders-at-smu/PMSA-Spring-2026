@@ -16,6 +16,8 @@ class ExecutionEngine:
         self.store = state_store
         self.kalshi = kalshi_client
         self.poly = polymarket_client
+        self.risk_manager = None  # Set by service after portfolio is available
+        self.notifier = None  # Set by service after notifications are configured
 
     def arm_live(self, confirm_token: str | None = None) -> str:
         token = confirm_token or secrets.token_hex(6)
@@ -54,6 +56,16 @@ class ExecutionEngine:
                 return [{"status": "blocked", "reason": reason}]
 
         for d in tradable:
+            # Risk check
+            if self.risk_manager:
+                allowed, reason = self.risk_manager.check_pre_trade(d)
+                if not allowed:
+                    self.store.save_alert("medium", f"Trade blocked by risk: {reason}", pair_id=d.pair_id)
+                    if self.notifier:
+                        self.notifier.notify_risk_alert(reason, {"pair_id": d.pair_id, "strategy": d.strategy})
+                    results.append({"decision": asdict(d), "status": "risk_blocked", "reason": reason})
+                    continue
+
             idem_base = f"{cycle_id}:{d.pair_id}:{d.strategy}:{d.contracts}"
             if mode == "paper":
                 paper_resp_k = {
@@ -72,6 +84,8 @@ class ExecutionEngine:
                 }
                 self.store.save_order(cycle_id, f"{idem_base}:kalshi", d.pair_id, "kalshi", mode, d.kalshi_side, d.contracts, d.kalshi_price, "filled", paper_resp_k)
                 self.store.save_order(cycle_id, f"{idem_base}:polymarket", d.pair_id, "polymarket", mode, d.polymarket_side, d.contracts, d.polymarket_price, "filled", paper_resp_p)
+                if self.notifier:
+                    self.notifier.notify_trade_executed(d, mode)
                 results.append({"decision": asdict(d), "kalshi": paper_resp_k, "polymarket": paper_resp_p})
                 continue
 
@@ -93,6 +107,8 @@ class ExecutionEngine:
                 poly_token = d.metadata["polymarket_yes_token_id"] if d.polymarket_side == "yes" else d.metadata["polymarket_no_token_id"]
                 resp_p = self.poly.place_order(token_id=poly_token, side="buy", size=d.contracts, price=d.polymarket_price)
                 self.store.save_order(cycle_id, f"{idem_base}:polymarket", d.pair_id, "polymarket", mode, d.polymarket_side, d.contracts, d.polymarket_price, "submitted", resp_p)
+                if self.notifier:
+                    self.notifier.notify_trade_executed(d, mode)
                 results.append({"decision": asdict(d), "kalshi": resp_k, "polymarket": resp_p})
             except Exception as exc:
                 self.store.save_alert(
@@ -101,6 +117,11 @@ class ExecutionEngine:
                     pair_id=d.pair_id,
                     details={"error": str(exc), "decision": asdict(d), "kalshi_response": resp_k},
                 )
+                if self.notifier:
+                    self.notifier.notify_risk_alert(
+                        "Partial failure: polymarket leg failed after kalshi fill",
+                        {"pair_id": d.pair_id, "error": str(exc)},
+                    )
                 results.append({"decision": asdict(d), "status": "partial_failure", "error": str(exc), "kalshi": resp_k})
 
         return results

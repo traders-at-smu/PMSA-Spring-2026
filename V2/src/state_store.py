@@ -66,6 +66,53 @@ class StateStore:
                     message TEXT NOT NULL,
                     details_json TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS positions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    pair_id TEXT NOT NULL,
+                    venue TEXT NOT NULL,
+                    side TEXT NOT NULL,
+                    contracts INTEGER NOT NULL,
+                    avg_entry_price REAL NOT NULL,
+                    current_price REAL NOT NULL DEFAULT 0,
+                    unrealized_pnl REAL NOT NULL DEFAULT 0,
+                    realized_pnl REAL NOT NULL DEFAULT 0,
+                    source TEXT NOT NULL DEFAULT 'arb',
+                    status TEXT NOT NULL DEFAULT 'open',
+                    opened_at TEXT NOT NULL,
+                    closed_at TEXT,
+                    UNIQUE(pair_id, venue, side, source)
+                );
+
+                CREATE TABLE IF NOT EXISTS pnl_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    snapshot_at TEXT NOT NULL,
+                    total_value REAL NOT NULL,
+                    total_unrealized_pnl REAL NOT NULL,
+                    total_realized_pnl REAL NOT NULL,
+                    summary_json TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS copy_targets (
+                    address TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    set_at TEXT NOT NULL,
+                    active INTEGER NOT NULL DEFAULT 1
+                );
+
+                CREATE TABLE IF NOT EXISTS copy_signals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    created_at TEXT NOT NULL,
+                    trader_address TEXT NOT NULL,
+                    condition_id TEXT NOT NULL,
+                    side TEXT NOT NULL,
+                    size REAL NOT NULL,
+                    price REAL NOT NULL,
+                    cash_value REAL NOT NULL,
+                    market_title TEXT NOT NULL,
+                    suspicion_score INTEGER NOT NULL DEFAULT 0,
+                    acted_on INTEGER NOT NULL DEFAULT 0
+                );
                 """
             )
             cur = conn.execute("SELECT COUNT(*) AS c FROM runtime_control")
@@ -183,4 +230,106 @@ class StateStore:
     def list_alerts(self, limit: int = 100) -> list[dict[str, Any]]:
         with self._conn() as conn:
             rows = conn.execute("SELECT * FROM alerts ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+            return [dict(r) for r in rows]
+
+    # --- Position tracking ---
+
+    def upsert_position(self, pos) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                """
+                INSERT INTO positions (pair_id, venue, side, contracts, avg_entry_price, current_price,
+                    unrealized_pnl, realized_pnl, source, status, opened_at, closed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(pair_id, venue, side, source) DO UPDATE SET
+                    contracts = excluded.contracts,
+                    avg_entry_price = excluded.avg_entry_price,
+                    current_price = excluded.current_price,
+                    unrealized_pnl = excluded.unrealized_pnl,
+                    realized_pnl = excluded.realized_pnl,
+                    status = excluded.status,
+                    closed_at = excluded.closed_at
+                """,
+                (pos.pair_id, pos.venue, pos.side, pos.contracts, pos.avg_entry_price,
+                 pos.current_price, pos.unrealized_pnl, pos.realized_pnl,
+                 pos.source, pos.status, pos.opened_at, pos.closed_at),
+            )
+
+    def list_positions(self, status: str | None = None, limit: int = 500) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            if status:
+                rows = conn.execute(
+                    "SELECT * FROM positions WHERE status = ? ORDER BY opened_at DESC LIMIT ?",
+                    (status, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT * FROM positions ORDER BY opened_at DESC LIMIT ?", (limit,)
+                ).fetchall()
+            return [dict(r) for r in rows]
+
+    def close_position(self, pair_id: str, venue: str, side: str, realized_pnl: float = 0.0) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                """UPDATE positions SET status = 'closed', realized_pnl = ?, closed_at = ?
+                   WHERE pair_id = ? AND venue = ? AND side = ? AND status = 'open'""",
+                (realized_pnl, now, pair_id, venue, side),
+            )
+
+    def save_pnl_snapshot(self, snapshot_at: str, summary: dict[str, Any]) -> None:
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT INTO pnl_snapshots (snapshot_at, total_value, total_unrealized_pnl, total_realized_pnl, summary_json) VALUES (?, ?, ?, ?, ?)",
+                (snapshot_at, summary.get("total_value", 0.0), summary.get("total_unrealized_pnl", 0.0),
+                 summary.get("total_realized_pnl", 0.0), json.dumps(summary)),
+            )
+
+    def list_pnl_snapshots(self, limit: int = 30) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM pnl_snapshots ORDER BY snapshot_at DESC LIMIT ?", (limit,)
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    # --- Copy trading ---
+
+    def save_copy_target(self, address: str, name: str) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO copy_targets (address, name, set_at, active) VALUES (?, ?, ?, 1)",
+                (address, name, now),
+            )
+
+    def remove_copy_target(self, address: str) -> None:
+        with self._conn() as conn:
+            conn.execute("UPDATE copy_targets SET active = 0 WHERE address = ?", (address,))
+
+    def list_copy_targets(self, active_only: bool = True) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            if active_only:
+                rows = conn.execute("SELECT * FROM copy_targets WHERE active = 1").fetchall()
+            else:
+                rows = conn.execute("SELECT * FROM copy_targets").fetchall()
+            return [dict(r) for r in rows]
+
+    def save_copy_signal(self, signal: dict[str, Any]) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._conn() as conn:
+            conn.execute(
+                """INSERT INTO copy_signals (created_at, trader_address, condition_id, side, size, price,
+                   cash_value, market_title, suspicion_score, acted_on)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (now, signal["trader_address"], signal["condition_id"], signal["side"],
+                 signal["size"], signal["price"], signal["cash_value"],
+                 signal["market_title"], signal.get("suspicion_score", 0),
+                 signal.get("acted_on", 0)),
+            )
+
+    def list_copy_signals(self, limit: int = 100) -> list[dict[str, Any]]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM copy_signals ORDER BY created_at DESC LIMIT ?", (limit,)
+            ).fetchall()
             return [dict(r) for r in rows]

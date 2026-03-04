@@ -33,6 +33,43 @@
       }
     }
   },
+  "risk": {
+    "max_total_exposure": 5000,
+    "max_drawdown_pct": 0.15,
+    "circuit_breaker_cooldown_minutes": 60
+  },
+  "notifications": {
+    "enabled": false,
+    "telegram": {
+      "bot_token": "",
+      "chat_id": ""
+    },
+    "discord": {
+      "webhook_url": ""
+    },
+    "notify_on": {
+      "trade_executed": true,
+      "arb_found": false,
+      "risk_alert": true,
+      "copy_signal": true,
+      "circuit_breaker": true
+    }
+  },
+  "copy_trading": {
+    "enabled": false,
+    "poll_interval_seconds": 30,
+    "min_trade_size_usd": 5000,
+    "max_copy_size_usd": 500,
+    "suspicion_score_threshold": 40,
+    "copy_fraction": 0.1
+  },
+  "pair_discovery": {
+    "enabled": false,
+    "min_similarity": 0.6,
+    "refresh_interval_seconds": 3600,
+    "max_discovered_pairs": 50,
+    "auto_activate": false
+  },
   "live_safety": {
     "require_arm": true,
     "require_typed_confirm": true,

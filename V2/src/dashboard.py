@@ -449,7 +449,9 @@ def app():
     m4.metric("Mean Edge", f"{avg_edge_pct:.2f}%")
     m5.metric("Mean Annualized Edge", f"{avg_annualized_edge_pct:.2f}%", delta=f"{len(errors_df)} cycle errors")
 
-    trading_tab, ops_tab, raw_tab = st.tabs(["Trading View", "Operations", "Raw API Data"])
+    trading_tab, portfolio_tab, copy_tab, ops_tab, raw_tab = st.tabs(
+        ["Trading View", "Portfolio", "Copy Trading", "Operations", "Raw API Data"]
+    )
 
     with trading_tab:
         left, right = st.columns([1.2, 1.8], gap="large")
@@ -512,6 +514,65 @@ def app():
                         use_container_width=True,
                         hide_index=True,
                     )
+
+    with portfolio_tab:
+        st.subheader("Portfolio Overview")
+        portfolio_summary = service.portfolio.get_portfolio_summary()
+        pc1, pc2, pc3, pc4 = st.columns(4, gap="small")
+        pc1.metric("Open Positions", portfolio_summary["open_position_count"])
+        pc2.metric("Total Cost", f"${portfolio_summary['total_cost']:.2f}")
+        pc3.metric("Unrealized P&L", f"${portfolio_summary['total_unrealized_pnl']:.2f}")
+        pc4.metric("Realized P&L", f"${portfolio_summary['total_realized_pnl']:.2f}")
+
+        positions_df = pd.DataFrame(store.list_positions(status="open"))
+        if positions_df.empty:
+            st.info("No open positions.")
+        else:
+            st.dataframe(positions_df, use_container_width=True, hide_index=True)
+
+        with st.expander("P&L History", expanded=False):
+            pnl_history = store.list_pnl_snapshots(limit=50)
+            if pnl_history:
+                pnl_df = pd.DataFrame(pnl_history)
+                st.dataframe(pnl_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No P&L snapshots yet.")
+
+    with copy_tab:
+        st.subheader("Copy Trading")
+
+        ct_left, ct_right = st.columns([1, 2], gap="large")
+        with ct_left:
+            st.markdown("#### Add Copy Target")
+            ct_address = st.text_input("Trader address", key="ct_address")
+            ct_name = st.text_input("Trader name", key="ct_name")
+            if st.button("Add Target", key="add_ct_btn"):
+                if ct_address:
+                    store.save_copy_target(ct_address, ct_name or ct_address[:10])
+                    st.success(f"Added {ct_name or ct_address[:10]}")
+
+            st.markdown("#### Active Targets")
+            targets = store.list_copy_targets(active_only=True)
+            if targets:
+                targets_df = pd.DataFrame(targets)
+                st.dataframe(targets_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No active copy targets.")
+
+        with ct_right:
+            st.markdown("#### Recent Signals")
+            signals = store.list_copy_signals(limit=50)
+            if signals:
+                signals_df = pd.DataFrame(signals)
+                st.dataframe(signals_df, use_container_width=True, hide_index=True)
+            else:
+                st.info("No copy trading signals yet.")
+
+            if st.button("Poll Targets Now", key="poll_ct_btn"):
+                result = service.run_copy_cycle()
+                st.success(f"Found {result['signals_found']} signals")
+                if result["signals"]:
+                    st.json(result["signals"])
 
     with ops_tab:
         st.subheader("Cycle Errors")
