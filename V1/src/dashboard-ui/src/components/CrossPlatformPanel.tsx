@@ -215,6 +215,7 @@ interface RuntimeControlResponse {
   tokenMasked: string | null;
   tokenExpiresAt: string | null;
   updatedAt: string;
+  verifiedOnly: boolean;
 }
 
 interface RiskStatusResponse {
@@ -521,6 +522,7 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
   const [typedConfirm, setTypedConfirm] = useState("");
   const [executing, setExecuting] = useState(false);
   const [executionResult, setExecutionResult] = useState<any>(null);
+  const [verifiedPairKeys, setVerifiedPairKeys] = useState<Set<string>>(new Set());
 
   const arbData = usePolling<ArbResponse>("/api/cross-platform/arbs", 30_000, paused);
   const diffData = usePolling<DiffResponse>("/api/cross-platform/diffs", 30_000, paused);
@@ -616,6 +618,46 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
     return () => clearInterval(t);
   }, []);
 
+  // Fetch verified pair keys on mount
+  useEffect(() => {
+    fetch("/api/cross-platform/verified-pairs")
+      .then((r) => r.json())
+      .then((data) => setVerifiedPairKeys(new Set(data.keys || [])))
+      .catch(() => {});
+  }, []);
+
+  const handleToggleVerifiedPair = async (kalshiTicker: string, polymarketSlug: string) => {
+    const pairKey = `${polymarketSlug}::${kalshiTicker}`;
+    const isCurrentlyVerified = verifiedPairKeys.has(pairKey);
+    try {
+      const resp = await fetch("/api/cross-platform/pairs/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          kalshiTicker,
+          polymarketSlug,
+          verified: !isCurrentlyVerified,
+        }),
+      });
+      const data = await resp.json();
+      if (data.keys) {
+        setVerifiedPairKeys(new Set(data.keys));
+      }
+    } catch (_) {}
+  };
+
+  const handleToggleVerifiedOnly = async () => {
+    const newVal = !(runtimeData.data?.verifiedOnly ?? false);
+    try {
+      await fetch("/api/execution/verified-only", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: newVal }),
+      });
+      runtimeData.refetch();
+    } catch (_) {}
+  };
+
   const handleTelegramTest = async () => {
     setTelegramTesting(true);
     try {
@@ -704,8 +746,16 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
     setExecutionResult(null);
     try {
       // Gather tradable arbs with depth-walking data as decisions
+      const isVerifiedOnly = runtimeData.data?.verifiedOnly ?? false;
       const tradableDecisions = (arbData.data?.arbs ?? [])
-        .filter((a) => a.contracts && a.contracts > 0 && a.edgeDollar && a.edgeDollar > 0)
+        .filter((a) => {
+          if (!(a.contracts && a.contracts > 0 && a.edgeDollar && a.edgeDollar > 0)) return false;
+          if (isVerifiedOnly) {
+            const pk = `${a.polymarketSlug}::${a.kalshiTicker}`;
+            return verifiedPairKeys.has(pk);
+          }
+          return true;
+        })
         .map((a) => ({
           pair_id: `${a.polymarketSlug}::${a.kalshiTicker}`,
           strategy: a.strategy ?? "BUY_KY_BUY_PN",
@@ -1003,6 +1053,9 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-white/[0.06]">
+                    <th className="px-2 py-3 text-center text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold w-10" title="Manually verify this pair for trading">
+                      <svg className="w-3.5 h-3.5 mx-auto text-zinc-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
+                    </th>
                     <th className="px-4 py-3 text-left text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">
                       Event
                     </th>
@@ -1033,11 +1086,32 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {arbs.map((arb, i) => (
+                  {arbs.map((arb, i) => {
+                    const pairKey = `${arb.polymarketSlug}::${arb.kalshiTicker}`;
+                    const isVerified = verifiedPairKeys.has(pairKey);
+                    return (
                       <tr
                         key={`${arb.polymarketSlug}-${arb.kalshiTicker}-${i}`}
-                        className="data-row border-b border-white/[0.03] last:border-0"
+                        className={`data-row border-b border-white/[0.03] last:border-0 ${isVerified ? "bg-emerald-500/[0.03]" : ""}`}
                       >
+                        {/* Verified Checkbox */}
+                        <td className="px-2 py-3 text-center">
+                          <button
+                            onClick={() => handleToggleVerifiedPair(arb.kalshiTicker, arb.polymarketSlug)}
+                            className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${
+                              isVerified
+                                ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-400"
+                                : "border-zinc-700 text-transparent hover:border-zinc-500"
+                            }`}
+                            title={isVerified ? "Verified — click to unverify" : "Click to manually verify this pair"}
+                          >
+                            {isVerified && (
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </button>
+                        </td>
                         {/* Event */}
                         <td className="px-4 py-3 max-w-xs">
                           <div className="text-[13px] text-zinc-200 font-medium leading-snug line-clamp-2">
@@ -1146,7 +1220,8 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
                           )}
                         </td>
                       </tr>
-                    ))}
+                    );
+                  })}
                 </tbody>
               </table>
               </div>
@@ -2067,6 +2142,60 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
                   )}
                 </div>
 
+                {/* Verified Only Toggle */}
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold w-16">Source</span>
+                  <div className="flex gap-1 bg-zinc-900 rounded-lg p-0.5">
+                    <button
+                      onClick={() => { if (runtimeData.data?.verifiedOnly) handleToggleVerifiedOnly(); }}
+                      className={`px-4 py-1.5 rounded-md text-[12px] font-semibold transition-all ${
+                        !runtimeData.data?.verifiedOnly
+                          ? "bg-violet-500/15 text-violet-400 shadow-inner"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      All Pairs
+                    </button>
+                    <button
+                      onClick={() => { if (!runtimeData.data?.verifiedOnly) handleToggleVerifiedOnly(); }}
+                      className={`px-4 py-1.5 rounded-md text-[12px] font-semibold transition-all ${
+                        runtimeData.data?.verifiedOnly
+                          ? "bg-emerald-500/15 text-emerald-400 shadow-inner"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      Verified Only
+                    </button>
+                  </div>
+                  {runtimeData.data?.verifiedOnly && (
+                    <span className="flex items-center gap-1.5 px-2 py-0.5 rounded text-[9px] font-bold tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                      </svg>
+                      MANUAL ONLY
+                    </span>
+                  )}
+                  {!runtimeData.data?.verifiedOnly && (
+                    <span className="text-[10px] text-zinc-600">
+                      Trading from all AI-matched pairs
+                    </span>
+                  )}
+                </div>
+
+                {/* Verified pair count */}
+                {runtimeData.data?.verifiedOnly && (
+                  <div className="flex items-center gap-2 pl-[calc(4rem+0.75rem)]">
+                    <span className="text-[11px] text-zinc-500">
+                      {verifiedPairKeys.size} pair{verifiedPairKeys.size !== 1 ? "s" : ""} manually verified
+                    </span>
+                    {verifiedPairKeys.size === 0 && (
+                      <span className="text-[10px] text-amber-400">
+                        — go to the Arb tab and check pairs to verify them
+                      </span>
+                    )}
+                  </div>
+                )}
+
                 {/* ARM LIVE Controls */}
                 {runtimeData.data?.mode === "live" && (
                   <div className="space-y-3 border-t border-white/[0.06] pt-4">
@@ -2156,12 +2285,21 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
 
                   {/* Tradable count */}
                   {(() => {
+                    const isVO = runtimeData.data?.verifiedOnly ?? false;
                     const tradable = (arbData.data?.arbs ?? []).filter(
-                      (a) => a.contracts && a.contracts > 0 && a.edgeDollar && a.edgeDollar > 0
+                      (a) => {
+                        if (!(a.contracts && a.contracts > 0 && a.edgeDollar && a.edgeDollar > 0)) return false;
+                        if (isVO) {
+                          const pk = `${a.polymarketSlug}::${a.kalshiTicker}`;
+                          return verifiedPairKeys.has(pk);
+                        }
+                        return true;
+                      }
                     );
                     return (
                       <span className="text-[11px] text-zinc-500">
                         {tradable.length} tradable arb{tradable.length !== 1 ? "s" : ""} queued
+                        {isVO && <span className="text-emerald-400/70 ml-1">(verified only)</span>}
                       </span>
                     );
                   })()}

@@ -491,6 +491,7 @@ export interface RuntimeControl {
   confirmToken: string | null;
   confirmExpiresAt: string | null;
   updatedAt: string;
+  verifiedOnly: boolean;
 }
 
 // ---- Position & Portfolio Types ----

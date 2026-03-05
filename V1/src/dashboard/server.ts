@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import os from "os";
+import axios from "axios";
 import { getRedactedSettings, getSettings, getSettingsWithMeta, validateSettingsForMode, saveSettings } from "../runtimeSettings";
 import { getTopTraders, getTraderProfile } from "../services/traderService";
 import { getTradeAlerts, getAlertHistory, getRecentLargeTrades, getAggregatedAlerts } from "../services/tradeAlertService";
@@ -713,6 +714,7 @@ app.get("/api/execution/runtime-control", (_req, res) => {
       tokenMasked: masked,
       tokenExpiresAt: ctrl.confirmExpiresAt,
       updatedAt: ctrl.updatedAt,
+      verifiedOnly: ctrl.verifiedOnly,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -775,6 +777,49 @@ app.post("/api/execution/execute", async (req, res) => {
   }
 });
 
+// ---- Verified Pairs & Verified-Only Toggle ----
+
+app.post("/api/execution/verified-only", (req, res) => {
+  try {
+    const { enabled } = req.body;
+    if (typeof enabled !== "boolean") {
+      return res.status(400).json({ error: "enabled (boolean) is required" });
+    }
+    stateStore.updateRuntimeControl({ verifiedOnly: enabled ? 1 : 0 });
+    res.json({ verifiedOnly: enabled });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/cross-platform/verified-pairs", (_req, res) => {
+  try {
+    const pairs = stateStore.listVerifiedPairs();
+    const keys = pairs.map((p) => p.pair_key);
+    res.json({ pairs, keys });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/cross-platform/pairs/verify", (req, res) => {
+  try {
+    const { kalshiTicker, polymarketSlug, verified, label } = req.body;
+    if (!kalshiTicker || !polymarketSlug) {
+      return res.status(400).json({ error: "kalshiTicker and polymarketSlug are required" });
+    }
+    if (verified === false) {
+      stateStore.removeVerifiedPair(kalshiTicker, polymarketSlug);
+    } else {
+      stateStore.addVerifiedPair(kalshiTicker, polymarketSlug, label || "");
+    }
+    const keys = Array.from(stateStore.getVerifiedPairKeys());
+    res.json({ success: true, verified: verified !== false, keys });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ---- Risk Status ----
 
 app.get("/api/risk/status", (_req, res) => {
@@ -831,6 +876,312 @@ app.get("/api/v2/alerts", (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+// ---- Arb Scanner Proxy Routes ----
+
+const KALSHI_BASE = "https://api.elections.kalshi.com/trade-api/v2";
+const GAMMA_BASE = "https://gamma-api.polymarket.com";
+const CLOB_BASE = "https://clob.polymarket.com";
+
+// Kalshi lookup — tries event_ticker first, then direct market ticker, then title search
+app.get("/api/arb-scanner/kalshi/lookup", async (req, res) => {
+  const ticker = (req.query.ticker as string)?.trim().toUpperCase();
+  if (!ticker) return res.status(400).json({ error: "ticker required" });
+
+  const formatMarket = (m: any) => ({
+    ticker: m.ticker, title: m.title, subtitle: m.subtitle,
+    yes_bid: m.yes_bid, no_bid: m.no_bid, last_price: m.last_price,
+    volume_24h: m.volume_24h, status: m.status,
+  });
+
+  // Strategy 1: Try as event_ticker via /markets?event_ticker=
+  try {
+    const eventResp = await axios.get(`${KALSHI_BASE}/markets`, {
+      params: { event_ticker: ticker, limit: 50 },
+    });
+    const markets = eventResp.data?.markets || [];
+    if (markets.length > 0) {
+      return res.json({
+        type: markets.length > 1 ? "event" : "market",
+        eventTicker: ticker,
+        markets: markets.map(formatMarket),
+      });
+    }
+  } catch (_) { /* fall through */ }
+
+  // Strategy 2: Direct market ticker via /markets/{ticker}
+  try {
+    const mktResp = await axios.get(`${KALSHI_BASE}/markets/${encodeURIComponent(ticker)}`);
+    const m = mktResp.data?.market || mktResp.data;
+    if (m && m.ticker) {
+      return res.json({ type: "market", markets: [formatMarket(m)] });
+    }
+  } catch (_) { /* fall through */ }
+
+  // Strategy 3: Direct event via /events/{ticker} with nested markets
+  try {
+    const evtResp = await axios.get(`${KALSHI_BASE}/events/${encodeURIComponent(ticker)}`, {
+      params: { with_nested_markets: true },
+    });
+    const evt = evtResp.data?.event || evtResp.data;
+    const markets = evt?.markets || [];
+    if (markets.length > 0) {
+      return res.json({
+        type: markets.length > 1 ? "event" : "market",
+        eventTicker: evt.event_ticker || ticker,
+        markets: markets.map(formatMarket),
+      });
+    }
+  } catch (_) { /* fall through */ }
+
+  // Strategy 4: Try as series_ticker via /events?series_ticker= (strips trailing -NN suffix)
+  const seriesTicker = ticker.replace(/-\d+$/, ""); // KXNEWPOPE-70 → KXNEWPOPE
+  try {
+    const seriesResp = await axios.get(`${KALSHI_BASE}/events`, {
+      params: { series_ticker: seriesTicker, with_nested_markets: true, limit: 10, status: "open" },
+    });
+    const events = seriesResp.data?.events || [];
+    if (events.length > 0) {
+      // Flatten all markets from all matching events
+      const allMarkets = events.flatMap((e: any) => (e.markets || []).map(formatMarket));
+      if (allMarkets.length > 0) {
+        return res.json({
+          type: allMarkets.length > 1 ? "event" : "market",
+          eventTicker: seriesTicker,
+          markets: allMarkets,
+        });
+      }
+    }
+  } catch (_) { /* fall through */ }
+
+  res.status(404).json({
+    error: `No Kalshi markets found for "${ticker}". Enter an event ticker (e.g. KXNEWPOPE-70) or market ticker (e.g. KXNEWPOPE-70-PPIZ).`,
+  });
+});
+
+// Kalshi orderbook — depth=50
+app.get("/api/arb-scanner/kalshi/orderbook", async (req, res) => {
+  const ticker = req.query.ticker as string;
+  if (!ticker) return res.status(400).json({ error: "ticker required" });
+  try {
+    const resp = await axios.get(`${KALSHI_BASE}/markets/${encodeURIComponent(ticker)}/orderbook`, {
+      params: { depth: 50 },
+    });
+    res.json(resp.data);
+  } catch (err: any) {
+    const status = err.response?.status || 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+// Kalshi search — uses /events endpoint with nested markets (the only reliable way)
+app.get("/api/arb-scanner/kalshi/search", async (req, res) => {
+  const q = (req.query.q as string || "").trim().toUpperCase();
+  const limit = parseInt(req.query.limit as string || "20", 10);
+  try {
+    // Fetch open events with nested markets, then filter client-side by title/ticker
+    const resp = await axios.get(`${KALSHI_BASE}/events`, {
+      params: { status: "open", with_nested_markets: true, limit: 200 },
+    });
+    const events = resp.data?.events || [];
+    const results: any[] = [];
+    for (const e of events) {
+      const title = (e.title || "").toUpperCase();
+      const eTicker = (e.event_ticker || "").toUpperCase();
+      const series = (e.series_ticker || "").toUpperCase();
+      if (!q || title.includes(q) || eTicker.includes(q) || series.includes(q)) {
+        for (const m of e.markets || []) {
+          results.push({
+            event_ticker: e.event_ticker,
+            series_ticker: e.series_ticker,
+            event_title: e.title,
+            ticker: m.ticker,
+            title: m.title,
+            subtitle: m.subtitle,
+            yes_bid: m.yes_bid,
+            no_bid: m.no_bid,
+            last_price: m.last_price,
+            volume_24h: m.volume_24h,
+            status: m.status,
+          });
+        }
+      }
+      if (results.length >= limit) break;
+    }
+    res.json({ markets: results.slice(0, limit) });
+  } catch (err: any) {
+    const status = err.response?.status || 500;
+    const msg = err.response?.data?.error || err.message;
+    res.status(status).json({ error: msg });
+  }
+});
+
+// Poly lookup — tries event slug, market slug, sub-slug
+app.get("/api/arb-scanner/poly/lookup", async (req, res) => {
+  let rawSlug = req.query.slug as string;
+  if (!rawSlug) return res.status(400).json({ error: "slug required" });
+
+  // Clean slug from full URL — handle multiple URL formats
+  let slug = rawSlug.trim();
+  let subSlug: string | null = null;
+
+  // https://polymarket.com/event/main-slug/sub-market-slug
+  const eventWithSub = slug.match(/polymarket\.com\/event\/([^/?#]+)\/([^/?#]+)/);
+  const eventOnly = slug.match(/polymarket\.com\/event\/([^/?#]+)/);
+  if (eventWithSub) {
+    slug = eventWithSub[1];
+    subSlug = eventWithSub[2];
+  } else if (eventOnly) {
+    slug = eventOnly[1];
+  } else {
+    // Raw input: strip protocol, path separators, query params
+    slug = slug.replace(/^https?:\/\//, "").replace(/^polymarket\.com\//, "");
+    slug = slug.split("?")[0].split("#")[0];
+    // If has path separator, treat last segment as potential sub-slug
+    if (slug.includes("/")) {
+      const parts = slug.split("/").filter(Boolean);
+      if (parts.length >= 2) {
+        slug = parts[0];
+        subSlug = parts[parts.length - 1];
+      } else {
+        slug = parts[0] || slug;
+      }
+    }
+  }
+
+  const formatResult = (title: string, markets: any[]) => ({
+    type: markets.length > 1 ? "event" : "market",
+    title,
+    markets: markets.map((m: any) => ({
+      question: m.question || m.groupItemTitle || "",
+      conditionId: m.conditionId || "",
+      slug: m.slug || "",
+      tokens: extractTokens(m),
+    })),
+  });
+
+  // Strategy 1: Try as event slug via /events?slug=
+  try {
+    const eventResp = await axios.get(`${GAMMA_BASE}/events`, { params: { slug } });
+    const events = Array.isArray(eventResp.data) ? eventResp.data : eventResp.data ? [eventResp.data] : [];
+    if (events.length > 0 && events[0]) {
+      const event = events[0];
+      const markets: any[] = event.markets || [];
+      if (markets.length > 0) {
+        // If sub-slug provided, try to auto-select that market
+        if (subSlug) {
+          const match = markets.find((m: any) => m.slug === subSlug);
+          if (match) {
+            return res.json(formatResult(event.title || slug, [match]));
+          }
+        }
+        return res.json(formatResult(event.title || slug, markets));
+      }
+    }
+  } catch (_) { /* fall through */ }
+
+  // Strategy 2: Try as market slug via /markets?slug=
+  try {
+    const mktResp = await axios.get(`${GAMMA_BASE}/markets`, { params: { slug } });
+    const mktData = mktResp.data;
+    const markets = Array.isArray(mktData) ? mktData : mktData ? [mktData] : [];
+    if (markets.length > 0 && markets[0] && markets[0].conditionId) {
+      return res.json(formatResult(markets[0].question || markets[0].title || slug, markets));
+    }
+  } catch (_) { /* fall through */ }
+
+  // Strategy 3: If sub-slug was provided, try it as the direct event slug
+  if (subSlug) {
+    try {
+      const subResp = await axios.get(`${GAMMA_BASE}/events`, { params: { slug: subSlug } });
+      const events = Array.isArray(subResp.data) ? subResp.data : subResp.data ? [subResp.data] : [];
+      if (events.length > 0 && events[0]) {
+        const event = events[0];
+        const markets: any[] = event.markets || [];
+        if (markets.length > 0) {
+          return res.json(formatResult(event.title || subSlug, markets));
+        }
+      }
+    } catch (_) { /* fall through */ }
+
+    // Also try sub-slug as market slug
+    try {
+      const mktResp = await axios.get(`${GAMMA_BASE}/markets`, { params: { slug: subSlug } });
+      const mktData = mktResp.data;
+      const markets = Array.isArray(mktData) ? mktData : mktData ? [mktData] : [];
+      if (markets.length > 0 && markets[0] && markets[0].conditionId) {
+        return res.json(formatResult(markets[0].question || markets[0].title || subSlug, markets));
+      }
+    } catch (_) { /* fall through */ }
+  }
+
+  res.status(404).json({
+    error: `No Polymarket markets found for "${slug}". Paste the full event URL (e.g. https://polymarket.com/event/fed-decision-in-march-885).`,
+  });
+});
+
+// Poly CLOB book
+app.get("/api/arb-scanner/poly/book", async (req, res) => {
+  const tokenId = req.query.token_id as string;
+  if (!tokenId) return res.status(400).json({ error: "token_id required" });
+  try {
+    const resp = await axios.get(`${CLOB_BASE}/book`, {
+      params: { token_id: tokenId },
+    });
+    res.json(resp.data);
+  } catch (err: any) {
+    const status = err.response?.status || 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+// Poly search — fetches events and filters client-side (Gamma API text search is unreliable)
+app.get("/api/arb-scanner/poly/search", async (req, res) => {
+  const q = (req.query.q as string || "").trim().toLowerCase();
+  const limit = parseInt(req.query.limit as string || "20", 10);
+  try {
+    // Fetch active events sorted by volume, then filter client-side
+    const resp = await axios.get(`${GAMMA_BASE}/events`, {
+      params: { active: true, closed: false, limit: 200, order: "volume", ascending: false },
+    });
+    const events = Array.isArray(resp.data) ? resp.data : [];
+    const results: any[] = [];
+    for (const e of events) {
+      const title = (e.title || "").toLowerCase();
+      const eSlug = (e.slug || "").toLowerCase();
+      if (!q || title.includes(q) || eSlug.includes(q)) {
+        results.push({
+          slug: e.slug,
+          title: e.title,
+          marketsCount: (e.markets || []).length,
+          active: e.active,
+        });
+      }
+      if (results.length >= limit) break;
+    }
+    res.json({ events: results });
+  } catch (err: any) {
+    const status = err.response?.status || 500;
+    const msg = err.response?.data?.error || err.message;
+    res.status(status).json({ error: msg });
+  }
+});
+
+/** Extract token IDs from a Gamma API market object */
+function extractTokens(market: any): { token_id: string; outcome: string }[] {
+  if (market.tokens && market.tokens.length > 0) return market.tokens;
+  if (!market.clobTokenIds) return [];
+  try {
+    const ids = JSON.parse(market.clobTokenIds);
+    const outcomes = JSON.parse(market.outcomes || "[]");
+    return ids.map((id: string, i: number) => ({
+      token_id: id,
+      outcome: outcomes[i] || (i === 0 ? "Yes" : "No"),
+    }));
+  } catch {
+    return [];
+  }
+}
 
 // ---- Static files (React SPA) ----
 const staticDir = path.join(__dirname, "../dashboard-ui/dist");

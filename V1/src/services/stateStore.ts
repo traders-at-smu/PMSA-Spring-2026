@@ -43,6 +43,14 @@ export interface PnlSnapshotRow {
   summary_json: string;
 }
 
+export interface VerifiedPairRow {
+  pair_key: string;
+  kalshi_ticker: string;
+  polymarket_slug: string;
+  verified_at: string;
+  label: string;
+}
+
 export interface CycleRow {
   cycle_id: string;
   created_at: string;
@@ -133,7 +141,22 @@ export class StateStore {
         total_realized_pnl REAL NOT NULL,
         summary_json TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS verified_pairs (
+        pair_key TEXT PRIMARY KEY,
+        kalshi_ticker TEXT NOT NULL,
+        polymarket_slug TEXT NOT NULL,
+        verified_at TEXT NOT NULL,
+        label TEXT NOT NULL DEFAULT ''
+      );
     `);
+
+    // Add verified_only column to runtime_control if it doesn't exist yet
+    try {
+      this.db.prepare("SELECT verified_only FROM runtime_control LIMIT 1").get();
+    } catch (_) {
+      this.db.prepare("ALTER TABLE runtime_control ADD COLUMN verified_only INTEGER NOT NULL DEFAULT 0").run();
+    }
 
     // Seed runtime_control singleton if empty
     const count = this.db.prepare("SELECT COUNT(*) AS c FROM runtime_control").get() as { c: number };
@@ -156,6 +179,7 @@ export class StateStore {
       confirmToken: (row.confirm_token as string) || null,
       confirmExpiresAt: (row.confirm_expires_at as string) || null,
       updatedAt: row.updated_at as string,
+      verifiedOnly: ((row.verified_only as number) ?? 0) === 1,
     };
   }
 
@@ -164,12 +188,14 @@ export class StateStore {
     armLive: number;
     confirmToken: string | null;
     confirmExpiresAt: string | null;
+    verifiedOnly: number;
   }>): void {
     const mapping: Record<string, string> = {
       mode: "mode",
       armLive: "arm_live",
       confirmToken: "confirm_token",
       confirmExpiresAt: "confirm_expires_at",
+      verifiedOnly: "verified_only",
     };
 
     const setClauses: string[] = [];
@@ -340,6 +366,36 @@ export class StateStore {
     return this.db.prepare(
       "SELECT * FROM pnl_snapshots ORDER BY snapshot_at DESC LIMIT ?"
     ).all(limit) as PnlSnapshotRow[];
+  }
+
+  // ---- Verified Pairs ----
+
+  addVerifiedPair(kalshiTicker: string, polymarketSlug: string, label = ""): void {
+    const pairKey = `${polymarketSlug}::${kalshiTicker}`;
+    this.db.prepare(`
+      INSERT OR REPLACE INTO verified_pairs (pair_key, kalshi_ticker, polymarket_slug, verified_at, label)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(pairKey, kalshiTicker, polymarketSlug, new Date().toISOString(), label);
+  }
+
+  removeVerifiedPair(kalshiTicker: string, polymarketSlug: string): void {
+    const pairKey = `${polymarketSlug}::${kalshiTicker}`;
+    this.db.prepare("DELETE FROM verified_pairs WHERE pair_key = ?").run(pairKey);
+  }
+
+  isVerifiedPair(kalshiTicker: string, polymarketSlug: string): boolean {
+    const pairKey = `${polymarketSlug}::${kalshiTicker}`;
+    const row = this.db.prepare("SELECT 1 FROM verified_pairs WHERE pair_key = ?").get(pairKey);
+    return !!row;
+  }
+
+  listVerifiedPairs(): VerifiedPairRow[] {
+    return this.db.prepare("SELECT * FROM verified_pairs ORDER BY verified_at DESC").all() as VerifiedPairRow[];
+  }
+
+  getVerifiedPairKeys(): Set<string> {
+    const rows = this.db.prepare("SELECT pair_key FROM verified_pairs").all() as { pair_key: string }[];
+    return new Set(rows.map((r) => r.pair_key));
   }
 
   // ---- Cleanup ----

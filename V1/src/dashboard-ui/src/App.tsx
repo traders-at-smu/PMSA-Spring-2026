@@ -5,6 +5,7 @@ import { CrossPlatformPanel } from "./components/CrossPlatformPanel";
 import { ExecutionPanel } from "./components/ExecutionPanel";
 import { AnalyticsPanel } from "./components/AnalyticsPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { ArbScannerPanel } from "./components/ArbScannerPanel";
 
 export default function App() {
   const [tab, setTab] = useState<Tab>("overview");
@@ -16,6 +17,7 @@ export default function App() {
       {tab === "scanner" && <CrossPlatformPanel paused={paused} />}
       {tab === "execution" && <ExecutionPanel paused={paused} />}
       {tab === "analytics" && <AnalyticsPanel paused={paused} />}
+      {tab === "arb-scanner" && <ArbScannerPanel />}
       {tab === "settings" && <SettingsPanel />}
     </Layout>
   );
