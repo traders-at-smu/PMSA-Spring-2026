@@ -1,2 +1,5 @@
 - [ ] Portfolio Balance
 - [ ] Minimum Annualized Return Lever
+- [ ] Current Holdings Tab
+- [ ] Switch of AI vs Manual Pairs
+- [ ] 
