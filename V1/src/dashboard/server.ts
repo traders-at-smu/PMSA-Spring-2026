@@ -15,6 +15,10 @@ import { getCopyTarget, setCopyTarget, clearCopyTarget } from "../services/copyT
 import { SignalTrackerService } from "../services/signalTrackerService";
 import { PaperAccountService } from "../services/paperAccountService";
 import { TelegramService } from "../services/telegramService";
+import { StateStore } from "../services/stateStore";
+import { PortfolioTracker } from "../services/portfolioTracker";
+import { RiskManager, DEFAULT_RISK_CONFIG } from "../services/riskManager";
+import { ExecutionEngine, DEFAULT_LIVE_SAFETY } from "../services/executionEngine";
 
 const app = express();
 const runtime = getSettings();
@@ -63,6 +67,19 @@ const telegramService = new TelegramService();
 const signalTracker = new SignalTrackerService(telegramService);
 const paperAccount = new PaperAccountService();
 executionService.setPaperAccount(paperAccount);
+
+// ---- V2 Feature Services (SQLite, Risk, Execution) ----
+const stateStore = new StateStore(path.resolve(process.cwd(), "data/state.db"));
+const portfolioTracker = new PortfolioTracker(stateStore);
+const riskManager = new RiskManager(DEFAULT_RISK_CONFIG, portfolioTracker);
+const executionEngineV2 = new ExecutionEngine(
+  stateStore,
+  riskManager,
+  portfolioTracker,
+  telegramService,
+  DEFAULT_LIVE_SAFETY
+);
+console.log("  V2 services: SQLite + Risk + Execution engine initialized");
 
 function getLocalIpv4Urls(port: number): string[] {
   const interfaces = os.networkInterfaces();
@@ -675,6 +692,141 @@ app.post("/api/settings", (req, res) => {
     const saved = saveSettings(updates);
     // Return redacted version so secrets aren't leaked
     res.json(getRedactedSettings());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- Execution Engine V2 Endpoints ----
+
+app.get("/api/execution/runtime-control", (_req, res) => {
+  try {
+    const ctrl = stateStore.getRuntimeControl();
+    // Mask token for security — only show last 4 chars
+    const masked = ctrl.confirmToken
+      ? `****${ctrl.confirmToken.slice(-4)}`
+      : null;
+    res.json({
+      mode: ctrl.mode,
+      armLive: ctrl.armLive === 1,
+      hasToken: !!ctrl.confirmToken,
+      tokenMasked: masked,
+      tokenExpiresAt: ctrl.confirmExpiresAt,
+      updatedAt: ctrl.updatedAt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/execution/mode", (req, res) => {
+  try {
+    const { mode } = req.body;
+    if (mode !== "paper" && mode !== "live") {
+      return res.status(400).json({ error: "mode must be 'paper' or 'live'" });
+    }
+    stateStore.updateRuntimeControl({ mode });
+    res.json({ mode });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/execution/arm-live", (_req, res) => {
+  try {
+    const token = executionEngineV2.armLive();
+    const ctrl = stateStore.getRuntimeControl();
+    res.json({
+      armed: true,
+      token,
+      expiresAt: ctrl.confirmExpiresAt,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/execution/disarm-live", (_req, res) => {
+  try {
+    executionEngineV2.disarmLive();
+    res.json({ armed: false });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/execution/execute", async (req, res) => {
+  try {
+    const { decisions, typedConfirm } = req.body;
+    const ctrl = stateStore.getRuntimeControl();
+    const mode = ctrl.mode as "paper" | "live";
+    const cycleId = new Date().toISOString().replace(/[:.]/g, "").slice(0, 18) + "Z";
+
+    const results = await executionEngineV2.execute(
+      cycleId,
+      decisions ?? [],
+      mode,
+      typedConfirm
+    );
+
+    res.json({ cycleId, mode, results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- Risk Status ----
+
+app.get("/api/risk/status", (_req, res) => {
+  try {
+    res.json(riskManager.getRiskStatus());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- Portfolio ----
+
+app.get("/api/portfolio/summary", (_req, res) => {
+  try {
+    res.json(portfolioTracker.getPortfolioSummary());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/portfolio/positions", (_req, res) => {
+  try {
+    res.json(portfolioTracker.getOpenPositions());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/portfolio/pnl-history", (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 30;
+    res.json(portfolioTracker.getPnlHistory(limit));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- Orders & Alerts ----
+
+app.get("/api/orders", (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 200;
+    res.json(stateStore.listOrders(limit));
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/v2/alerts", (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 100;
+    res.json(stateStore.listAlerts(limit));
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

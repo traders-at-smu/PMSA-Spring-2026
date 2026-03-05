@@ -375,3 +375,175 @@ export interface CrossPlatformResults {
   kalshiMarketsScanned: number;
   timestamp: string;
 }
+
+// ---- Depth-Walking Engine Types ----
+
+export interface DepthLevel {
+  price: number;  // 0.0–1.0
+  size: number;   // contract count at this level
+}
+
+export type StopReason =
+  | "no_positive_edge"
+  | "kp_max_hit"
+  | "annualized_edge_below_min"
+  | "kalshi_depth_exhausted"
+  | "polymarket_depth_exhausted"
+  | "depth_exhausted";
+
+export type ArbStrategy = "BUY_KY_BUY_PN" | "BUY_KN_BUY_PY";
+
+export interface DepthWalkResult {
+  contracts: number;
+  kalshiSpend: number;
+  polymarketSpend: number;
+  kalshiLimitPrice: number;
+  polymarketLimitPrice: number;
+  metrics: PositionMetrics;
+  stopReason: StopReason;
+  contractsAvailableKalshi: number;
+  contractsAvailablePoly: number;
+}
+
+export interface PositionMetrics {
+  kalshiFee: number;
+  polymarketFee: number;
+  kpCost: number;
+  edgeDollar: number;
+  edgePct: number;
+  annualizedEdge: number;
+  avgKalshiPrice: number;
+  avgPolymarketPrice: number;
+}
+
+export interface OpportunityDecision {
+  pairId: string;
+  strategy: ArbStrategy;
+  contracts: number;
+  kpTotalCost: number;
+  edgeDollar: number;
+  edgePct: number;
+  annualizedEdge: number;
+  kalshiSide: "yes" | "no";
+  polymarketSide: "yes" | "no";
+  kalshiPrice: number;
+  polymarketPrice: number;
+  trade: boolean;
+  reasons: string[];
+  metadata: Record<string, unknown>;
+}
+
+// ---- Fee Configuration ----
+
+export interface KalshiFeeConfig {
+  enabled: boolean;
+  rate: number;
+  roundMode: "ceil_cent" | "round_cent" | "none";
+}
+
+export interface PolymarketCategoryFee {
+  feeRate: number;
+  exponent: number;
+  makerRebate?: number;
+}
+
+export interface PolymarketFeeConfig {
+  enabled: boolean;
+  default: PolymarketCategoryFee;
+  categories: Record<string, PolymarketCategoryFee>;
+}
+
+export interface FeeConfig {
+  kalshi: KalshiFeeConfig;
+  polymarket: PolymarketFeeConfig;
+}
+
+export interface StrategyParams {
+  fixedContractSize: number;
+  kpMaxPerTrade: number;
+  annualizedEdgeMin: number;
+  fees: FeeConfig;
+}
+
+// ---- Risk Management Types ----
+
+export interface RiskConfig {
+  maxOpenPositionsPerPair: number;
+  maxNotionalPerPair: number;
+  maxTotalExposure: number;
+  maxDrawdownPct: number;
+  circuitBreakerCooldownMin: number;
+}
+
+export interface RiskCheckResult {
+  allowed: boolean;
+  reason: string;
+}
+
+// ---- Execution Engine Types ----
+
+export type ExecutionMode = "paper" | "live";
+
+export interface RuntimeControl {
+  id: number;
+  mode: ExecutionMode;
+  armLive: number;
+  confirmToken: string | null;
+  confirmExpiresAt: string | null;
+  updatedAt: string;
+}
+
+// ---- Position & Portfolio Types ----
+
+export interface Position {
+  id?: number;
+  pairId: string;
+  venue: "kalshi" | "polymarket";
+  side: "yes" | "no";
+  contracts: number;
+  avgEntryPrice: number;
+  currentPrice: number;
+  unrealizedPnl: number;
+  realizedPnl: number;
+  source: "arb" | "copy";
+  status: "open" | "closed" | "resolved";
+  openedAt: string;
+  closedAt: string | null;
+}
+
+export interface PortfolioSummary {
+  openPositionCount: number;
+  totalValue: number;
+  totalCost: number;
+  totalUnrealizedPnl: number;
+  totalRealizedPnl: number;
+  totalPnl: number;
+}
+
+// ---- Pair Snapshot (for depth-walking) ----
+
+export interface MarketQuote {
+  yesBid: number;
+  yesAsk: number;
+  noBid: number;
+  noAsk: number;
+}
+
+export interface PairDepth {
+  kalshi: { buyYes: DepthLevel[]; buyNo: DepthLevel[] };
+  polymarket: { yesAsks: DepthLevel[]; noAsks: DepthLevel[] };
+}
+
+export interface PairSnapshot {
+  pairId: string;
+  kalshiTicker: string;
+  polymarketSlug: string;
+  polyYesTokenId: string;
+  polyNoTokenId: string;
+  resolutionTimeUtc: string;
+  category: string;
+  kalshi: MarketQuote;
+  polymarket: MarketQuote;
+  daysToResolution: number;
+  depth: PairDepth;
+}

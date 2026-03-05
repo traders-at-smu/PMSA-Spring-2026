@@ -28,6 +28,14 @@ interface CrossPlatformArb {
   kalshiLiquidity: number;
   polymarketVolume24h: number;
   kalshiVolume24h: number;
+  contracts?: number;
+  kpTotalCost?: number;
+  edgeDollar?: number;
+  edgePct?: number;
+  annualizedEdge?: number;
+  strategy?: string;
+  stopReason?: string;
+  daysToResolution?: number;
 }
 
 interface PriceDiff {
@@ -198,6 +206,61 @@ interface PaperAccountResponse {
   resolvedTrades: ResolvedTrade[];
   equityCurve: EquitySnapshot[];
   startedAt: string;
+}
+
+interface RuntimeControlResponse {
+  mode: "paper" | "live";
+  armLive: boolean;
+  hasToken: boolean;
+  tokenMasked: string | null;
+  tokenExpiresAt: string | null;
+  updatedAt: string;
+}
+
+interface RiskStatusResponse {
+  circuitBreakerActive: boolean;
+  currentExposure: number;
+  maxTotalExposure: number;
+  currentDrawdownPct: number;
+  maxDrawdownPct: number;
+  openPositionCount: number;
+  maxPositionsPerPair: number;
+}
+
+interface V2PortfolioSummary {
+  openPositionCount: number;
+  totalValue: number;
+  totalCost: number;
+  totalUnrealizedPnl: number;
+  totalRealizedPnl: number;
+  totalPnl: number;
+}
+
+interface V2Position {
+  pairId: string;
+  venue: "kalshi" | "polymarket";
+  side: "yes" | "no";
+  contracts: number;
+  avgEntryPrice: number;
+  currentPrice: number;
+  unrealizedPnl: number;
+  realizedPnl: number;
+  source: string;
+  status: string;
+  openedAt: string;
+}
+
+interface V2Order {
+  id: number;
+  cycleId: string;
+  pairId: string;
+  venue: string;
+  side: string;
+  contracts: number;
+  price: number;
+  status: string;
+  idempotencyKey: string;
+  createdAt: string;
 }
 
 // ---- Helpers ----
@@ -443,7 +506,7 @@ const DEMO_ARBS: CrossPlatformArb[] = [
 // ---- Component ----
 
 export function CrossPlatformPanel({ paused }: { paused: boolean }) {
-  const [tab, setTab] = useState<"arb" | "diff" | "vol" | "pairs" | "signal" | "account">("arb");
+  const [tab, setTab] = useState<"arb" | "diff" | "vol" | "pairs" | "signal" | "account" | "exec">("arb");
   const [countdown, setCountdown] = useState(30);
   const [pairsFilter, setPairsFilter] = useState<"all" | "arb" | "no-arb">("all");
   const [now, setNow] = useState(Date.now());
@@ -454,11 +517,21 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
   const [telegramStatus, setTelegramStatus] = useState<{ configured: boolean; enabled: boolean; chatId: string } | null>(null);
   const [telegramTesting, setTelegramTesting] = useState(false);
 
+  const [armToken, setArmToken] = useState<string | null>(null);
+  const [typedConfirm, setTypedConfirm] = useState("");
+  const [executing, setExecuting] = useState(false);
+  const [executionResult, setExecutionResult] = useState<any>(null);
+
   const arbData = usePolling<ArbResponse>("/api/cross-platform/arbs", 30_000, paused);
   const diffData = usePolling<DiffResponse>("/api/cross-platform/diffs", 30_000, paused);
   const pairsData = usePolling<PairsResponse>(`/api/cross-platform/pairs?filter=${pairsFilter}`, 30_000, paused);
   const signalData = usePolling<SignalResponse>("/api/cross-platform/signals", 30_000, paused);
   const accountData = usePolling<PaperAccountResponse>("/api/paper-account/state", 30_000, paused);
+  const runtimeData = usePolling<RuntimeControlResponse>("/api/execution/runtime-control", 5_000, paused);
+  const riskData = usePolling<RiskStatusResponse>("/api/risk/status", 10_000, paused);
+  const v2Portfolio = usePolling<V2PortfolioSummary>("/api/portfolio/summary", 15_000, paused);
+  const v2Positions = usePolling<V2Position[]>("/api/portfolio/positions", 15_000, paused);
+  const v2Orders = usePolling<V2Order[]>("/api/orders?limit=50", 15_000, paused);
 
   const handleForceRefresh = async () => {
     setRefreshing(true);
@@ -596,6 +669,81 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
     setResetting(false);
   };
 
+  const handleModeSwitch = async (mode: "paper" | "live") => {
+    try {
+      await fetch("/api/execution/mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+      runtimeData.refetch();
+    } catch (_) {}
+  };
+
+  const handleArmLive = async () => {
+    try {
+      const resp = await fetch("/api/execution/arm-live", { method: "POST" });
+      const data = await resp.json();
+      setArmToken(data.token);
+      runtimeData.refetch();
+    } catch (_) {}
+  };
+
+  const handleDisarmLive = async () => {
+    try {
+      await fetch("/api/execution/disarm-live", { method: "POST" });
+      setArmToken(null);
+      setTypedConfirm("");
+      runtimeData.refetch();
+    } catch (_) {}
+  };
+
+  const handleExecute = async () => {
+    if (executing) return;
+    setExecuting(true);
+    setExecutionResult(null);
+    try {
+      // Gather tradable arbs with depth-walking data as decisions
+      const tradableDecisions = (arbData.data?.arbs ?? [])
+        .filter((a) => a.contracts && a.contracts > 0 && a.edgeDollar && a.edgeDollar > 0)
+        .map((a) => ({
+          pair_id: `${a.polymarketSlug}::${a.kalshiTicker}`,
+          strategy: a.strategy ?? "BUY_KY_BUY_PN",
+          contracts: a.contracts ?? 0,
+          kp_total_cost: a.kpTotalCost ?? 0,
+          edge_dollar: a.edgeDollar ?? 0,
+          edge_pct: a.edgePct ?? 0,
+          annualized_edge: a.annualizedEdge ?? 0,
+          kalshi_side: (a.strategy ?? "").includes("KY") ? "yes" : "no",
+          polymarket_side: (a.strategy ?? "").includes("PY") ? "yes" : "no",
+          kalshi_price: a.buyYesVenue === "KALSHI" ? a.buyYesPrice : a.buyNoPrice,
+          polymarket_price: a.buyYesVenue === "POLYMARKET" ? a.buyYesPrice : a.buyNoPrice,
+          trade: true,
+          reasons: [],
+          metadata: {},
+        }));
+
+      const resp = await fetch("/api/execution/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          decisions: tradableDecisions,
+          typedConfirm: typedConfirm || undefined,
+        }),
+      });
+      const data = await resp.json();
+      setExecutionResult(data);
+      // Refresh related data
+      v2Portfolio.refetch();
+      v2Positions.refetch();
+      v2Orders.refetch();
+      riskData.refetch();
+    } catch (err) {
+      setExecutionResult({ error: String(err) });
+    }
+    setExecuting(false);
+  };
+
   const liveArbs = arbData.data?.arbs ?? [];
   const showingDemo = liveArbs.length === 0 && arbData.data != null;
   const arbs = showingDemo ? DEMO_ARBS : liveArbs;
@@ -613,6 +761,7 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
     { id: "pairs", label: "Pairs", count: pairsData.data?.total ?? 0 },
     { id: "signal", label: "Signal", count: signalData.data?.stats.currentLive ?? 0 },
     { id: "account", label: "Account", count: accountData.data?.openPositionCount ?? 0 },
+    { id: "exec", label: "Execution", count: riskData.data?.openPositionCount ?? 0 },
   ];
 
   return (
@@ -796,6 +945,9 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
                   <th className="px-4 py-3 text-center text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Buy NO</th>
                   <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Net Profit</th>
                   <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">ROI</th>
+                  <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Contracts</th>
+                  <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Edge</th>
+                  <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Ann. Edge</th>
                 </tr>
               </thead>
               <tbody>
@@ -810,6 +962,15 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
                     </td>
                     <td className="px-4 py-4 text-center">
                       <div className="h-4 w-12 bg-zinc-800 rounded animate-pulse mx-auto" />
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <div className="h-4 w-10 bg-zinc-800 rounded animate-pulse ml-auto" />
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <div className="h-5 w-14 bg-zinc-800 rounded-md animate-pulse ml-auto" />
+                    </td>
+                    <td className="px-4 py-4 text-right">
+                      <div className="h-4 w-10 bg-zinc-800 rounded animate-pulse ml-auto" />
                     </td>
                     <td className="px-4 py-4 text-right">
                       <div className="h-4 w-10 bg-zinc-800 rounded animate-pulse ml-auto" />
@@ -859,6 +1020,15 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
                     </th>
                     <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">
                       ROI
+                    </th>
+                    <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">
+                      Contracts
+                    </th>
+                    <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">
+                      Edge
+                    </th>
+                    <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">
+                      Ann. Edge
                     </th>
                   </tr>
                 </thead>
@@ -937,6 +1107,43 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
                           >
                             {(arb.roi * 100).toFixed(1)}%
                           </span>
+                        </td>
+
+                        {/* Contracts */}
+                        <td className="px-4 py-3 text-right">
+                          <span className="font-mono tabular-nums text-[13px] text-zinc-300">
+                            {arb.contracts ?? "\u2014"}
+                          </span>
+                        </td>
+
+                        {/* Edge $ */}
+                        <td className="px-4 py-3 text-right">
+                          {arb.edgeDollar != null ? (
+                            <span className={`font-mono tabular-nums text-[13px] font-semibold ${
+                              arb.edgeDollar > 0 ? "text-emerald-400" : "text-zinc-500"
+                            }`}>
+                              {arb.edgeDollar > 0 ? "+" : ""}{arb.edgeDollar.toFixed(2)}
+                            </span>
+                          ) : (
+                            <span className="text-zinc-600">{"\u2014"}</span>
+                          )}
+                        </td>
+
+                        {/* Ann. Edge % */}
+                        <td className="px-4 py-3 text-right">
+                          {arb.annualizedEdge != null ? (
+                            <span className={`px-2 py-0.5 rounded-md text-[11px] font-bold tabular-nums ${
+                              arb.annualizedEdge > 0.5
+                                ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
+                                : arb.annualizedEdge > 0.1
+                                ? "bg-amber-500/15 text-amber-400 border border-amber-500/20"
+                                : "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                            }`}>
+                              {(arb.annualizedEdge * 100).toFixed(0)}%
+                            </span>
+                          ) : (
+                            <span className="text-zinc-600">{"\u2014"}</span>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1810,6 +2017,481 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
                   </table>
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* ──── EXECUTION TAB ──── */}
+          {tab === "exec" && (
+            <div className="space-y-5">
+
+              {/* ── A. Execution Controls ── */}
+              <div className="glass-card rounded-xl p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-zinc-300">Execution Controls</h3>
+                  {runtimeData.data && (
+                    <span className="text-[10px] text-zinc-600 font-mono">
+                      Updated {new Date(runtimeData.data.updatedAt).toLocaleTimeString()}
+                    </span>
+                  )}
+                </div>
+
+                {/* Mode Toggle */}
+                <div className="flex items-center gap-3">
+                  <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold w-16">Mode</span>
+                  <div className="flex gap-1 bg-zinc-900 rounded-lg p-0.5">
+                    <button
+                      onClick={() => handleModeSwitch("paper")}
+                      className={`px-4 py-1.5 rounded-md text-[12px] font-semibold transition-all ${
+                        runtimeData.data?.mode === "paper"
+                          ? "bg-amber-500/15 text-amber-400 shadow-inner"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      Paper
+                    </button>
+                    <button
+                      onClick={() => handleModeSwitch("live")}
+                      className={`px-4 py-1.5 rounded-md text-[12px] font-semibold transition-all ${
+                        runtimeData.data?.mode === "live"
+                          ? "bg-[#CC0035]/15 text-[#ff3d6a] shadow-inner"
+                          : "text-zinc-500 hover:text-zinc-300"
+                      }`}
+                    >
+                      Live
+                    </button>
+                  </div>
+                  {runtimeData.data?.mode === "live" && (
+                    <span className="px-2 py-0.5 rounded text-[9px] font-bold tracking-wider bg-[#CC0035]/15 text-[#CC0035] border border-[#CC0035]/25 animate-pulse">
+                      LIVE MODE
+                    </span>
+                  )}
+                </div>
+
+                {/* ARM LIVE Controls */}
+                {runtimeData.data?.mode === "live" && (
+                  <div className="space-y-3 border-t border-white/[0.06] pt-4">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[11px] text-zinc-500 uppercase tracking-wider font-semibold w-16">Arm</span>
+                      {!runtimeData.data?.armLive ? (
+                        <button
+                          onClick={handleArmLive}
+                          className="px-4 py-1.5 rounded-lg text-[12px] font-bold bg-[#CC0035]/10 text-[#CC0035] border border-[#CC0035]/25 hover:bg-[#CC0035]/20 transition-all"
+                        >
+                          ARM LIVE
+                        </button>
+                      ) : (
+                        <div className="flex items-center gap-3">
+                          <span className="flex items-center gap-2">
+                            <span className="relative flex h-3 w-3">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+                            </span>
+                            <span className="text-[12px] font-bold text-red-400">ARMED</span>
+                          </span>
+                          <button
+                            onClick={handleDisarmLive}
+                            className="px-3 py-1 rounded-lg text-[11px] font-semibold bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-zinc-200 transition-all"
+                          >
+                            Disarm
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Token display when armed */}
+                    {runtimeData.data?.armLive && armToken && (
+                      <div className="bg-zinc-900/50 rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Confirmation Token</span>
+                          {runtimeData.data.tokenExpiresAt && (
+                            <span className="text-[10px] text-red-400 font-mono">
+                              Expires {new Date(runtimeData.data.tokenExpiresAt).toLocaleTimeString()}
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-mono text-[13px] text-amber-400 bg-zinc-950 rounded px-3 py-2 select-all break-all">
+                          {armToken}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            placeholder="Type token to confirm..."
+                            value={typedConfirm}
+                            onChange={(e) => setTypedConfirm(e.target.value)}
+                            className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-950 border border-zinc-700 text-[12px] text-zinc-200 font-mono placeholder:text-zinc-600 focus:outline-none focus:border-[#CC0035]/50"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Execute Button */}
+                <div className="border-t border-white/[0.06] pt-4 flex items-center gap-4">
+                  <button
+                    onClick={handleExecute}
+                    disabled={
+                      executing ||
+                      (runtimeData.data?.mode === "live" && (!runtimeData.data?.armLive || !typedConfirm))
+                    }
+                    className={`px-6 py-2 rounded-lg text-[13px] font-bold transition-all ${
+                      executing
+                        ? "bg-zinc-800 text-zinc-500 cursor-wait"
+                        : runtimeData.data?.mode === "live"
+                        ? "bg-[#CC0035] text-white hover:bg-[#CC0035]/90 disabled:bg-zinc-800 disabled:text-zinc-600 disabled:cursor-not-allowed"
+                        : "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/25 disabled:opacity-40"
+                    }`}
+                  >
+                    {executing ? (
+                      <span className="flex items-center gap-2">
+                        <span className="w-4 h-4 border-2 border-zinc-600 border-t-zinc-300 rounded-full animate-spin" />
+                        Executing...
+                      </span>
+                    ) : runtimeData.data?.mode === "live" ? (
+                      "Execute LIVE"
+                    ) : (
+                      "Execute Paper"
+                    )}
+                  </button>
+
+                  {/* Tradable count */}
+                  {(() => {
+                    const tradable = (arbData.data?.arbs ?? []).filter(
+                      (a) => a.contracts && a.contracts > 0 && a.edgeDollar && a.edgeDollar > 0
+                    );
+                    return (
+                      <span className="text-[11px] text-zinc-500">
+                        {tradable.length} tradable arb{tradable.length !== 1 ? "s" : ""} queued
+                      </span>
+                    );
+                  })()}
+                </div>
+
+                {/* Execution Result */}
+                {executionResult && (
+                  <div className={`rounded-lg p-3 text-[12px] font-mono ${
+                    executionResult.error
+                      ? "bg-red-500/10 border border-red-500/20 text-red-400"
+                      : "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400"
+                  }`}>
+                    {executionResult.error ? (
+                      <span>Error: {executionResult.error}</span>
+                    ) : (
+                      <div className="space-y-1">
+                        <div>Cycle: <span className="text-zinc-300">{executionResult.cycleId}</span></div>
+                        <div>Mode: <span className="text-zinc-300">{executionResult.mode}</span></div>
+                        {executionResult.results && (
+                          <div>Results: <span className="text-zinc-300">{executionResult.results.length} order(s)</span></div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* ── B. Risk Status Card ── */}
+              <div className="glass-card rounded-xl p-5 space-y-4">
+                <h3 className="text-sm font-semibold text-zinc-300">Risk Status</h3>
+                <div className="grid grid-cols-4 gap-4">
+                  {/* Circuit Breaker */}
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Circuit Breaker</span>
+                    <div className="flex items-center gap-2">
+                      <span className={`w-3 h-3 rounded-full ${
+                        riskData.data?.circuitBreakerActive ? "bg-red-500 animate-pulse" : "bg-emerald-500"
+                      }`} />
+                      <span className={`text-sm font-bold ${
+                        riskData.data?.circuitBreakerActive ? "text-red-400" : "text-emerald-400"
+                      }`}>
+                        {riskData.data?.circuitBreakerActive ? "TRIPPED" : "OK"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Exposure */}
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold text-center">Exposure</span>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] font-mono">
+                        <span className="text-zinc-400">${(riskData.data?.currentExposure ?? 0).toFixed(0)}</span>
+                        <span className="text-zinc-600">${(riskData.data?.maxTotalExposure ?? 0).toFixed(0)}</span>
+                      </div>
+                      <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            (riskData.data?.currentExposure ?? 0) / (riskData.data?.maxTotalExposure || 1) > 0.8
+                              ? "bg-red-500" : "bg-emerald-500"
+                          }`}
+                          style={{ width: `${Math.min(100, ((riskData.data?.currentExposure ?? 0) / (riskData.data?.maxTotalExposure || 1)) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Drawdown */}
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold text-center">Drawdown</span>
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] font-mono">
+                        <span className="text-zinc-400">{((riskData.data?.currentDrawdownPct ?? 0) * 100).toFixed(1)}%</span>
+                        <span className="text-zinc-600">{((riskData.data?.maxDrawdownPct ?? 0) * 100).toFixed(1)}%</span>
+                      </div>
+                      <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            (riskData.data?.currentDrawdownPct ?? 0) / (riskData.data?.maxDrawdownPct || 1) > 0.8
+                              ? "bg-red-500" : "bg-amber-500"
+                          }`}
+                          style={{ width: `${Math.min(100, ((riskData.data?.currentDrawdownPct ?? 0) / (riskData.data?.maxDrawdownPct || 1)) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Position Count */}
+                  <div className="flex flex-col items-center gap-2">
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Positions</span>
+                    <span className="text-xl font-bold font-mono tabular-nums text-zinc-200">
+                      {riskData.data?.openPositionCount ?? 0}
+                    </span>
+                    <span className="text-[10px] text-zinc-600 font-mono">
+                      max {riskData.data?.maxPositionsPerPair ?? 0}/pair
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── C. V2 Portfolio Summary ── */}
+              <div className="grid grid-cols-5 gap-3">
+                {[
+                  {
+                    label: "Total Value",
+                    value: `$${(v2Portfolio.data?.totalValue ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                    accent: "text-zinc-200",
+                  },
+                  {
+                    label: "Total Cost",
+                    value: `$${(v2Portfolio.data?.totalCost ?? 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+                    accent: "text-zinc-400",
+                  },
+                  {
+                    label: "Unrealized P&L",
+                    value: `${(v2Portfolio.data?.totalUnrealizedPnl ?? 0) >= 0 ? "+" : ""}$${(v2Portfolio.data?.totalUnrealizedPnl ?? 0).toFixed(2)}`,
+                    accent: (v2Portfolio.data?.totalUnrealizedPnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400",
+                  },
+                  {
+                    label: "Realized P&L",
+                    value: `${(v2Portfolio.data?.totalRealizedPnl ?? 0) >= 0 ? "+" : ""}$${(v2Portfolio.data?.totalRealizedPnl ?? 0).toFixed(2)}`,
+                    accent: (v2Portfolio.data?.totalRealizedPnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400",
+                  },
+                  {
+                    label: "Total P&L",
+                    value: `${(v2Portfolio.data?.totalPnl ?? 0) >= 0 ? "+" : ""}$${(v2Portfolio.data?.totalPnl ?? 0).toFixed(2)}`,
+                    accent: (v2Portfolio.data?.totalPnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400",
+                  },
+                ].map((stat) => (
+                  <div
+                    key={stat.label}
+                    className="glass-card rounded-xl p-4 flex flex-col items-center gap-1"
+                  >
+                    <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">
+                      {stat.label}
+                    </span>
+                    <span className={`text-lg font-bold font-mono tabular-nums ${stat.accent}`}>
+                      {stat.value}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* ── D. V2 Positions Table ── */}
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-300 mb-2">
+                  Open Positions (V2)
+                  <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    {v2Positions.data?.length ?? 0}
+                  </span>
+                </h3>
+                <div className="glass-card rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/[0.06]">
+                        <th className="px-4 py-3 text-left text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Pair</th>
+                        <th className="px-4 py-3 text-center text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Venue</th>
+                        <th className="px-4 py-3 text-center text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Side</th>
+                        <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Contracts</th>
+                        <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Entry</th>
+                        <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Current</th>
+                        <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Unreal. P&L</th>
+                        <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Opened</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(v2Positions.data ?? []).length === 0 ? (
+                        <tr>
+                          <td colSpan={8} className="px-4 py-10 text-center text-zinc-500 text-sm">
+                            No open V2 positions
+                          </td>
+                        </tr>
+                      ) : (
+                        (v2Positions.data ?? []).map((pos, i) => (
+                          <tr key={`${pos.pairId}-${pos.venue}-${i}`} className="data-row border-b border-white/[0.03] last:border-0">
+                            <td className="px-4 py-3 max-w-[200px]">
+                              <div className="text-[13px] text-zinc-200 font-medium leading-snug line-clamp-1 font-mono">
+                                {pos.pairId}
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider ${
+                                  pos.status === "open"
+                                    ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25"
+                                    : "bg-zinc-700/30 text-zinc-500 border border-zinc-600/30"
+                                }`}>{pos.status.toUpperCase()}</span>
+                                <span className="text-[9px] text-zinc-600">{pos.source}</span>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider ${
+                                pos.venue === "kalshi"
+                                  ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/25"
+                                  : "bg-violet-500/15 text-violet-400 border border-violet-500/25"
+                              }`}>
+                                {pos.venue === "kalshi" ? "Kalshi" : "Poly"}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`text-[12px] font-semibold ${
+                                pos.side === "yes" ? "text-emerald-400" : "text-red-400"
+                              }`}>
+                                {pos.side.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className="font-mono tabular-nums text-[13px] text-zinc-300">{pos.contracts}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className="font-mono tabular-nums text-[13px] text-zinc-400">
+                                {(pos.avgEntryPrice * 100).toFixed(1)}&cent;
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className="font-mono tabular-nums text-[13px] text-zinc-300">
+                                {(pos.currentPrice * 100).toFixed(1)}&cent;
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className={`font-mono tabular-nums text-[13px] font-semibold ${
+                                pos.unrealizedPnl >= 0 ? "text-emerald-400" : "text-red-400"
+                              }`}>
+                                {pos.unrealizedPnl >= 0 ? "+" : ""}${pos.unrealizedPnl.toFixed(2)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className="text-[12px] text-zinc-500 font-mono">
+                                {new Date(pos.openedAt).toLocaleDateString()}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* ── E. Recent Orders Table ── */}
+              <div>
+                <h3 className="text-sm font-semibold text-zinc-300 mb-2">
+                  Recent Orders
+                  <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded-md bg-zinc-800 text-zinc-500">
+                    {v2Orders.data?.length ?? 0}
+                  </span>
+                </h3>
+                <div className="glass-card rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-white/[0.06]">
+                        <th className="px-4 py-3 text-left text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">ID</th>
+                        <th className="px-4 py-3 text-left text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Cycle</th>
+                        <th className="px-4 py-3 text-left text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Pair</th>
+                        <th className="px-4 py-3 text-center text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Venue</th>
+                        <th className="px-4 py-3 text-center text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Side</th>
+                        <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Contracts</th>
+                        <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Price</th>
+                        <th className="px-4 py-3 text-center text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Status</th>
+                        <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Created</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(v2Orders.data ?? []).length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="px-4 py-10 text-center text-zinc-500 text-sm">
+                            No orders yet
+                          </td>
+                        </tr>
+                      ) : (
+                        (v2Orders.data ?? []).map((order) => (
+                          <tr key={order.id} className="data-row border-b border-white/[0.03] last:border-0">
+                            <td className="px-4 py-3">
+                              <span className="font-mono text-[12px] text-zinc-500">{order.id}</span>
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="font-mono text-[11px] text-zinc-500 truncate max-w-[80px] block">
+                                {order.cycleId.slice(0, 8)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 max-w-[160px]">
+                              <span className="text-[12px] text-zinc-300 font-mono line-clamp-1">{order.pairId}</span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider ${
+                                order.venue.toLowerCase() === "kalshi"
+                                  ? "bg-cyan-500/15 text-cyan-400 border border-cyan-500/25"
+                                  : "bg-violet-500/15 text-violet-400 border border-violet-500/25"
+                              }`}>
+                                {order.venue}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`text-[12px] font-semibold ${
+                                order.side.toLowerCase() === "yes" ? "text-emerald-400" : "text-red-400"
+                              }`}>
+                                {order.side.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className="font-mono tabular-nums text-[13px] text-zinc-300">{order.contracts}</span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className="font-mono tabular-nums text-[13px] text-zinc-400">
+                                {(order.price * 100).toFixed(1)}&cent;
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider ${
+                                order.status === "filled"
+                                  ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/25"
+                                  : order.status === "pending"
+                                  ? "bg-amber-500/15 text-amber-400 border border-amber-500/25"
+                                  : order.status === "rejected" || order.status === "failed"
+                                  ? "bg-red-500/15 text-red-400 border border-red-500/25"
+                                  : "bg-zinc-700/30 text-zinc-500 border border-zinc-600/30"
+                              }`}>
+                                {order.status.toUpperCase()}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <span className="text-[12px] text-zinc-500 font-mono">
+                                {new Date(order.createdAt).toLocaleString()}
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
             </div>
           )}
         </>

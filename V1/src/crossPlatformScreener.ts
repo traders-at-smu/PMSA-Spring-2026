@@ -2,6 +2,13 @@ import { ArbitrageScreener } from "./screener";
 import { KalshiScreener } from "./kalshiScreener";
 import { KalshiMarket } from "./types";
 import { EmbeddingService } from "./services/embeddingService";
+import {
+  computeKalshiFee,
+  computePolymarketFee,
+  evaluatePairSnapshot,
+  DEFAULT_STRATEGY_PARAMS,
+} from "./services/depthWalkingEngine";
+import type { PairSnapshot, StrategyParams, DepthLevel } from "./types";
 
 // ---- Types ----
 
@@ -38,6 +45,19 @@ export interface CrossPlatformArb {
   polyYesTokenId: string;
   polyNoTokenId: string;
   polyNegRisk: boolean;
+  // Depth-walking results (populated when depth data available)
+  contracts?: number;
+  kpTotalCost?: number;
+  edgeDollar?: number;
+  edgePct?: number;
+  annualizedEdge?: number;
+  kalshiLimitPrice?: number;
+  polymarketLimitPrice?: number;
+  kalshiFee?: number;
+  polymarketFee?: number;
+  daysToResolution?: number;
+  strategy?: "BUY_KY_BUY_PN" | "BUY_KN_BUY_PY";
+  stopReason?: string;
 }
 
 export interface PriceDiff {
@@ -601,17 +621,14 @@ function categoryTag(title: string): string {
   return "other";
 }
 
-// ---- Fee calculations ----
+// ---- Fee calculations (using depth-walking engine) ----
 
 function calcKalshiFee(price: number): number {
-  // Per-contract taker fee: ceil(0.07 * 1 * price * (1 - price))
-  // Rounded to cents
-  return Math.ceil(0.07 * price * (1 - price) * 100) / 100;
+  return computeKalshiFee(1, price, 0.07, "ceil_cent");
 }
 
 function calcPolymarketFee(price: number): number {
-  // Polymarket US taker fee: 0.10%
-  return price * 0.001;
+  return computePolymarketFee(1, price, 0.0175, 1, 0);
 }
 
 /** Build a working Kalshi web URL from available ticker data.
@@ -730,20 +747,23 @@ export class CrossPlatformScreener {
     const volumes = this.buildVolumePairs(pairs);
 
     // Build serializable matched pair info for UI verification
+    // Filter out pairs where Kalshi has no order book (0¢ prices = no liquidity)
     const arbSlugs = new Set(arbs.map(a => `${a.polymarketSlug}|${a.kalshiTicker}`));
-    const pairInfos: MatchedPairInfo[] = pairs.map(p => ({
-      polymarketTitle: p.polymarket.title,
-      kalshiTitle: p.kalshi.title,
-      polymarketUrl: p.polymarket.url,
-      kalshiUrl: p.kalshi.url,
-      similarityScore: p.similarityScore,
-      category: p.polymarket.category || p.kalshi.category || "other",
-      polyYesBid: p.polymarket.yesBid,
-      polyYesAsk: p.polymarket.yesAsk,
-      kalshiYesBid: p.kalshi.yesBid,
-      kalshiYesAsk: p.kalshi.yesAsk,
-      hasArb: arbSlugs.has(`${p.polymarket.slug}|${p.kalshi.id}`),
-    }));
+    const pairInfos: MatchedPairInfo[] = pairs
+      .filter(p => p.kalshi.yesBid > 0 || p.kalshi.yesAsk > 0)
+      .map(p => ({
+        polymarketTitle: p.polymarket.title,
+        kalshiTitle: p.kalshi.title,
+        polymarketUrl: p.polymarket.url,
+        kalshiUrl: p.kalshi.url,
+        similarityScore: p.similarityScore,
+        category: p.polymarket.category || p.kalshi.category || "other",
+        polyYesBid: p.polymarket.yesBid,
+        polyYesAsk: p.polymarket.yesAsk,
+        kalshiYesBid: p.kalshi.yesBid,
+        kalshiYesAsk: p.kalshi.yesAsk,
+        hasArb: arbSlugs.has(`${p.polymarket.slug}|${p.kalshi.id}`),
+      }));
 
     const results: CrossPlatformResults = {
       arbs: arbs.sort((a, b) => b.roi - a.roi),
@@ -816,8 +836,9 @@ export class CrossPlatformScreener {
       const title = m.title || m.subtitle || m.ticker;
       const yesBid = (m.yes_bid_dollars || 0) / 100;
       const yesAsk = (m.yes_ask_dollars || 0) / 100;
-      const noBid = (m.no_bid_dollars || 0) / 100;
-      const noAsk = (m.no_ask_dollars || 0) / 100;
+      // Kalshi API sometimes omits NO prices — derive from YES (YES + NO = $1)
+      const noBid = m.no_bid_dollars ? m.no_bid_dollars / 100 : (yesAsk > 0 ? 1 - yesAsk : 0);
+      const noAsk = m.no_ask_dollars ? m.no_ask_dollars / 100 : (yesBid > 0 ? 1 - yesBid : 0);
       const { unigrams, bigrams } = extractTokens(title);
 
       // Extract ticker suffix as pseudo-entity for matching
@@ -1107,6 +1128,38 @@ export class CrossPlatformScreener {
       for (const strat of strategies) {
         if (strat.netProfit <= 0) continue;
 
+        // Compute days to resolution for depth-walking
+        const endDateStr = km.endDate || pm.endDate || "";
+        const daysToRes = endDateStr
+          ? Math.max((Date.parse(endDateStr) - Date.now()) / 86400000, 0.001)
+          : 30; // fallback 30 days
+
+        // Build a lightweight PairSnapshot for depth-walking evaluation
+        // (depth data is empty — uses fallback single-level pricing)
+        const snapshot: PairSnapshot = {
+          pairId: `${pm.slug}|${km.slug}`,
+          kalshiTicker: km.slug,
+          polymarketSlug: pm.slug,
+          polyYesTokenId: pm.clobTokenIds?.[0] || "",
+          polyNoTokenId: pm.clobTokenIds?.[1] || "",
+          resolutionTimeUtc: endDateStr,
+          category: pm.category,
+          kalshi: { yesBid: km.yesBid, yesAsk: km.yesAsk, noBid: km.noBid, noAsk: km.noAsk },
+          polymarket: { yesBid: pm.yesBid, yesAsk: pm.yesAsk, noBid: pm.noBid, noAsk: pm.noAsk },
+          daysToResolution: daysToRes,
+          depth: {
+            kalshi: { buyYes: [], buyNo: [] },
+            polymarket: { yesAsks: [], noAsks: [] },
+          },
+        };
+
+        // Run depth-walking evaluation (falls back to single-level at ask prices)
+        const dwDecisions = evaluatePairSnapshot(snapshot, DEFAULT_STRATEGY_PARAMS);
+        // Find the matching strategy decision
+        const matchStrategy: "BUY_KY_BUY_PN" | "BUY_KN_BUY_PY" =
+          strat.buyYesVenue === "KALSHI" ? "BUY_KY_BUY_PN" : "BUY_KN_BUY_PY";
+        const dwMatch = dwDecisions.find((d) => d.strategy === matchStrategy);
+
         arbs.push({
           event: pm.title,
           outcome: "YES",
@@ -1132,11 +1185,24 @@ export class CrossPlatformScreener {
           kalshiLiquidity: km.liquidity,
           polymarketVolume24h: pm.volume24h,
           kalshiVolume24h: km.volume24h,
-          endDate: km.endDate || pm.endDate || "",
+          endDate: endDateStr,
           polyConditionId: pm.conditionId || "",
           polyYesTokenId: pm.clobTokenIds?.[0] || "",
           polyNoTokenId: pm.clobTokenIds?.[1] || "",
           polyNegRisk: pm.negRisk || false,
+          // Depth-walking results
+          contracts: dwMatch?.contracts,
+          kpTotalCost: dwMatch?.kpTotalCost,
+          edgeDollar: dwMatch?.edgeDollar,
+          edgePct: dwMatch?.edgePct,
+          annualizedEdge: dwMatch?.annualizedEdge,
+          kalshiLimitPrice: dwMatch?.kalshiPrice,
+          polymarketLimitPrice: dwMatch?.polymarketPrice,
+          kalshiFee: dwMatch?.metadata?.kalshiFee as number | undefined,
+          polymarketFee: dwMatch?.metadata?.polymarketFee as number | undefined,
+          daysToResolution: daysToRes,
+          strategy: matchStrategy,
+          stopReason: dwMatch?.metadata?.arbStopReason as string | undefined,
         });
       }
     }
