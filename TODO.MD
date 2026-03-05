@@ -1,3 +1,2 @@
 - [ ] Portfolio Balance
 - [ ] Minimum Annualized Return Lever
-- 
