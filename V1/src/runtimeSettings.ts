@@ -14,7 +14,9 @@ export interface ExecutionSettingsFile {
   mode: ExecutionMode;
   autoExecute: boolean;
   bankrollUsd: number;
+  maxTradeUsd: number;
   minNetEdge: number;
+  minAnnualizedReturn: number;
   defaultLegTickSize: string;
   kalshiUseMakerFees: boolean;
 }
@@ -70,7 +72,9 @@ const defaults: RuntimeSettings = {
     mode: "PAPER",
     autoExecute: false,
     bankrollUsd: 10000,
+    maxTradeUsd: 100,
     minNetEdge: 0.005,
+    minAnnualizedReturn: 0,
     defaultLegTickSize: "0.01",
     kalshiUseMakerFees: false,
   },

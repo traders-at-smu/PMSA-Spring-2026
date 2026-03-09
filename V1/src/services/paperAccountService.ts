@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { CrossPlatformArb } from "../crossPlatformScreener";
+import { getSettings } from "../runtimeSettings";
 
 // ---- Types ----
 
@@ -79,7 +80,6 @@ export interface PaperAccountState {
 // ---- Constants ----
 
 const STARTING_BALANCE = 100_000;
-const MAX_TRADE_USD = 100;
 const MAX_RESOLVED_IN_MEMORY = 100;
 const MAX_EQUITY_POINTS = 500;
 
@@ -185,7 +185,8 @@ export class PaperAccountService {
     const costPerContract = arb.buyYesPrice + arb.buyNoPrice;
     if (costPerContract >= 1) return null;
 
-    const maxNotional = Math.min(MAX_TRADE_USD, this.availableBalance);
+    const maxTradeUsd = getSettings().execution.maxTradeUsd;
+    const maxNotional = Math.min(maxTradeUsd, this.availableBalance);
     const contracts = Math.floor(maxNotional / costPerContract);
     if (contracts < 1) return null;
 
@@ -249,21 +250,33 @@ export class PaperAccountService {
     const resolvedCount = this.resolvedTrades.length;
     const totalTrades = this.openPositions.length + resolvedCount;
 
-    // Weighted annualized ROI across resolved trades
+    // Weighted annualized ROI across resolved trades + open positions (using expiry as hold period)
     let annualizedRoi = 0;
-    if (resolvedCount > 0) {
+    {
       let totalCapDays = 0;
+      let totalCost = 0;
       let weightedReturn = 0;
+
       for (const t of this.resolvedTrades) {
         const capDays = t.costUsd * t.holdDays;
         totalCapDays += capDays;
+        totalCost += t.costUsd;
         weightedReturn += t.profitUsd;
       }
-      if (totalCapDays > 0) {
-        // Capital-weighted average daily return, then annualize
-        const totalCost = this.resolvedTrades.reduce((s, t) => s + t.costUsd, 0);
+
+      // Include open positions: use daysToExpiry (= expiry − openDate) as expected hold period
+      for (const p of this.openPositions) {
+        if (p.daysToExpiry > 0 && p.costUsd > 0) {
+          const capDays = p.costUsd * p.daysToExpiry;
+          totalCapDays += capDays;
+          totalCost += p.costUsd;
+          weightedReturn += p.expectedProfitUsd;
+        }
+      }
+
+      if (totalCapDays > 0 && totalCost > 0) {
         const avgDays = totalCapDays / totalCost;
-        const totalRoi = totalCost > 0 ? weightedReturn / totalCost : 0;
+        const totalRoi = weightedReturn / totalCost;
         annualizedRoi = avgDays > 0 ? Math.pow(1 + totalRoi, 365 / avgDays) - 1 : 0;
       }
     }

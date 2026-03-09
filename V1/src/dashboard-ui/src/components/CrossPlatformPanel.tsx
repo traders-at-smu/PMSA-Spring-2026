@@ -78,6 +78,8 @@ interface MatchedPairInfo {
   kalshiTitle: string;
   polymarketUrl: string;
   kalshiUrl: string;
+  polymarketSlug: string;
+  kalshiTicker: string;
   similarityScore: number;
   category: string;
   polyYesBid: number;
@@ -745,16 +747,10 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
     setExecuting(true);
     setExecutionResult(null);
     try {
-      // Gather tradable arbs with depth-walking data as decisions
-      const isVerifiedOnly = runtimeData.data?.verifiedOnly ?? false;
+      // Gather tradable arbs — server pre-filters to manual or AI pairs based on verifiedOnly flag
       const tradableDecisions = (arbData.data?.arbs ?? [])
         .filter((a) => {
-          if (!(a.contracts && a.contracts > 0 && a.edgeDollar && a.edgeDollar > 0)) return false;
-          if (isVerifiedOnly) {
-            const pk = `${a.polymarketSlug}::${a.kalshiTicker}`;
-            return verifiedPairKeys.has(pk);
-          }
-          return true;
+          return !!(a.contracts && a.contracts > 0 && a.edgeDollar && a.edgeDollar > 0);
         })
         .map((a) => ({
           pair_id: `${a.polymarketSlug}::${a.kalshiTicker}`,
@@ -916,6 +912,34 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
               )}
             </div>
           )}
+
+          <div className="w-px h-4 bg-zinc-800" />
+
+          {/* AI / Manual pair source toggle (prominent, always visible) */}
+          <div className="flex gap-0.5 bg-zinc-900 rounded-lg p-0.5">
+            <button
+              onClick={() => { if (runtimeData.data?.verifiedOnly) handleToggleVerifiedOnly(); }}
+              className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                !runtimeData.data?.verifiedOnly
+                  ? "bg-violet-500/15 text-violet-400 shadow-inner"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+              title="Use all AI-matched pairs"
+            >
+              AI Pairs
+            </button>
+            <button
+              onClick={() => { if (!runtimeData.data?.verifiedOnly) handleToggleVerifiedOnly(); }}
+              className={`px-3 py-1 rounded-md text-[11px] font-semibold transition-all ${
+                runtimeData.data?.verifiedOnly
+                  ? "bg-emerald-500/15 text-emerald-400 shadow-inner"
+                  : "text-zinc-500 hover:text-zinc-300"
+              }`}
+              title="Use only manually verified pairs"
+            >
+              Manual
+            </button>
+          </div>
 
           <div className="w-px h-4 bg-zinc-800" />
 
@@ -2287,19 +2311,12 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
                   {(() => {
                     const isVO = runtimeData.data?.verifiedOnly ?? false;
                     const tradable = (arbData.data?.arbs ?? []).filter(
-                      (a) => {
-                        if (!(a.contracts && a.contracts > 0 && a.edgeDollar && a.edgeDollar > 0)) return false;
-                        if (isVO) {
-                          const pk = `${a.polymarketSlug}::${a.kalshiTicker}`;
-                          return verifiedPairKeys.has(pk);
-                        }
-                        return true;
-                      }
+                      (a) => !!(a.contracts && a.contracts > 0 && a.edgeDollar && a.edgeDollar > 0)
                     );
                     return (
                       <span className="text-[11px] text-zinc-500">
                         {tradable.length} tradable arb{tradable.length !== 1 ? "s" : ""} queued
-                        {isVO && <span className="text-emerald-400/70 ml-1">(verified only)</span>}
+                        {isVO && <span className="text-emerald-400/70 ml-1">(manual pairs)</span>}
                       </span>
                     );
                   })()}

@@ -13,7 +13,9 @@ interface Settings {
     mode: "PAPER" | "LIVE";
     autoExecute: boolean;
     bankrollUsd: number;
+    maxTradeUsd: number;
     minNetEdge: number;
+    minAnnualizedReturn: number;
     defaultLegTickSize: string;
     kalshiUseMakerFees: boolean;
   };
@@ -392,12 +394,28 @@ export function SettingsPanel() {
                           step={100}
                         />
                       </FieldRow>
+                      <FieldRow label="Max Trade Size (USD)">
+                        <NumberInput
+                          value={getValue("execution.maxTradeUsd")}
+                          onChange={(v) => updateDraft("execution.maxTradeUsd", v)}
+                          min={1}
+                          step={10}
+                        />
+                      </FieldRow>
                       <FieldRow label="Min Net Edge">
                         <NumberInput
                           value={getValue("execution.minNetEdge")}
                           onChange={(v) => updateDraft("execution.minNetEdge", v)}
                           min={0}
                           step={0.001}
+                        />
+                      </FieldRow>
+                      <FieldRow label="Min Ann. Return (0–1)">
+                        <NumberInput
+                          value={getValue("execution.minAnnualizedReturn")}
+                          onChange={(v) => updateDraft("execution.minAnnualizedReturn", v)}
+                          min={0}
+                          step={0.05}
                         />
                       </FieldRow>
                       <FieldRow label="Default Leg Tick Size">

@@ -2,6 +2,7 @@ import { ArbitrageScreener } from "./screener";
 import { KalshiScreener } from "./kalshiScreener";
 import { KalshiMarket } from "./types";
 import { EmbeddingService } from "./services/embeddingService";
+import { getSettings } from "./runtimeSettings";
 import {
   computeKalshiFee,
   computePolymarketFee,
@@ -92,6 +93,8 @@ export interface MatchedPairInfo {
   kalshiTitle: string;
   polymarketUrl: string;
   kalshiUrl: string;
+  polymarketSlug: string;
+  kalshiTicker: string;
   similarityScore: number;
   category: string;
   polyYesBid: number;
@@ -756,6 +759,8 @@ export class CrossPlatformScreener {
         kalshiTitle: p.kalshi.title,
         polymarketUrl: p.polymarket.url,
         kalshiUrl: p.kalshi.url,
+        polymarketSlug: p.polymarket.slug,
+        kalshiTicker: p.kalshi.id,
         similarityScore: p.similarityScore,
         category: p.polymarket.category || p.kalshi.category || "other",
         polyYesBid: p.polymarket.yesBid,
@@ -1110,6 +1115,7 @@ export class CrossPlatformScreener {
   private findArbitrage(pairs: MatchedPair[]): CrossPlatformArb[] {
     const arbs: CrossPlatformArb[] = [];
     const MIN_LIQUIDITY = 500; // Skip markets with <$500 liquidity (likely stale/illiquid)
+    const minAnnualizedReturn = getSettings().execution.minAnnualizedReturn;
 
     for (const { polymarket: pm, kalshi: km, similarityScore } of pairs) {
       // Skip if no price data on either side
@@ -1159,6 +1165,11 @@ export class CrossPlatformScreener {
         const matchStrategy: "BUY_KY_BUY_PN" | "BUY_KN_BUY_PY" =
           strat.buyYesVenue === "KALSHI" ? "BUY_KY_BUY_PN" : "BUY_KN_BUY_PY";
         const dwMatch = dwDecisions.find((d) => d.strategy === matchStrategy);
+
+        // Skip if annualized return is below user-configured minimum
+        if (minAnnualizedReturn > 0 && dwMatch?.annualizedEdge !== undefined) {
+          if (dwMatch.annualizedEdge < minAnnualizedReturn) continue;
+        }
 
         arbs.push({
           event: pm.title,

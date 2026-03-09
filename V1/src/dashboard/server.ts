@@ -4,15 +4,12 @@ import path from "path";
 import os from "os";
 import axios from "axios";
 import { getRedactedSettings, getSettings, getSettingsWithMeta, validateSettingsForMode, saveSettings } from "../runtimeSettings";
-import { getTopTraders, getTraderProfile } from "../services/traderService";
-import { getTradeAlerts, getAlertHistory, getRecentLargeTrades, getAggregatedAlerts } from "../services/tradeAlertService";
 import { ArbitrageScreener } from "../screener";
 import { KalshiScreener } from "../kalshiScreener";
 import { ArbitrageExecutionService } from "../services/arbitrageExecutionService";
 import { PythonModelClient } from "../services/pythonModelClient";
 import { MiguelService } from "../services/miguelService";
 import { CrossPlatformScreener } from "../crossPlatformScreener";
-import { getCopyTarget, setCopyTarget, clearCopyTarget } from "../services/copyTargetService";
 import { SignalTrackerService } from "../services/signalTrackerService";
 import { PaperAccountService } from "../services/paperAccountService";
 import { TelegramService } from "../services/telegramService";
@@ -20,6 +17,7 @@ import { StateStore } from "../services/stateStore";
 import { PortfolioTracker } from "../services/portfolioTracker";
 import { RiskManager, DEFAULT_RISK_CONFIG } from "../services/riskManager";
 import { ExecutionEngine, DEFAULT_LIVE_SAFETY } from "../services/executionEngine";
+import { ManualPairsService } from "../services/manualPairsService";
 
 const app = express();
 const runtime = getSettings();
@@ -81,6 +79,7 @@ const executionEngineV2 = new ExecutionEngine(
   DEFAULT_LIVE_SAFETY
 );
 console.log("  V2 services: SQLite + Risk + Execution engine initialized");
+const manualPairsService = new ManualPairsService();
 
 function getLocalIpv4Urls(port: number): string[] {
   const interfaces = os.networkInterfaces();
@@ -108,68 +107,6 @@ async function getCachedKalshiScreenerData() {
 
 // ---- API Routes ----
 
-// Traders leaderboard
-app.get("/api/traders", async (req, res) => {
-  try {
-    const orderBy = (req.query.orderBy as string) === "VOL" ? "VOL" : "PNL";
-    const timePeriod = (["DAY", "WEEK", "MONTH", "ALL"].includes(req.query.timePeriod as string)
-      ? req.query.timePeriod
-      : "ALL") as "DAY" | "WEEK" | "MONTH" | "ALL";
-    const category = (req.query.category as string) || "OVERALL";
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 50);
-
-    const traders = await getTopTraders(orderBy, timePeriod, category, limit);
-    res.json(traders);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Single trader profile
-app.get("/api/traders/:address", async (req, res) => {
-  try {
-    const profile = await getTraderProfile(req.params.address);
-    if (!profile) return res.status(404).json({ error: "Trader not found" });
-    res.json(profile);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Trade alerts (snapshot)
-app.get("/api/alerts", async (req, res) => {
-  try {
-    const [alerts, recent, aggregated] = await Promise.all([
-      getTradeAlerts(),
-      getRecentLargeTrades(),
-      getAggregatedAlerts(),
-    ]);
-    res.json({ alerts, recent, aggregated });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Trade alerts SSE stream
-app.get("/api/alerts/stream", (req, res) => {
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.flushHeaders();
-
-  const send = async () => {
-    try {
-      const alerts = await getTradeAlerts();
-      res.write(`data: ${JSON.stringify(alerts)}\n\n`);
-    } catch {
-      // Skip on error
-    }
-  };
-
-  send();
-  const interval = setInterval(send, 30_000);
-  req.on("close", () => clearInterval(interval));
-});
 
 // Screener (snapshot)
 app.get("/api/screener", async (req, res) => {
@@ -247,6 +184,80 @@ app.post("/api/cross-platform/refresh", async (_req, res) => {
 // Cross-Platform Arbitrage Scanner
 app.get("/api/cross-platform/arbs", async (_req, res) => {
   try {
+    const { verifiedOnly } = stateStore.getRuntimeControl();
+
+    if (verifiedOnly) {
+      // Manual mode: build arbs from Excel pairs with live prices
+      const settings = getSettings();
+      const maxTradeUsd = settings.execution.maxTradeUsd ?? 100;
+      const manualPairs = await manualPairsService.getPairs();
+
+      const arbs: import("../crossPlatformScreener").CrossPlatformArb[] = [];
+      for (const p of manualPairs) {
+        if (!p.hasArb) continue;
+
+        // Determine cheapest arb direction
+        const cost1 = p.kalshiYesAsk > 0 && p.polyYesBid > 0
+          ? p.kalshiYesAsk + (1 - p.polyYesBid) : 1; // Buy Kalshi YES + Poly NO
+        const cost2 = p.polyYesAsk > 0 && p.kalshiYesBid > 0
+          ? p.polyYesAsk + (1 - p.kalshiYesBid) : 1; // Buy Poly YES + Kalshi NO
+
+        const useDir1 = cost1 <= cost2;
+        const totalCost = useDir1 ? cost1 : cost2;
+        if (totalCost >= 1) continue;
+
+        const grossProfit = 1 - totalCost;
+        const contracts = totalCost > 0 ? Math.max(1, Math.floor(maxTradeUsd / totalCost)) : 0;
+
+        arbs.push({
+          event: p.polymarketTitle || p.kalshiTitle,
+          outcome: "YES",
+          polymarketSlug: p.polymarketSlug,
+          kalshiTicker: p.kalshiTicker,
+          polyYesBid: p.polyYesBid,
+          polyYesAsk: p.polyYesAsk,
+          kalshiYesBid: p.kalshiYesBid,
+          kalshiYesAsk: p.kalshiYesAsk,
+          buyYesVenue: useDir1 ? "KALSHI" : "POLYMARKET",
+          buyYesPrice: useDir1 ? p.kalshiYesAsk : p.polyYesAsk,
+          buyNoVenue: useDir1 ? "POLYMARKET" : "KALSHI",
+          buyNoPrice: useDir1 ? (1 - p.polyYesBid) : (1 - p.kalshiYesBid),
+          grossProfit,
+          netProfit: grossProfit,
+          roi: totalCost > 0 ? grossProfit / totalCost : 0,
+          priceDiff: Math.abs(p.polyYesAsk - p.kalshiYesAsk),
+          polymarketUrl: p.polymarketUrl,
+          kalshiUrl: p.kalshiUrl,
+          similarityScore: p.similarityScore,
+          category: p.category,
+          polymarketLiquidity: 0,
+          kalshiLiquidity: 0,
+          polymarketVolume24h: 0,
+          kalshiVolume24h: 0,
+          endDate: "",
+          polyConditionId: "",
+          polyYesTokenId: "",
+          polyNoTokenId: "",
+          polyNegRisk: false,
+          contracts,
+          kpTotalCost: contracts * totalCost,
+          edgeDollar: contracts * grossProfit,
+          edgePct: grossProfit / totalCost,
+          annualizedEdge: 0,
+          strategy: useDir1 ? "BUY_KY_BUY_PN" : "BUY_KN_BUY_PY",
+          stopReason: "manual_pair",
+        });
+      }
+
+      return res.json({
+        arbs,
+        matchedPairs: manualPairs.length,
+        polymarketsScanned: 0,
+        kalshiMarketsScanned: 0,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const results = await crossPlatformScreener.getResults();
     signalTracker.tick(results.arbs);
     res.json({
@@ -263,16 +274,33 @@ app.get("/api/cross-platform/arbs", async (_req, res) => {
 
 app.get("/api/cross-platform/pairs", async (req, res) => {
   try {
-    const results = await crossPlatformScreener.getResults();
     const filter = (req.query.filter as string) || "all"; // all | arb | no-arb
-    let pairs = results.pairs;
+    const { verifiedOnly } = stateStore.getRuntimeControl();
+
+    let allPairs: import("../crossPlatformScreener").MatchedPairInfo[];
+    let timestamp: string;
+
+    if (verifiedOnly) {
+      // Manual mode: load pairs from V2 Excel file
+      allPairs = await manualPairsService.getPairs();
+      timestamp = new Date().toISOString();
+    } else {
+      // AI mode: use fuzzy-matched screener results
+      const results = await crossPlatformScreener.getResults();
+      allPairs = results.pairs;
+      timestamp = results.timestamp;
+    }
+
+    let pairs = allPairs;
     if (filter === "arb") pairs = pairs.filter(p => p.hasArb);
     else if (filter === "no-arb") pairs = pairs.filter(p => !p.hasArb);
+
     res.json({
       pairs,
-      total: results.pairs.length,
+      total: allPairs.length,
       filtered: pairs.length,
-      timestamp: results.timestamp,
+      timestamp,
+      source: verifiedOnly ? "manual" : "ai",
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -631,25 +659,6 @@ app.get("/api/health", (_req, res) => {
   }
 });
 
-// ---- Copy Trading Target ----
-
-app.get("/api/copy-trading/target", (_req, res) => {
-  res.json({ target: getCopyTarget() });
-});
-
-app.post("/api/copy-trading/target", (req, res) => {
-  const { address, name } = req.body || {};
-  if (!address || typeof address !== "string") {
-    return res.status(400).json({ error: "address is required" });
-  }
-  const target = setCopyTarget(address, name || "");
-  res.json({ target });
-});
-
-app.delete("/api/copy-trading/target", (_req, res) => {
-  clearCopyTarget();
-  res.json({ target: null });
-});
 
 // ---- Settings ----
 
@@ -786,6 +795,9 @@ app.post("/api/execution/verified-only", (req, res) => {
       return res.status(400).json({ error: "enabled (boolean) is required" });
     }
     stateStore.updateRuntimeControl({ verifiedOnly: enabled ? 1 : 0 });
+    // Switching modes: invalidate the manual pairs cache so it reloads on next fetch
+    manualPairsService.invalidateCache();
+    crossPlatformScreener.invalidateCache();
     res.json({ verifiedOnly: enabled });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

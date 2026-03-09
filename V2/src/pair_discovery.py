@@ -17,16 +17,28 @@ GAMMA_API = "https://gamma-api.polymarket.com"
 # --- Text similarity utilities (extracted from KalshiClient pattern) ---
 
 _STOP_WORDS = {
-    "a", "an", "and", "are", "at", "be", "by", "for", "from", "has", "have",
-    "if", "in", "is", "no", "of", "on", "or", "the", "to", "under", "over",
+    "a", "an", "and", "are", "at", "be", "been", "by", "does", "for", "from",
+    "has", "have", "if", "in", "is", "it", "its", "no", "not", "of", "on",
+    "or", "than", "that", "the", "this", "to", "under", "over", "was",
     "what", "when", "where", "who", "will", "win", "wins", "with", "yes",
 }
 
 _ALIASES = {
-    "basketball": "nba", "nba": "nba", "football": "nfl", "nfl": "nfl",
-    "baseball": "mlb", "mlb": "mlb", "hockey": "nhl", "nhl": "nhl",
-    "soccer": "soccer", "futbol": "soccer", "champion": "championship",
-    "champions": "championship", "final": "finals", "finals": "finals",
+    "basketball": "nba", "nba": "nba",
+    "football": "nfl", "nfl": "nfl",
+    "baseball": "mlb", "mlb": "mlb",
+    "hockey": "nhl", "nhl": "nhl",
+    "soccer": "soccer", "futbol": "soccer",
+    "champion": "championship", "champions": "championship",
+    "final": "finals", "finals": "finals",
+    "stanley": "stanleycup", "cup": "stanleycup",
+    "superbowl": "superbowl", "super": "superbowl",
+    "worldseries": "worldseries",
+    "ncaa": "ncaa", "college": "ncaa",
+    "bitcoin": "btc", "btc": "btc",
+    "ethereum": "eth", "eth": "eth",
+    "federal": "fed", "fed": "fed",
+    "presidency": "president", "presidential": "president",
 }
 
 
@@ -50,8 +62,8 @@ def title_similarity(query: str, title: str) -> float:
     def _canon(tok: str) -> str:
         return _ALIASES.get(tok, tok)
 
-    q_tokens = [_canon(tok) for tok in q.split() if tok not in _STOP_WORDS and len(tok) > 2]
-    t_tokens = [_canon(tok) for tok in t.split() if tok not in _STOP_WORDS and len(tok) > 2]
+    q_tokens = [_canon(tok) for tok in q.split() if tok not in _STOP_WORDS and len(tok) > 1]
+    t_tokens = [_canon(tok) for tok in t.split() if tok not in _STOP_WORDS and len(tok) > 1]
     if not q_tokens or not t_tokens:
         return 0.0
 
@@ -66,6 +78,11 @@ def title_similarity(query: str, title: str) -> float:
     query_coverage = overlap_count / len(q_set)
     candidate_precision = overlap_count / len(t_set)
     blended = (0.2 * seq_score) + (0.4 * query_coverage) + (0.4 * candidate_precision)
+
+    # Confidence floor: reject matches where query coverage is too low regardless of blended score.
+    if query_coverage < 0.5:
+        return 0.0
+
     return max(query_coverage, blended)
 
 
@@ -147,6 +164,11 @@ class PairDiscovery:
                     best_poly = pm
 
             if best_score >= self.min_similarity and best_poly:
+                # Bidirectional confidence check: also verify reverse similarity is reasonable.
+                p_title = best_poly.get("question", best_poly.get("title", ""))
+                reverse_score = title_similarity(p_title, k_title)
+                if reverse_score < self.min_similarity * 0.7:
+                    continue
                 tokens = best_poly.get("clobTokenIds", "")
                 yes_token = ""
                 no_token = ""

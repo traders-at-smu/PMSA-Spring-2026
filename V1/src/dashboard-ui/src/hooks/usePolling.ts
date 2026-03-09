@@ -9,6 +9,7 @@ export function usePolling<T>(
   const [loading, setLoading] = useState(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastFetchRef = useRef<number>(0);
 
   const fetchData = useCallback(async () => {
     try {
@@ -16,6 +17,7 @@ export function usePolling<T>(
       if (!res.ok) return;
       const json = await res.json();
       setData(json);
+      lastFetchRef.current = Date.now();
       setLastUpdated(new Date());
     } catch {
       // silently fail, keep previous data
@@ -57,7 +59,12 @@ export function usePolling<T>(
 
     const onVisible = () => {
       if (document.visibilityState === "visible") {
-        fetchData().then(() => scheduleNext());
+        // Only re-fetch if most of the interval has elapsed since the last fetch.
+        // This avoids hammering the server every time the user switches browser tabs.
+        const elapsed = Date.now() - lastFetchRef.current;
+        if (elapsed >= intervalMs * 0.75) {
+          fetchData().then(() => scheduleNext());
+        }
       }
     };
 

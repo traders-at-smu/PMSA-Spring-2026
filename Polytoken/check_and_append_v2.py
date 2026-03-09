@@ -64,7 +64,7 @@ def _parse_list_field(value: Any) -> list[str]:
     return []
 
 
-def _validate_kalshi_market(ticker: str) -> None:
+def _validate_kalshi_market(ticker: str) -> dict[str, Any]:
     res = requests.get(f"{KALSHI_BASE}/markets/{ticker}", timeout=HTTP_TIMEOUT_SEC)
     res.raise_for_status()
     market = res.json().get("market", {})
@@ -74,8 +74,21 @@ def _validate_kalshi_market(ticker: str) -> None:
     if status not in {"open", "active"}:
         raise RuntimeError(f"Kalshi market '{ticker}' status is '{status}', expected active/open")
 
+    # Verify the market has not yet closed
+    import datetime as _dt
+    close_time = str(market.get("close_time") or "").strip()
+    if close_time:
+        try:
+            close_dt = _dt.datetime.fromisoformat(close_time.rstrip("Z")).replace(tzinfo=_dt.timezone.utc)
+            if close_dt <= _dt.datetime.now(_dt.timezone.utc):
+                raise RuntimeError(f"Kalshi market '{ticker}' has already closed (close_time={close_time})")
+        except ValueError:
+            pass  # Unparseable date — skip the check
+
     orderbook_res = requests.get(f"{KALSHI_BASE}/markets/{ticker}/orderbook", timeout=HTTP_TIMEOUT_SEC)
     orderbook_res.raise_for_status()
+
+    return {"close_time": close_time}
 
 
 def _resolve_poly_market(slug: str) -> dict[str, Any]:
@@ -104,13 +117,33 @@ def _validate_poly_market(slug: str) -> dict[str, Any]:
     yes_id = token_ids[yes_idx]
     no_id = token_ids[no_idx]
 
+    # Verify CLOB tokens are accessible (confirm the market is live on-chain)
     for token_id in [yes_id, no_id]:
         book_res = requests.get(f"{POLY_CLOB_HOST}/book", params={"token_id": token_id}, timeout=HTTP_TIMEOUT_SEC)
         book_res.raise_for_status()
 
+    # Sanity check using Gamma API prices — these match what the Polymarket UI shows
+    # and are more reliable than CLOB orderbook asks (which may have high stub orders).
+    yes_ask = float(market.get("bestAsk") or 0)
+    yes_bid = float(market.get("bestBid") or 0)
+    if yes_ask > 0 and yes_bid > 0:
+        # In a binary market: NO ask ≈ 1 − YES bid
+        no_ask = 1.0 - yes_bid
+        ask_sum = yes_ask + no_ask
+        if ask_sum > 1.10:
+            raise RuntimeError(
+                f"Polymarket '{slug}' ask prices sum to {ask_sum:.3f} "
+                f"(YES ask={yes_ask:.3f}, NO ask≈{no_ask:.3f}) — market may be stale or mispriced"
+            )
+
+    end_date = str(
+        market.get("endDate") or market.get("end_date_iso") or market.get("end_date") or ""
+    ).strip()
+
     return {
         "conditionId": str(market.get("conditionId", "")).strip(),
         "slug": str(market.get("slug", "")).strip() or slug,
+        "end_date": end_date,
     }
 
 
@@ -120,7 +153,7 @@ def validate_row(row: dict[str, str]) -> dict[str, str]:
     if not kalshi_market_id or not poly_slug:
         raise RuntimeError("Row missing kalshi_market_id or poly_slug")
 
-    _validate_kalshi_market(kalshi_market_id)
+    kalshi_info = _validate_kalshi_market(kalshi_market_id)
     poly = _validate_poly_market(poly_slug)
 
     validated = dict(row)
@@ -129,6 +162,13 @@ def validate_row(row: dict[str, str]) -> dict[str, str]:
     if poly.get("slug"):
         validated["poly_slug"] = poly["slug"]
         validated["poly_url"] = f"https://polymarket.com/market/{poly['slug']}"
+
+    # Populate resolution_time_utc: prefer Kalshi close_time, fall back to Poly end_date
+    if not validated.get("resolution_time_utc"):
+        validated["resolution_time_utc"] = (
+            kalshi_info.get("close_time") or poly.get("end_date") or ""
+        )
+
     return validated
 
 
@@ -185,6 +225,11 @@ def append_rows_to_contract_list(rows: list[dict[str, str]], target_path: Path) 
             col = header_map.get(_normalize_header_name(field))
             if col:
                 ws.cell(row=new_row_index, column=col, value=row.get(field, ""))
+
+        # Write resolution_time_utc if the column exists
+        res_col = header_map.get(_normalize_header_name("resolution_time_utc"))
+        if res_col and row.get("resolution_time_utc"):
+            ws.cell(row=new_row_index, column=res_col, value=row["resolution_time_utc"])
 
         active_col = header_map.get(_normalize_header_name("active"))
         if active_col:

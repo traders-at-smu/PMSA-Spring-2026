@@ -20,6 +20,9 @@ OUTPUT_FIELDS = [
     "poly_url",
     "kalshi_market_id",
     "kalshi_url",
+    "expiry_poly_utc",
+    "expiry_kalshi_utc",
+    "resolution_time_utc",
 ]
 
 COUNTER_PATH = Path(__file__).resolve().parent / "counter.txt"
@@ -220,6 +223,15 @@ def _poly_contract_match_text(market):
 
 def _build_mapping_row(poly_market, poly_market_slug, kalshi_submarket):
     pair_id = get_next_pair_id()
+    # Extract expiry from Polymarket (Gamma API returns endDate or end_date_iso)
+    expiry_poly = (
+        poly_market.get("endDate")
+        or poly_market.get("end_date_iso")
+        or poly_market.get("end_date")
+        or ""
+    )
+    # Extract expiry from Kalshi (markets API returns close_time)
+    expiry_kalshi = kalshi_submarket.get("close_time") or ""
     return {
         "pair_id": pair_id,
         "title_clean": poly_market.get("question", "N/A"),
@@ -230,6 +242,8 @@ def _build_mapping_row(poly_market, poly_market_slug, kalshi_submarket):
         "poly_url": f"https://polymarket.com/market/{poly_market_slug}",
         "kalshi_market_id": kalshi_submarket["ticker"],
         "kalshi_url": f"https://kalshi.com/markets/{kalshi_submarket['ticker']}",
+        "expiry_poly_utc": expiry_poly,
+        "expiry_kalshi_utc": expiry_kalshi,
     }
 
 
