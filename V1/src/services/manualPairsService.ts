@@ -26,6 +26,98 @@ interface Cache {
   expiresAt: number;
 }
 
+function clamp01(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  if (n < 0) return 0;
+  if (n > 1) return 1;
+  return n;
+}
+
+function toNum(v: unknown): number {
+  const n = typeof v === "string" ? Number(v) : (v as number);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseStringArray(v: unknown): string[] {
+  if (Array.isArray(v)) return v.map((x) => String(x));
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v);
+      if (Array.isArray(parsed)) return parsed.map((x) => String(x));
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+function isYesLabel(label: string): boolean {
+  const x = label.trim().toLowerCase();
+  return x === "yes" || x === "y" || x === "true";
+}
+
+function isNoLabel(label: string): boolean {
+  const x = label.trim().toLowerCase();
+  return x === "no" || x === "n" || x === "false";
+}
+
+function extractPolyYesQuotes(poly: any): { yesBid: number; yesAsk: number } {
+  const outcomes = parseStringArray(poly?.outcomes);
+  const outcomePrices = parseStringArray(poly?.outcomePrices).map(toNum);
+  const yesIdx = outcomes.findIndex(isYesLabel);
+  const noIdx = outcomes.findIndex(isNoLabel);
+
+  const rawBestBid = clamp01(toNum(poly?.bestBid));
+  const rawBestAsk = clamp01(toNum(poly?.bestAsk));
+
+  let yesBid = rawBestBid;
+  let yesAsk = rawBestAsk;
+
+  // Gamma bestBid/bestAsk is for outcomes[0]. If outcomes[0] is NO, invert to YES.
+  if (outcomes.length >= 2 && noIdx === 0 && yesIdx === 1) {
+    yesBid = rawBestAsk > 0 ? 1 - rawBestAsk : 0;
+    yesAsk = rawBestBid > 0 ? 1 - rawBestBid : 0;
+  }
+
+  const yesMidFromOutcome =
+    yesIdx >= 0 ? clamp01(toNum(outcomePrices[yesIdx])) : 0;
+  const noMidFromOutcome =
+    noIdx >= 0 ? clamp01(toNum(outcomePrices[noIdx])) : 0;
+  const yesMidFallback =
+    yesMidFromOutcome > 0
+      ? yesMidFromOutcome
+      : noMidFromOutcome > 0
+        ? 1 - noMidFromOutcome
+        : 0;
+
+  if (yesBid <= 0) yesBid = yesMidFallback;
+  if (yesAsk <= 0) yesAsk = yesMidFallback;
+
+  if (yesBid > yesAsk && yesAsk > 0) {
+    const lo = Math.min(yesBid, yesAsk);
+    const hi = Math.max(yesBid, yesAsk);
+    yesBid = lo;
+    yesAsk = hi;
+  }
+
+  return { yesBid: clamp01(yesBid), yesAsk: clamp01(yesAsk) };
+}
+
+function extractKalshiYesQuotes(kalshi: any): { yesBid: number; yesAsk: number } {
+  const rawYesBid = toNum(kalshi?.yes_bid_dollars);
+  const rawYesAsk = toNum(kalshi?.yes_ask_dollars);
+  const rawNoBid = toNum(kalshi?.no_bid_dollars);
+  const rawNoAsk = toNum(kalshi?.no_ask_dollars);
+
+  // Kalshi has historically sent either cents (1..99) or dollar-normalized (0..1) prices.
+  const scale = [rawYesBid, rawYesAsk, rawNoBid, rawNoAsk].some((v) => v > 1) ? 100 : 1;
+
+  return {
+    yesBid: clamp01(rawYesBid / scale),
+    yesAsk: clamp01(rawYesAsk / scale),
+  };
+}
+
 export class ManualPairsService {
   private cache: Cache | null = null;
 
@@ -108,10 +200,12 @@ export class ManualPairsService {
     // Skip pairs where both APIs failed — no useful data to show
     if (!kalshi && !poly) return null;
 
-    const kalshiYesBid = kalshi ? (kalshi.yes_bid_dollars || 0) / 100 : 0;
-    const kalshiYesAsk = kalshi ? (kalshi.yes_ask_dollars || 0) / 100 : 0;
-    const polyYesBid = poly ? (poly.bestBid || 0) : 0;
-    const polyYesAsk = poly ? (poly.bestAsk || 0) : 0;
+    const kalshiQuotes = kalshi ? extractKalshiYesQuotes(kalshi) : { yesBid: 0, yesAsk: 0 };
+    const polyQuotes = poly ? extractPolyYesQuotes(poly) : { yesBid: 0, yesAsk: 0 };
+    const kalshiYesBid = kalshiQuotes.yesBid;
+    const kalshiYesAsk = kalshiQuotes.yesAsk;
+    const polyYesBid = polyQuotes.yesBid;
+    const polyYesAsk = polyQuotes.yesAsk;
 
     // Arb: total cost of buying YES on one venue + NO on the other < $1
     // NO cost on venue X = 1 - YES bid on venue X  (using bid as NO ask approximation)
