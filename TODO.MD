@@ -1,14 +1,5 @@
-- [ ] Portfolio Max investment per contract setting
-- [ ] Minimum Annualized Return Lever
-- [ ] Current Holdings Tab
-- [ ] Switch of AI vs Manual Pairs
-- [ ] Add Date of Execution to Polytoken
-     - [ ] Update Excel Sheet to Support Date of Expiration
-     - [ ] Update Calculation of ARR within V1
-- [ ] Fix Pairs Flowing through on scanning page of V1
-- [ ] Prevent the bot from having to reload for zero reason
-- [ ] Take unnecessary things for Prediction Market Spatial Arbitrage out the bot
-- [ ] Improve AI pairs scanner accuracy
-- [ ] Improved contract validation from check_and_append_v2.py. Make sure both sets of pairs pull correctly, and prices for yes/no asks are similar
-- [ ] Overview tab has to reload every time it is clicked, should stay loaded and refresh with data throughout the app. 
-- [ ] Get rid of the Analytics tab 
+- [ ] Fix Annualized edge for screener
+- [ ] Implement Manual Pair selection on execution tab
+- [ ] Clean up execution tab
+- [ ] Fix execution date being pulled through manual pair table 
+
