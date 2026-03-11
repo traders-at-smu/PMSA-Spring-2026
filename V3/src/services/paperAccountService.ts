@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import { CrossPlatformArb } from "../crossPlatformScreener";
-import { getSettings } from "../runtimeSettings";
+import { getSettings } from "../config";
 
 // ---- Types ----
 

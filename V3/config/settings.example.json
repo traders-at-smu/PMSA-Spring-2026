@@ -1,0 +1,110 @@
+{
+  "dashboard": {
+    "port": 3456,
+    "bindHost": "0.0.0.0",
+    "initialRefreshOnBoot": false,
+    "refreshIntervalMs": 60000
+  },
+  "execution": {
+    "mode": "PAPER",
+    "autoExecute": false,
+    "bankrollUsd": 10000,
+    "maxTradeUsd": 100,
+    "minNetEdge": 0.005,
+    "minAnnualizedReturn": 0,
+    "defaultLegTickSize": "0.01",
+    "kalshiUseMakerFees": false
+  },
+  "loop": {
+    "enabled": false,
+    "intervalMs": 300000,
+    "executeOnArb": true
+  },
+  "strategy": {
+    "fixedContractSize": 5,
+    "kpMaxPerTrade": 4.95,
+    "annualizedEdgeMin": 0.1,
+    "fees": {
+      "kalshi": {
+        "rate": 0.07,
+        "roundMode": "ceil_cent"
+      },
+      "polymarket": {
+        "default": {
+          "feeRate": 0.0175,
+          "exponent": 1
+        },
+        "categories": {}
+      }
+    }
+  },
+  "aiMatching": {
+    "confidenceThreshold": 0.9,
+    "textScoreAutoAcceptMin": 0.9,
+    "textScoreAiZone": [0.5, 0.9],
+    "maxAiCandidates": 250,
+    "fewShotExampleCount": 15,
+    "fewShotSelectionStrategy": "diverse"
+  },
+  "risk": {
+    "maxOpenPositionsPerPair": 5,
+    "maxNotionalPerPair": 250,
+    "maxTotalExposure": 5000,
+    "maxDrawdownPct": 0.15,
+    "circuitBreakerCooldownMin": 60
+  },
+  "notifications": {
+    "enabled": false,
+    "telegram": {
+      "botToken": "",
+      "chatId": ""
+    },
+    "discord": {
+      "webhookUrl": ""
+    },
+    "notifyOn": {
+      "tradeExecuted": true,
+      "arbFound": false,
+      "riskAlert": true,
+      "circuitBreaker": true
+    }
+  },
+  "liveSafety": {
+    "requireArm": true,
+    "requireTypedConfirm": true,
+    "confirmTokenTtlSec": 600
+  },
+  "apiKeys": {
+    "polymarket": {
+      "privateKey": "",
+      "proxyWalletAddress": "",
+      "rpcUrl": ""
+    },
+    "kalshi": {
+      "apiUrl": "https://api.elections.kalshi.com/trade-api/v2",
+      "tradingApiUrl": "",
+      "apiKey": "",
+      "apiSecret": "",
+      "apiPassphrase": "",
+      "bearerToken": "",
+      "orderEndpoint": ""
+    },
+    "kimi": {
+      "apiKey": "",
+      "baseUrl": "https://api.moonshot.ai/v1",
+      "model": "kimi-k2.5"
+    }
+  },
+  "externalApis": {
+    "gammaApiUrl": "https://gamma-api.polymarket.com",
+    "clobHttpUrl": "https://clob.polymarket.com",
+    "dataApiUrl": "https://data-api.polymarket.com",
+    "kalshiApiUrl": "https://api.elections.kalshi.com/trade-api/v2"
+  },
+  "paths": {
+    "stateDb": "data/state.db",
+    "trainingSet": "data/training-set.json",
+    "kimiCache": "data/kimi-match-cache.json",
+    "embeddingCache": "data/embedding-cache.json"
+  }
+}

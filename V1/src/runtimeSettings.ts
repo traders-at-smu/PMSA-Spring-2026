@@ -36,6 +36,11 @@ export interface ApiKeysSettings {
     bearerToken: string;
     orderEndpoint: string;
   };
+  kimi: {
+    apiKey: string;
+    baseUrl: string;
+    model: string;
+  };
 }
 
 export interface ExternalApiSettings {
@@ -92,6 +97,11 @@ const defaults: RuntimeSettings = {
       apiPassphrase: "",
       bearerToken: "",
       orderEndpoint: "",
+    },
+    kimi: {
+      apiKey: "",
+      baseUrl: "https://api.moonshot.ai/v1",
+      model: "kimi-k2.5",
     },
   },
   externalApis: {
@@ -175,6 +185,10 @@ function envOverride(settings: RuntimeSettings): RuntimeSettings {
   if (process.env.KALSHI_API_PASSPHRASE) withEnv.apiKeys.kalshi.apiPassphrase = process.env.KALSHI_API_PASSPHRASE;
   if (process.env.KALSHI_BEARER_TOKEN) withEnv.apiKeys.kalshi.bearerToken = process.env.KALSHI_BEARER_TOKEN;
   if (process.env.KALSHI_ORDER_ENDPOINT) withEnv.apiKeys.kalshi.orderEndpoint = process.env.KALSHI_ORDER_ENDPOINT;
+
+  if (process.env.KIMI_API_KEY) withEnv.apiKeys.kimi.apiKey = process.env.KIMI_API_KEY;
+  if (process.env.KIMI_BASE_URL) withEnv.apiKeys.kimi.baseUrl = process.env.KIMI_BASE_URL;
+  if (process.env.KIMI_MODEL) withEnv.apiKeys.kimi.model = process.env.KIMI_MODEL;
 
   if (process.env.GAMMA_API_URL) withEnv.externalApis.gammaApiUrl = process.env.GAMMA_API_URL;
   if (process.env.CLOB_HTTP_URL) withEnv.externalApis.clobHttpUrl = process.env.CLOB_HTTP_URL;
@@ -320,6 +334,11 @@ export function getRedactedSettings(): RuntimeSettings {
         apiPassphrase: mask(s.apiKeys.kalshi.apiPassphrase),
         bearerToken: mask(s.apiKeys.kalshi.bearerToken),
         orderEndpoint: s.apiKeys.kalshi.orderEndpoint,
+      },
+      kimi: {
+        apiKey: mask(s.apiKeys.kimi.apiKey),
+        baseUrl: s.apiKeys.kimi.baseUrl,
+        model: s.apiKeys.kimi.model,
       },
     },
   };

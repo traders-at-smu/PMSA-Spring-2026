@@ -156,8 +156,25 @@ export class ManualPairsService {
 
   private readExcelPairs(): Promise<RawPair[]> {
     const settings = getSettings();
-    const pythonExe = settings.python.pythonExecutable || "python";
+    const configured = settings.python.pythonExecutable || "python";
 
+    // Try configured python first, then common fallbacks
+    const candidates = [configured];
+    if (configured !== "python3") candidates.push("python3");
+    if (configured !== "python") candidates.push("python");
+
+    return this.trySpawnPython(candidates, 0);
+  }
+
+  private trySpawnPython(candidates: string[], idx: number): Promise<RawPair[]> {
+    if (idx >= candidates.length) {
+      return Promise.reject(new Error(
+        `Python not found. Tried: ${candidates.join(", ")}. ` +
+        `Set python.pythonExecutable in settings (e.g. "python3").`
+      ));
+    }
+
+    const pythonExe = candidates[idx];
     return new Promise((resolve, reject) => {
       let stdout = "";
       let stderr = "";
@@ -168,7 +185,14 @@ export class ManualPairsService {
 
       child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
       child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
-      child.on("error", reject);
+      child.on("error", (err: NodeJS.ErrnoException) => {
+        if (err.code === "ENOENT" && idx + 1 < candidates.length) {
+          // This python binary doesn't exist — try next candidate
+          resolve(this.trySpawnPython(candidates, idx + 1));
+        } else {
+          reject(err);
+        }
+      });
       child.on("close", (code: number) => {
         if (code !== 0) {
           return reject(new Error(`read_manual_pairs.py exited ${code}: ${stderr.trim()}`));
@@ -226,6 +250,39 @@ export class ManualPairsService {
     const arbCost2 = kalshiYesAsk > 0 && polyYesBid > 0 ? kalshiYesAsk + (1 - polyYesBid) : 1;
     const hasArb = arbCost1 < 0.995 || arbCost2 < 0.995;
 
+    // Resolve end date: prefer live API data, fallback to Excel column
+    const endDate =
+      kalshi?.close_time ||
+      kalshi?.expected_expiration_time ||
+      kalshi?.expiration_time ||
+      poly?.end_date_iso ||
+      poly?.endDate ||
+      pair.resolution_time_utc ||
+      "";
+
+    // Extract Polymarket token IDs for depth-walking
+    let polyYesTokenId: string | undefined;
+    let polyNoTokenId: string | undefined;
+    let polyConditionId: string | undefined;
+    let polyNegRisk: boolean | undefined;
+    if (poly) {
+      // Tokens can come as an array or as JSON strings
+      if (Array.isArray(poly.tokens) && poly.tokens.length >= 2) {
+        const yesToken = poly.tokens.find((t: any) => t.outcome === "Yes");
+        const noToken = poly.tokens.find((t: any) => t.outcome === "No");
+        polyYesTokenId = yesToken?.token_id;
+        polyNoTokenId = noToken?.token_id;
+      } else if (poly.clobTokenIds) {
+        const ids = typeof poly.clobTokenIds === "string" ? JSON.parse(poly.clobTokenIds) : poly.clobTokenIds;
+        if (Array.isArray(ids)) {
+          polyYesTokenId = ids[0];
+          polyNoTokenId = ids[1];
+        }
+      }
+      polyConditionId = poly.conditionId || poly.condition_id || undefined;
+      polyNegRisk = poly.negRisk || poly.neg_risk || false;
+    }
+
     return {
       polymarketTitle: poly?.question || pair.title || pair.poly_slug,
       kalshiTitle: kalshi?.title || pair.title || pair.kalshi_ticker,
@@ -241,6 +298,11 @@ export class ManualPairsService {
       kalshiYesAsk,
       hasArb,
       resolutionTimeUtc: pair.resolution_time_utc || kalshi?.close_time || "",
+      endDate,
+      polyYesTokenId,
+      polyNoTokenId,
+      polyConditionId,
+      polyNegRisk,
     };
   }
 

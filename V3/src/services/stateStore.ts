@@ -75,6 +75,8 @@ export interface AiMatchRow {
   from_cache: number;
   final_verdict: string;
   user_override: string | null;
+  poly_url: string | null;
+  kalshi_url: string | null;
 }
 
 // ---- Service ----
@@ -193,6 +195,14 @@ export class StateStore {
       this.db.prepare("SELECT verified_only FROM runtime_control LIMIT 1").get();
     } catch (_) {
       this.db.prepare("ALTER TABLE runtime_control ADD COLUMN verified_only INTEGER NOT NULL DEFAULT 0").run();
+    }
+
+    // Add URL columns to ai_match_results if they don't exist yet
+    try {
+      this.db.prepare("SELECT poly_url FROM ai_match_results LIMIT 1").get();
+    } catch (_) {
+      this.db.prepare("ALTER TABLE ai_match_results ADD COLUMN poly_url TEXT").run();
+      this.db.prepare("ALTER TABLE ai_match_results ADD COLUMN kalshi_url TEXT").run();
     }
 
     // Seed runtime_control singleton if empty
@@ -450,13 +460,15 @@ export class StateStore {
     aiLatencyMs: number;
     fromCache: boolean;
     finalVerdict?: string;
+    polyUrl?: string;
+    kalshiUrl?: string;
   }): void {
     this.db.prepare(`
       INSERT INTO ai_match_results
         (created_at, poly_slug, kalshi_ticker, poly_title, kalshi_title,
          text_score, ai_match, ai_confidence, ai_reasoning, ai_model,
-         ai_latency_ms, from_cache, final_verdict)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ai_latency_ms, from_cache, final_verdict, poly_url, kalshi_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(poly_slug, kalshi_ticker) DO UPDATE SET
         created_at = excluded.created_at,
         poly_title = excluded.poly_title,
@@ -468,7 +480,9 @@ export class StateStore {
         ai_model = excluded.ai_model,
         ai_latency_ms = excluded.ai_latency_ms,
         from_cache = excluded.from_cache,
-        final_verdict = excluded.final_verdict
+        final_verdict = excluded.final_verdict,
+        poly_url = excluded.poly_url,
+        kalshi_url = excluded.kalshi_url
     `).run(
       new Date().toISOString(),
       row.polySlug,
@@ -482,7 +496,9 @@ export class StateStore {
       row.aiModel,
       row.aiLatencyMs,
       row.fromCache ? 1 : 0,
-      row.finalVerdict ?? "pending"
+      row.finalVerdict ?? "pending",
+      row.polyUrl ?? null,
+      row.kalshiUrl ?? null
     );
   }
 
