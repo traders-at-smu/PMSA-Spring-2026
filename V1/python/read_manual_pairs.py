@@ -10,6 +10,12 @@ from pathlib import Path
 
 
 def _norm(value) -> str:
+    from datetime import datetime, date
+    if isinstance(value, datetime):
+        # Emit ISO 8601 so JavaScript Date.parse() handles it correctly
+        return value.strftime("%Y-%m-%dT%H:%M:%SZ")
+    if isinstance(value, date):
+        return value.strftime("%Y-%m-%dT00:00:00Z")
     return str(value or "").strip()
 
 

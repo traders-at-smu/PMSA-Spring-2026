@@ -11,7 +11,10 @@ export default function App() {
 
   return (
     <Layout activeTab={tab} onTabChange={setTab} paused={paused} onTogglePause={() => setPaused(!paused)}>
-      {tab === "overview" && <OverviewPanel paused={paused} />}
+      {/* Keep OverviewPanel mounted so it doesn't re-boot on every tab switch */}
+      <div style={{ display: tab === "overview" ? undefined : "none" }}>
+        <OverviewPanel paused={paused || tab !== "overview"} />
+      </div>
       {tab === "scanner" && <CrossPlatformPanel paused={paused} />}
       {tab === "execution" && <ExecutionPanel paused={paused} />}
       {tab === "settings" && <SettingsPanel />}

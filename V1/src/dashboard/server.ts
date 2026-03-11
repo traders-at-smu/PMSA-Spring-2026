@@ -18,6 +18,7 @@ import { PortfolioTracker } from "../services/portfolioTracker";
 import { RiskManager, DEFAULT_RISK_CONFIG } from "../services/riskManager";
 import { ExecutionEngine, DEFAULT_LIVE_SAFETY } from "../services/executionEngine";
 import { ManualPairsService } from "../services/manualPairsService";
+import { computeKalshiFee, computePolymarketFee, DEFAULT_STRATEGY_PARAMS } from "../services/depthWalkingEngine";
 
 const app = express();
 const runtime = getSettings();
@@ -243,6 +244,15 @@ app.get("/api/cross-platform/arbs", async (_req, res) => {
           kpTotalCost: contracts * totalCost,
           edgeDollar: contracts * grossProfit,
           edgePct: grossProfit / totalCost,
+          kalshiFee: (() => {
+            const kPrice = useDir1 ? p.kalshiYesAsk : (1 - p.kalshiYesBid);
+            return computeKalshiFee(contracts, kPrice, DEFAULT_STRATEGY_PARAMS.fees.kalshi.rate, DEFAULT_STRATEGY_PARAMS.fees.kalshi.roundMode);
+          })(),
+          polymarketFee: (() => {
+            const pPrice = useDir1 ? (1 - p.polyYesBid) : p.polyYesAsk;
+            const pf = DEFAULT_STRATEGY_PARAMS.fees.polymarket.default;
+            return computePolymarketFee(contracts, pPrice, pf.feeRate, pf.exponent, pf.makerRebate ?? 0);
+          })(),
           annualizedEdge: (() => {
             const endDateStr = p.resolutionTimeUtc || "";
             const daysToRes = endDateStr
@@ -264,8 +274,8 @@ app.get("/api/cross-platform/arbs", async (_req, res) => {
       return res.json({
         arbs,
         matchedPairs: manualPairs.length,
-        polymarketsScanned: 0,
-        kalshiMarketsScanned: 0,
+        polymarketsScanned: manualPairs.filter(p => p.polymarketSlug).length,
+        kalshiMarketsScanned: manualPairs.filter(p => p.kalshiTicker).length,
         timestamp: new Date().toISOString(),
       });
     }

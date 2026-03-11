@@ -569,20 +569,45 @@ export function ExecutionPanel({ paused }: { paused: boolean }) {
       </div>
 
       {/* ── C. Portfolio Summary ── */}
-      <div className="grid grid-cols-5 gap-3">
-        {[
-          { label: "Total Value", value: `$${(v2Portfolio.data?.totalValue ?? 0).toFixed(2)}`, accent: "text-zinc-200" },
-          { label: "Total Cost", value: `$${(v2Portfolio.data?.totalCost ?? 0).toFixed(2)}`, accent: "text-zinc-400" },
-          { label: "Unrealized P&L", value: `${(v2Portfolio.data?.totalUnrealizedPnl ?? 0) >= 0 ? "+" : ""}$${(v2Portfolio.data?.totalUnrealizedPnl ?? 0).toFixed(2)}`, accent: (v2Portfolio.data?.totalUnrealizedPnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400" },
-          { label: "Realized P&L", value: `${(v2Portfolio.data?.totalRealizedPnl ?? 0) >= 0 ? "+" : ""}$${(v2Portfolio.data?.totalRealizedPnl ?? 0).toFixed(2)}`, accent: (v2Portfolio.data?.totalRealizedPnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400" },
-          { label: "Total P&L", value: `${(v2Portfolio.data?.totalPnl ?? 0) >= 0 ? "+" : ""}$${(v2Portfolio.data?.totalPnl ?? 0).toFixed(2)}`, accent: (v2Portfolio.data?.totalPnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400" },
-        ].map((stat) => (
-          <div key={stat.label} className="glass-card rounded-xl p-4 flex flex-col items-center gap-1">
-            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">{stat.label}</span>
-            <span className={`text-lg font-bold font-mono tabular-nums ${stat.accent}`}>{stat.value}</span>
+      {runtimeData.data?.mode === "paper" ? (
+        /* Paper mode: show paper account P&L */
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Paper Account P&L</span>
+            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PAPER</span>
           </div>
-        ))}
-      </div>
+          <div className="grid grid-cols-5 gap-3">
+            {[
+              { label: "Portfolio Value", value: `$${(accountData.data?.portfolioValue ?? 0).toFixed(2)}`, accent: "text-zinc-200" },
+              { label: "Available Cash", value: `$${(accountData.data?.availableBalance ?? 0).toFixed(2)}`, accent: "text-zinc-400" },
+              { label: "Unrealized P&L", value: `${(accountData.data?.unrealizedProfit ?? 0) >= 0 ? "+" : ""}$${(accountData.data?.unrealizedProfit ?? 0).toFixed(2)}`, accent: (accountData.data?.unrealizedProfit ?? 0) >= 0 ? "text-emerald-400" : "text-red-400" },
+              { label: "Realized P&L", value: `${(accountData.data?.realizedProfit ?? 0) >= 0 ? "+" : ""}$${(accountData.data?.realizedProfit ?? 0).toFixed(2)}`, accent: (accountData.data?.realizedProfit ?? 0) >= 0 ? "text-emerald-400" : "text-red-400" },
+              { label: "Total Fees", value: `-$${(accountData.data?.totalFees ?? 0).toFixed(2)}`, accent: "text-amber-400" },
+            ].map((stat) => (
+              <div key={stat.label} className="glass-card rounded-xl p-4 flex flex-col items-center gap-1">
+                <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">{stat.label}</span>
+                <span className={`text-lg font-bold font-mono tabular-nums ${stat.accent}`}>{stat.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        /* Live mode: show V2 portfolio P&L */
+        <div className="grid grid-cols-5 gap-3">
+          {[
+            { label: "Total Value", value: `$${(v2Portfolio.data?.totalValue ?? 0).toFixed(2)}`, accent: "text-zinc-200" },
+            { label: "Total Cost", value: `$${(v2Portfolio.data?.totalCost ?? 0).toFixed(2)}`, accent: "text-zinc-400" },
+            { label: "Unrealized P&L", value: `${(v2Portfolio.data?.totalUnrealizedPnl ?? 0) >= 0 ? "+" : ""}$${(v2Portfolio.data?.totalUnrealizedPnl ?? 0).toFixed(2)}`, accent: (v2Portfolio.data?.totalUnrealizedPnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400" },
+            { label: "Realized P&L", value: `${(v2Portfolio.data?.totalRealizedPnl ?? 0) >= 0 ? "+" : ""}$${(v2Portfolio.data?.totalRealizedPnl ?? 0).toFixed(2)}`, accent: (v2Portfolio.data?.totalRealizedPnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400" },
+            { label: "Total P&L", value: `${(v2Portfolio.data?.totalPnl ?? 0) >= 0 ? "+" : ""}$${(v2Portfolio.data?.totalPnl ?? 0).toFixed(2)}`, accent: (v2Portfolio.data?.totalPnl ?? 0) >= 0 ? "text-emerald-400" : "text-red-400" },
+          ].map((stat) => (
+            <div key={stat.label} className="glass-card rounded-xl p-4 flex flex-col items-center gap-1">
+              <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">{stat.label}</span>
+              <span className={`text-lg font-bold font-mono tabular-nums ${stat.accent}`}>{stat.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* ── D. Holdings (Paper Account) ── */}
       <div className="glass-card rounded-xl overflow-hidden">
