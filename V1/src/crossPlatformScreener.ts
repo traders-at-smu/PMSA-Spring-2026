@@ -102,6 +102,7 @@ export interface MatchedPairInfo {
   kalshiYesBid: number;
   kalshiYesAsk: number;
   hasArb: boolean;
+  resolutionTimeUtc?: string;
 }
 
 export interface CrossPlatformResults {
@@ -1160,7 +1161,10 @@ export class CrossPlatformScreener {
         };
 
         // Run depth-walking evaluation (falls back to single-level at ask prices)
-        const dwDecisions = evaluatePairSnapshot(snapshot, DEFAULT_STRATEGY_PARAMS);
+        // Use annualizedEdgeMin=0 so the walk computes true edge for ALL positive-edge arbs.
+        // The minAnnualizedReturn filter below handles thresholding separately.
+        const SCREENER_WALK_PARAMS: StrategyParams = { ...DEFAULT_STRATEGY_PARAMS, annualizedEdgeMin: 0 };
+        const dwDecisions = evaluatePairSnapshot(snapshot, SCREENER_WALK_PARAMS);
         // Find the matching strategy decision
         const matchStrategy: "BUY_KY_BUY_PN" | "BUY_KN_BUY_PY" =
           strat.buyYesVenue === "KALSHI" ? "BUY_KY_BUY_PN" : "BUY_KN_BUY_PY";

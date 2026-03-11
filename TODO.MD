@@ -1,5 +1,7 @@
-- [ ] Fix Annualized edge for screener
-- [ ] Implement Manual Pair selection on execution tab
-- [ ] Clean up execution tab
-- [ ] Fix execution date being pulled through manual pair table 
-
+- [ ] Fees Not populating correctly
+- [ ] Keep overview tab cached, update it live after first load
+- [ ] On the Scanner Pairs page, only shows Poly Yes / Kalshi Yes, include Poly No / Kalshi No
+- [ ] On manual, always shows " (a number based on the excel sheet) matched pairs across 0 Polymarket & 0 Kalshi markets" show full the count for each market 
+- [ ] Dates not pulling correctly, many contracts resolve in 2028 when they end in 2026. 
+- [ ] Add Polytoken and check_and_append functionality to v1 UI 
+- [ ] Add sort functionality by clicking headers on table in Scanner

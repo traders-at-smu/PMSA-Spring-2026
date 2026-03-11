@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -l \"demo\\\\|Demo\" \"d:\\\\GitHub\\\\polymarket-copy-trading-bot-mtg\\\\polymarket-copy-trading-bot\\\\V1\\\\src\\\\dashboard-ui\\\\src\\\\components\"/*.tsx)"
+    ]
+  }
+}

@@ -120,6 +120,7 @@ function extractKalshiYesQuotes(kalshi: any): { yesBid: number; yesAsk: number }
 
 export class ManualPairsService {
   private cache: Cache | null = null;
+  private loadingPromise: Promise<MatchedPairInfo[]> | null = null;
 
   // Resolve paths relative to repo root (V1/src/services → V1/src → V1 → repo root)
   private readonly xlsxPath = path.resolve(__dirname, "../../../V2/Pairs_for_Kalshi_and_Polymarket.xlsx");
@@ -129,12 +130,24 @@ export class ManualPairsService {
     if (this.cache && Date.now() < this.cache.expiresAt) {
       return this.cache.pairs;
     }
+    if (this.loadingPromise) {
+      return this.loadingPromise;
+    }
 
-    const raw = await this.readExcelPairs();
-    const pairs = await this.fetchLivePrices(raw);
-    this.cache = { pairs, expiresAt: Date.now() + CACHE_TTL_MS };
-    console.log(`  Manual pairs: loaded ${pairs.length} pairs from Excel`);
-    return pairs;
+    this.loadingPromise = this.readExcelPairs()
+      .then((raw) => this.fetchLivePrices(raw))
+      .then((pairs) => {
+        this.cache = { pairs, expiresAt: Date.now() + CACHE_TTL_MS };
+        this.loadingPromise = null;
+        console.log(`  Manual pairs: loaded ${pairs.length} pairs from Excel`);
+        return pairs;
+      })
+      .catch((err) => {
+        this.loadingPromise = null;
+        throw err;
+      });
+
+    return this.loadingPromise;
   }
 
   invalidateCache(): void {
@@ -227,6 +240,7 @@ export class ManualPairsService {
       kalshiYesBid,
       kalshiYesAsk,
       hasArb,
+      resolutionTimeUtc: pair.resolution_time_utc || kalshi?.close_time || "",
     };
   }
 

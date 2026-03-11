@@ -177,7 +177,7 @@ app.post("/api/cross-platform/refresh", async (_req, res) => {
       timestamp: results.timestamp,
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -234,7 +234,7 @@ app.get("/api/cross-platform/arbs", async (_req, res) => {
           kalshiLiquidity: 0,
           polymarketVolume24h: 0,
           kalshiVolume24h: 0,
-          endDate: "",
+          endDate: p.resolutionTimeUtc || "",
           polyConditionId: "",
           polyYesTokenId: "",
           polyNoTokenId: "",
@@ -243,7 +243,19 @@ app.get("/api/cross-platform/arbs", async (_req, res) => {
           kpTotalCost: contracts * totalCost,
           edgeDollar: contracts * grossProfit,
           edgePct: grossProfit / totalCost,
-          annualizedEdge: 0,
+          annualizedEdge: (() => {
+            const endDateStr = p.resolutionTimeUtc || "";
+            const daysToRes = endDateStr
+              ? Math.max((Date.parse(endDateStr) - Date.now()) / 86400000, 0.001)
+              : 0;
+            return daysToRes > 0 ? (grossProfit / totalCost) * 365 / daysToRes : 0;
+          })(),
+          daysToResolution: (() => {
+            const endDateStr = p.resolutionTimeUtc || "";
+            return endDateStr
+              ? Math.max((Date.parse(endDateStr) - Date.now()) / 86400000, 0)
+              : 0;
+          })(),
           strategy: useDir1 ? "BUY_KY_BUY_PN" : "BUY_KN_BUY_PY",
           stopReason: "manual_pair",
         });
@@ -268,7 +280,7 @@ app.get("/api/cross-platform/arbs", async (_req, res) => {
       timestamp: results.timestamp,
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -303,7 +315,7 @@ app.get("/api/cross-platform/pairs", async (req, res) => {
       source: verifiedOnly ? "manual" : "ai",
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -317,7 +329,7 @@ app.get("/api/cross-platform/diffs", async (_req, res) => {
       timestamp: results.timestamp,
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -327,7 +339,7 @@ app.get("/api/cross-platform/signals", async (_req, res) => {
     signalTracker.tick(results.arbs);
     res.json(signalTracker.getState());
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 
@@ -421,7 +433,7 @@ app.get("/api/overview", async (_req, res) => {
       timestamp: results.timestamp,
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 

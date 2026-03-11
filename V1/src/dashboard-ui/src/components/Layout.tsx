@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from "react";
 
-export type Tab = "overview" | "scanner" | "execution" | "holdings" | "arb-scanner" | "settings";
+export type Tab = "overview" | "scanner" | "execution" | "settings";
 
 interface LayoutProps {
   activeTab: Tab;
@@ -13,9 +13,7 @@ interface LayoutProps {
 const tabs: { id: Tab; label: string; desc: string }[] = [
   { id: "overview", label: "Overview", desc: "Executive summary" },
   { id: "scanner", label: "Scanner", desc: "Cross-platform arb detection" },
-  { id: "execution", label: "Execution", desc: "Trade plans & paper account" },
-  { id: "holdings", label: "Holdings", desc: "Current open positions" },
-  { id: "arb-scanner", label: "Arb Scanner", desc: "Manual depth-walking calculator" },
+  { id: "execution", label: "Execution", desc: "Trade execution & holdings" },
   { id: "settings", label: "Settings", desc: "Configuration" },
 ];
 
