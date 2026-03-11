@@ -67,6 +67,7 @@ const modelClient = new PythonModelClient();
 const miguelService = new MiguelService(modelClient);
 const crossPlatformScreener = new CrossPlatformScreener(screener, kalshiScreener);
 executionService.setCrossPlatformScreener(crossPlatformScreener);
+// Wire stateStore after it's created (deferred below)
 const telegramService = new TelegramService();
 const signalTracker = new SignalTrackerService(telegramService);
 const paperAccount = new PaperAccountService();
@@ -83,6 +84,7 @@ const executionEngineV2 = new ExecutionEngine(
   telegramService,
   DEFAULT_LIVE_SAFETY
 );
+crossPlatformScreener.setStateStore(stateStore);
 console.log("  V2 services: SQLite + Risk + Execution engine initialized");
 const manualPairsService = new ManualPairsService();
 
@@ -987,6 +989,72 @@ app.post("/api/cross-platform/pairs/verify", (req, res) => {
     }
     const keys = Array.from(stateStore.getVerifiedPairKeys());
     res.json({ success: true, verified: verified !== false, keys });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ---- AI Matching ----
+
+app.get("/api/ai-matching/results", (req, res) => {
+  try {
+    const verdict = req.query.verdict as string | undefined;
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 200;
+    const results = stateStore.listAiMatches({ verdict, limit });
+    res.json({ results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/ai-matching/status", (_req, res) => {
+  try {
+    const screenerStatus = crossPlatformScreener.getStatus();
+    const matchStats = stateStore.getAiMatchStats();
+    res.json({
+      aiVerifier: screenerStatus.aiVerifier,
+      kimiStats: screenerStatus.kimiStats,
+      matchStats,
+      lastScanAt: screenerStatus.lastScanAt,
+      scanning: screenerStatus.scanning,
+      lastScanDurationMs: screenerStatus.lastScanDurationMs,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/ai-matching/override", (req, res) => {
+  try {
+    const { polySlug, kalshiTicker, action } = req.body;
+    if (!polySlug || !kalshiTicker || !action) {
+      return res.status(400).json({ error: "polySlug, kalshiTicker, and action are required" });
+    }
+    if (!["approved", "rejected"].includes(action)) {
+      return res.status(400).json({ error: "action must be 'approved' or 'rejected'" });
+    }
+    stateStore.updateAiMatchVerdict(polySlug, kalshiTicker, action);
+    res.json({ success: true, polySlug, kalshiTicker, action });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/ai-matching/config", (_req, res) => {
+  try {
+    const settings = getRedactedSettings();
+    res.json({
+      model: settings.apiKeys.kimi.model,
+      baseUrl: settings.apiKeys.kimi.baseUrl,
+      apiKeySet: !!getSettings().apiKeys.kimi.apiKey,
+      thresholds: {
+        rerankLow: 0.20,
+        rerankHigh: 0.60,
+        kimiConfidenceMin: 0.70,
+        kimiTextWeight: 0.40,
+        kimiAiWeight: 0.60,
+      },
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

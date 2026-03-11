@@ -27,6 +27,11 @@
       "apiPassphrase": "",
       "bearerToken": "",
       "orderEndpoint": ""
+    },
+    "kimi": {
+      "apiKey": "",
+      "baseUrl": "https://api.moonshot.ai/v1",
+      "model": "kimi-k2.5"
     }
   },
   "externalApis": {

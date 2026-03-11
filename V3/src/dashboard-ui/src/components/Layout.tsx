@@ -1,6 +1,6 @@
 import { ReactNode, useState, useEffect } from "react";
 
-export type Tab = "overview" | "scanner" | "execution" | "holdings" | "arb-scanner" | "ai-matching" | "settings";
+export type Tab = "overview" | "scanner" | "execution" | "holdings" | "arb-scanner" | "ai-matching" | "manual-verify" | "settings";
 
 interface LayoutProps {
   activeTab: Tab;
@@ -17,6 +17,7 @@ const tabs: { id: Tab; label: string; desc: string }[] = [
   { id: "holdings", label: "Holdings", desc: "Current open positions" },
   { id: "arb-scanner", label: "Arb Scanner", desc: "Manual depth-walking calculator" },
   { id: "ai-matching", label: "AI Matching", desc: "KimiK2.5 pair verification" },
+  { id: "manual-verify", label: "Manual Verify", desc: "Approve/reject matched pairs" },
   { id: "settings", label: "Settings", desc: "Configuration" },
 ];
 

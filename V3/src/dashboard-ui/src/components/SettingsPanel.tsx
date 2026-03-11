@@ -34,6 +34,11 @@ interface Settings {
       bearerToken: string;
       orderEndpoint: string;
     };
+    kimi: {
+      apiKey: string;
+      baseUrl: string;
+      model: string;
+    };
   };
   externalApis: {
     gammaApiUrl: string;
@@ -41,18 +46,9 @@ interface Settings {
     dataApiUrl: string;
     kalshiApiUrl: string;
   };
-  python: {
-    pythonExecutable: string;
-    modelBridgePath: string;
-    miguelScriptsDir: string;
-    miguel: {
-      pollIntervalSec: number;
-      minPairs: number;
-    };
-  };
 }
 
-type SectionKey = "execution" | "apiKeys" | "dashboard" | "python";
+type SectionKey = "execution" | "apiKeys" | "dashboard" | "externalApis";
 
 function GlassCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
@@ -175,6 +171,8 @@ export function SettingsPanel() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ type: "success" | "error"; msg: string } | null>(null);
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(["execution"]));
+  const [kimiSaving, setKimiSaving] = useState(false);
+  const [kimiStatus, setKimiStatus] = useState<{ type: "success" | "error"; msg: string } | null>(null);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -270,6 +268,48 @@ export function SettingsPanel() {
     setStatus(null);
   };
 
+  const handleSaveKimi = async () => {
+    const apiKey = getValue("apiKeys.kimi.apiKey");
+    const baseUrl = getValue("apiKeys.kimi.baseUrl");
+    const model = getValue("apiKeys.kimi.model");
+    if (!apiKey || apiKey.includes("***")) {
+      setKimiStatus({ type: "error", msg: "Enter a valid Kimi API key (not masked)" });
+      return;
+    }
+    setKimiSaving(true);
+    setKimiStatus(null);
+    try {
+      const res = await fetch(`${API}/api/settings/kimi`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey, baseUrl, model }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Save failed");
+      }
+      const data = await res.json();
+      // Remove kimi keys from draft since they're saved
+      setDraft((prev) => {
+        const next = JSON.parse(JSON.stringify(prev));
+        if (next.apiKeys?.kimi) delete next.apiKeys.kimi;
+        if (next.apiKeys && Object.keys(next.apiKeys).length === 0) delete next.apiKeys;
+        return next;
+      });
+      setKimiStatus({
+        type: "success",
+        msg: data.enabled
+          ? `Kimi AI enabled (${data.model}). Active immediately.`
+          : "Key saved but Kimi could not be enabled.",
+      });
+      fetchSettings();
+    } catch (err: any) {
+      setKimiStatus({ type: "error", msg: err.message });
+    } finally {
+      setKimiSaving(false);
+    }
+  };
+
   if (!settings) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -282,7 +322,6 @@ export function SettingsPanel() {
     { key: "execution", title: "Execution", desc: "Trading mode, bankroll, and edge thresholds", icon: "EX", accent: "from-rose-400 to-pink-500" },
     { key: "apiKeys", title: "API Keys", desc: "Polymarket and Kalshi credentials", icon: "KY", accent: "from-amber-400 to-orange-500" },
     { key: "dashboard", title: "Dashboard", desc: "Server port, refresh intervals", icon: "DB", accent: "from-violet-400 to-fuchsia-500" },
-    { key: "python", title: "Python / Model", desc: "Python executable and model bridge paths", icon: "PY", accent: "from-cyan-400 to-teal-500" },
     { key: "externalApis", title: "External APIs", desc: "API endpoint URLs", icon: "AP", accent: "from-lime-400 to-green-500" },
   ];
 
@@ -515,7 +554,7 @@ export function SettingsPanel() {
                       <FieldRow label="API Key">
                         <SecretInput
                           value={getValue("apiKeys.kimi.apiKey")}
-                          onChange={(v) => updateDraft("apiKeys.kimi.apiKey", v)}
+                          onChange={(v) => { updateDraft("apiKeys.kimi.apiKey", v); setKimiStatus(null); }}
                         />
                       </FieldRow>
                       <FieldRow label="Base URL">
@@ -532,6 +571,20 @@ export function SettingsPanel() {
                           mono
                         />
                       </FieldRow>
+                      <div className="mt-3 flex items-center gap-3">
+                        <button
+                          onClick={handleSaveKimi}
+                          disabled={kimiSaving}
+                          className="px-4 py-2 text-xs font-semibold rounded-lg bg-gradient-to-r from-violet-500 to-fuchsia-600 text-white shadow-lg shadow-violet-500/20 hover:shadow-violet-500/30 transition-all disabled:opacity-50"
+                        >
+                          {kimiSaving ? "Saving..." : "Save & Activate Kimi"}
+                        </button>
+                        {kimiStatus && (
+                          <span className={`text-xs font-medium ${kimiStatus.type === "success" ? "text-emerald-400" : "text-red-400"}`}>
+                            {kimiStatus.msg}
+                          </span>
+                        )}
+                      </div>
                     </>
                   )}
 
@@ -565,46 +618,6 @@ export function SettingsPanel() {
                           onChange={(v) => updateDraft("dashboard.refreshIntervalMs", v)}
                           min={5000}
                           step={1000}
-                        />
-                      </FieldRow>
-                    </>
-                  )}
-
-                  {sec.key === "python" && (
-                    <>
-                      <FieldRow label="Python Executable">
-                        <TextInput
-                          value={getValue("python.pythonExecutable")}
-                          onChange={(v) => updateDraft("python.pythonExecutable", v)}
-                          mono
-                        />
-                      </FieldRow>
-                      <FieldRow label="Model Bridge Path">
-                        <TextInput
-                          value={getValue("python.modelBridgePath")}
-                          onChange={(v) => updateDraft("python.modelBridgePath", v)}
-                          mono
-                        />
-                      </FieldRow>
-                      <FieldRow label="Miguel Scripts Dir">
-                        <TextInput
-                          value={getValue("python.miguelScriptsDir")}
-                          onChange={(v) => updateDraft("python.miguelScriptsDir", v)}
-                          mono
-                        />
-                      </FieldRow>
-                      <FieldRow label="Poll Interval (sec)">
-                        <NumberInput
-                          value={getValue("python.miguel.pollIntervalSec")}
-                          onChange={(v) => updateDraft("python.miguel.pollIntervalSec", v)}
-                          min={1}
-                        />
-                      </FieldRow>
-                      <FieldRow label="Min Pairs">
-                        <NumberInput
-                          value={getValue("python.miguel.minPairs")}
-                          onChange={(v) => updateDraft("python.miguel.minPairs", v)}
-                          min={1}
                         />
                       </FieldRow>
                     </>

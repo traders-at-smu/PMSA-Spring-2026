@@ -1,0 +1,47 @@
+# Node / TypeScript
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+*.js.map
+src/dashboard-ui/node_modules/
+src/dashboard-ui/dist/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+rpcUrls.json
+config/settings.local.json
+
+# Runtime data (keep training-set.json)
+data/*.db
+data/*.db-shm
+data/*.db-wal
+data/*-cache.json
+logs/
+opportunities_raw.csv
+pairs.csv
+python/data/live_quotes.csv
+python/data/model_v1_section_d.json
+python/data/model_v1_section_d_input.json
+
+# Config with secrets (use settings.example.json as template)
+config/settings.json
+
+# Python caches / virtual envs
+__pycache__/
+python/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+

@@ -5,7 +5,7 @@ import { KalshiMarket } from "./types";
 import { EmbeddingService } from "./services/embeddingService";
 import { KimiMatchingService } from "./services/kimiMatchingService";
 import type { KimiCandidate } from "./services/kimiMatchingService";
-import { getSettings } from "./runtimeSettings";
+import { getSettings } from "./config";
 import type { StateStore } from "./services/stateStore";
 import {
   computeKalshiFee,
@@ -677,16 +677,26 @@ function buildKalshiUrl(
 const PRIMARY_THRESHOLD = 0.50;
 const FALLBACK_THRESHOLD = 0.25;
 
-// AI re-ranker thresholds
-const RERANK_LOW = 0.20;            // Below this: reject regardless of AI score
-const RERANK_HIGH = 0.60;           // Above this: accept regardless (text score is confident enough)
-const KIMI_CONFIDENCE_MIN = 0.70;   // Min Kimi confidence to accept a match
+// AI re-ranker thresholds — read from config at call time
+// RERANK_LOW/HIGH are fallback defaults; runtime uses settings.aiMatching.textScoreAiZone
+const RERANK_LOW = 0.50;
+const RERANK_HIGH = 0.90;
 const KIMI_TEXT_WEIGHT = 0.40;      // Weight for text score in Kimi combined scoring
 const KIMI_AI_WEIGHT = 0.60;        // Weight for Kimi confidence in combined scoring
 // Embedding fallback weights (used when Kimi unavailable)
 const TEXT_WEIGHT = 0.55;
 const EMBEDDING_WEIGHT = 0.45;
 const COMBINED_THRESHOLD = 0.45;
+
+// ---- Scan Log Ring Buffer ----
+
+export interface ScanLogEntry {
+  ts: string;
+  level: "info" | "warn" | "error" | "step" | "detail";
+  msg: string;
+}
+
+const SCAN_LOG_MAX = 500;
 
 export class CrossPlatformScreener {
   private polyScreener: ArbitrageScreener;
@@ -703,6 +713,28 @@ export class CrossPlatformScreener {
   private _lastScanAt: string | null = null;
   private _scanning = false;
   private _lastScanDurationMs = 0;
+
+  // Live scan log
+  private _scanLog: ScanLogEntry[] = [];
+  private _logListeners: Set<(entry: ScanLogEntry) => void> = new Set();
+
+  private _log(level: ScanLogEntry["level"], msg: string): void {
+    const entry: ScanLogEntry = { ts: new Date().toISOString(), level, msg };
+    this._scanLog.push(entry);
+    if (this._scanLog.length > SCAN_LOG_MAX) this._scanLog.splice(0, this._scanLog.length - SCAN_LOG_MAX);
+    for (const fn of this._logListeners) fn(entry);
+  }
+
+  /** Subscribe to real-time log entries. Returns unsubscribe function. */
+  onLog(fn: (entry: ScanLogEntry) => void): () => void {
+    this._logListeners.add(fn);
+    return () => { this._logListeners.delete(fn); };
+  }
+
+  /** Get recent log entries (last N). */
+  getRecentLogs(count = 100): ScanLogEntry[] {
+    return this._scanLog.slice(-count);
+  }
 
   constructor(polyScreener?: ArbitrageScreener, kalshiScreener?: KalshiScreener) {
     this.polyScreener = polyScreener || new ArbitrageScreener();
@@ -733,9 +765,37 @@ export class CrossPlatformScreener {
     this.stateStore = store;
   }
 
+  /** Re-initialize the Kimi service with current settings (call after API key changes) */
+  reloadKimiService(): { enabled: boolean; model?: string } {
+    const settings = getSettings();
+    const kimiKey = settings.apiKeys.kimi.apiKey;
+    if (kimiKey) {
+      this.kimiService = new KimiMatchingService(kimiKey, {
+        baseUrl: settings.apiKeys.kimi.baseUrl,
+        model: settings.apiKeys.kimi.model,
+      });
+      this.embeddingService = null;
+      console.log(`  AI pair verifier: RELOADED (KimiK2.5 — ${settings.apiKeys.kimi.model})`);
+      return { enabled: true, model: settings.apiKeys.kimi.model };
+    }
+    this.kimiService = null;
+    console.log("  AI pair verifier: DISABLED (no KIMI_API_KEY)");
+    return { enabled: false };
+  }
+
   invalidateCache(): void {
     this.cachedResults = null;
     this.cacheExpiry = 0;
+  }
+
+  /** Invalidate everything INCLUDING the Kimi file cache — forces full AI re-evaluation */
+  invalidateAll(): void {
+    this.cachedResults = null;
+    this.cacheExpiry = 0;
+    if (this.kimiService) {
+      this.kimiService.clearCache();
+      console.log("[Screener] Kimi file cache cleared — all pairs will be re-evaluated by AI");
+    }
   }
 
   /** Status info for the UI status endpoint */
@@ -860,32 +920,41 @@ export class CrossPlatformScreener {
   private async computeResults(): Promise<CrossPlatformResults> {
     this._scanning = true;
     const scanStart = Date.now();
-    console.log("Cross-platform screener: scanning both venues...");
+    this._log("step", "Scan started — fetching markets from both venues...");
 
     // Fetch markets from both platforms in parallel
     const [polyMarkets, kalshiMarkets] = await Promise.all([
-      this.polyScreener.fetchAllActiveMarkets(),
-      this.kalshiScreener.fetchAllActiveMarkets(),
+      this.polyScreener.fetchAllActiveMarkets().then((r) => {
+        this._log("info", `Polymarket: fetched ${r.length} active markets`);
+        return r;
+      }),
+      this.kalshiScreener.fetchAllActiveMarkets().then((r) => {
+        this._log("info", `Kalshi: fetched ${r.length} active markets`);
+        return r;
+      }),
     ]);
 
     // Pre-filter: only keep Kalshi markets with actual price data
-    // Kalshi has 470k+ markets but most have zero bids/asks
     const kalshiWithPrices = kalshiMarkets.filter(
       (m) => (m.yes_bid_dollars || 0) > 0 || (m.yes_ask_dollars || 0) > 0
     );
-    console.log(
-      `  Kalshi pre-filter: ${kalshiWithPrices.length}/${kalshiMarkets.length} have price data`
-    );
+    this._log("info", `Kalshi pre-filter: ${kalshiWithPrices.length}/${kalshiMarkets.length} have price data`);
 
     // Normalize all markets into a common format
+    this._log("step", "Normalizing markets for text similarity...");
     const normalizedPoly = this.normalizePolymarkets(polyMarkets);
     const normalizedKalshi = this.normalizeKalshiMarkets(kalshiWithPrices);
+    this._log("info", `Normalized: ${normalizedPoly.length} Polymarket, ${normalizedKalshi.length} Kalshi`);
 
     // Match events across platforms (async to yield event loop)
+    this._log("step", "Running text similarity matching...");
     const pairs = await this.matchEvents(normalizedPoly, normalizedKalshi);
+    this._log("info", `Text matching complete: ${pairs.length} pairs found`);
 
     // Find arbitrage opportunities (async: fetches depth for top candidates)
+    this._log("step", "Evaluating arbitrage opportunities...");
     const arbs = await this.findArbitrage(pairs);
+    this._log("info", `Arb evaluation complete: ${arbs.length} opportunities`);
 
     // Find price differences
     const diffs = this.findPriceDiffs(pairs);
@@ -936,6 +1005,7 @@ export class CrossPlatformScreener {
     this._lastScanDurationMs = Date.now() - scanStart;
     this._scanning = false;
 
+    this._log("step", `Scan complete in ${(this._lastScanDurationMs / 1000).toFixed(1)}s — ${pairs.length} pairs, ${arbs.length} arbs, ${diffs.length} diffs`);
     console.log(
       `  Cross-platform: ${pairs.length} matched pairs, ${arbs.length} arbs, ${diffs.length} diffs (${this._lastScanDurationMs}ms)`
     );
@@ -1044,6 +1114,11 @@ export class CrossPlatformScreener {
     polyMarkets: NormalizedMarket[],
     kalshiMarkets: NormalizedMarket[]
   ): Promise<MatchedPair[]> {
+    // Read AI zone thresholds from config
+    const aiZone = getSettings().aiMatching.textScoreAiZone;
+    const rerankLow = aiZone[0] ?? RERANK_LOW;
+    const rerankHigh = aiZone[1] ?? RERANK_HIGH;
+
     // Build IDF map from both corpora for TF-IDF weighting
     buildIdfMap([...polyMarkets, ...kalshiMarkets]);
 
@@ -1113,8 +1188,8 @@ export class CrossPlatformScreener {
         }
       }
 
-      if (bestMatch && bestScore >= RERANK_LOW) {
-        if (bestScore >= RERANK_HIGH) {
+      if (bestMatch && bestScore >= rerankLow) {
+        if (bestScore >= rerankHigh) {
           // High-confidence text match — accept directly
           usedKalshi.add(bestMatch.id);
           matchedPoly.add(pm.id);
@@ -1134,10 +1209,37 @@ export class CrossPlatformScreener {
       }
     }
 
+    this._log("info", `Text pass: ${pairs.length} high-confidence, ${ambiguousCandidates.length} ambiguous (need AI)`);
+
     // ---- AI re-rank for ambiguous candidates ----
-    if (this.kimiService && ambiguousCandidates.length > 0) {
+    // Sort by text score descending so the best text matches get AI verification first
+    ambiguousCandidates.sort((a, b) => b.textScore - a.textScore);
+
+    // Cap at maxAiCandidates to limit API calls; overflow falls back to text-only
+    const maxAi = getSettings().aiMatching.maxAiCandidates;
+    const aiCandidates = ambiguousCandidates.slice(0, maxAi);
+    const overflowCandidates = ambiguousCandidates.slice(maxAi);
+
+    // Accept overflow candidates using text-only threshold
+    for (const c of overflowCandidates) {
+      if (c.textScore >= PRIMARY_THRESHOLD && !usedKalshi.has(c.kalshi.id)) {
+        usedKalshi.add(c.kalshi.id);
+        matchedPoly.add(c.polymarket.id);
+        pairs.push({
+          polymarket: c.polymarket,
+          kalshi: c.kalshi,
+          similarityScore: c.textScore,
+        });
+      }
+    }
+
+    if (this.kimiService && aiCandidates.length > 0) {
+      this._log("step", `Kimi AI verification: sending ${aiCandidates.length} candidates (max ${maxAi})...`);
+      if (overflowCandidates.length > 0) {
+        this._log("detail", `${overflowCandidates.length} overflow candidates using text-only threshold`);
+      }
       // Kimi chat-based verification
-      const kimiCandidates: KimiCandidate[] = ambiguousCandidates.map((c) => ({
+      const kimiCandidates: KimiCandidate[] = aiCandidates.map((c) => ({
         polyTitle: c.polymarket.title,
         kalshiTitle: c.kalshi.title,
         polySlug: c.polymarket.slug,
@@ -1148,16 +1250,19 @@ export class CrossPlatformScreener {
       try {
         const kimiResults = await this.kimiService.judgePairs(kimiCandidates);
         const stats = this.kimiService.getCacheStats();
-        console.log(
-          `  Kimi AI re-rank: ${ambiguousCandidates.length} candidates, ` +
-            `${stats.cacheMisses} API calls (cache: ${stats.cacheSize} entries, ${(stats.hitRate * 100).toFixed(0)}% hit)`
-        );
+        this._log("info", `Kimi done: ${stats.cacheMisses} API calls, ${stats.cacheSize} cached, ${(stats.hitRate * 100).toFixed(0)}% hit rate`);
 
-        for (const c of ambiguousCandidates) {
+        let aiAccepted = 0;
+        let aiRejected = 0;
+        for (const c of aiCandidates) {
           const key = `${c.polymarket.slug}::${c.kalshi.slug || c.kalshi.id}`;
           const result = kimiResults.get(key);
 
           if (result) {
+            const verdict = result.match && result.confidence >= getSettings().aiMatching.confidenceThreshold;
+            const tag = verdict ? "MATCH" : "NO";
+            this._log("detail", `[${tag} ${(result.confidence * 100).toFixed(0)}%] "${c.polymarket.title}" ↔ "${c.kalshi.title}"${result.fromCache ? " (cached)" : ""}`);
+            if (verdict) aiAccepted++; else aiRejected++;
             // Persist to SQLite
             if (this.stateStore) {
               try {
@@ -1173,12 +1278,14 @@ export class CrossPlatformScreener {
                   aiModel: getSettings().apiKeys.kimi.model,
                   aiLatencyMs: result.latencyMs,
                   fromCache: result.fromCache,
-                  finalVerdict: result.match && result.confidence >= KIMI_CONFIDENCE_MIN ? "verified" : "pending",
+                  finalVerdict: result.match && result.confidence >= getSettings().aiMatching.confidenceThreshold ? "verified" : "pending",
+                  polyUrl: c.polymarket.url,
+                  kalshiUrl: c.kalshi.url,
                 });
               } catch { /* non-critical */ }
             }
 
-            if (result.match && result.confidence >= KIMI_CONFIDENCE_MIN) {
+            if (result.match && result.confidence >= getSettings().aiMatching.confidenceThreshold) {
               const combined = KIMI_TEXT_WEIGHT * c.textScore + KIMI_AI_WEIGHT * result.confidence;
               if (!usedKalshi.has(c.kalshi.id)) {
                 usedKalshi.add(c.kalshi.id);
@@ -1203,9 +1310,11 @@ export class CrossPlatformScreener {
             }
           }
         }
+        this._log("info", `Kimi summary: ${aiAccepted} accepted, ${aiRejected} rejected out of ${aiCandidates.length}`);
       } catch (err) {
+        this._log("error", `Kimi AI re-rank failed: ${(err as Error).message}`);
         console.warn("  Kimi AI re-rank failed, falling back to text-only:", (err as Error).message);
-        for (const c of ambiguousCandidates) {
+        for (const c of aiCandidates) {
           if (c.textScore >= PRIMARY_THRESHOLD && !usedKalshi.has(c.kalshi.id)) {
             usedKalshi.add(c.kalshi.id);
             matchedPoly.add(c.polymarket.id);
@@ -1217,10 +1326,10 @@ export class CrossPlatformScreener {
           }
         }
       }
-    } else if (this.embeddingService && ambiguousCandidates.length > 0) {
+    } else if (this.embeddingService && aiCandidates.length > 0) {
       // Fallback: OpenAI embedding re-ranking
       const titlesToEmbed = new Set<string>();
-      for (const c of ambiguousCandidates) {
+      for (const c of aiCandidates) {
         titlesToEmbed.add(c.polymarket.title);
         titlesToEmbed.add(c.kalshi.title);
       }
@@ -1229,11 +1338,11 @@ export class CrossPlatformScreener {
         const vectors = await this.embeddingService.batchEmbed([...titlesToEmbed]);
         const stats = this.embeddingService.getCacheStats();
         console.log(
-          `  Embedding re-rank (fallback): ${ambiguousCandidates.length} candidates, ` +
+          `  Embedding re-rank (fallback): ${aiCandidates.length} candidates, ` +
             `${titlesToEmbed.size} titles embedded (cache: ${stats.size} vectors, ${(stats.hitRate * 100).toFixed(0)}% hit)`
         );
 
-        for (const c of ambiguousCandidates) {
+        for (const c of aiCandidates) {
           const vecA = vectors.get(c.polymarket.title);
           const vecB = vectors.get(c.kalshi.title);
 
@@ -1266,7 +1375,7 @@ export class CrossPlatformScreener {
         }
       } catch (err) {
         console.warn("  Embedding re-rank failed, falling back to text-only:", (err as Error).message);
-        for (const c of ambiguousCandidates) {
+        for (const c of aiCandidates) {
           if (c.textScore >= PRIMARY_THRESHOLD && !usedKalshi.has(c.kalshi.id)) {
             usedKalshi.add(c.kalshi.id);
             matchedPoly.add(c.polymarket.id);
@@ -1278,9 +1387,9 @@ export class CrossPlatformScreener {
           }
         }
       }
-    } else if (ambiguousCandidates.length > 0) {
+    } else if (aiCandidates.length > 0) {
       // No AI service — fall back to text-only threshold
-      for (const c of ambiguousCandidates) {
+      for (const c of aiCandidates) {
         if (c.textScore >= PRIMARY_THRESHOLD && !usedKalshi.has(c.kalshi.id)) {
           usedKalshi.add(c.kalshi.id);
           matchedPoly.add(c.polymarket.id);

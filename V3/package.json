@@ -1,0 +1,43 @@
+{
+  "name": "v3-unified-arb-bot",
+  "version": "3.0.0",
+  "description": "Unified cross-venue prediction market arbitrage bot (Polymarket ↔ Kalshi)",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/index.ts serve",
+    "serve": "tsx src/index.ts serve",
+    "loop": "tsx src/index.ts loop",
+    "scan-once": "tsx src/index.ts scan-once",
+    "dashboard": "npm run dashboard:build && npm run dashboard:server",
+    "dashboard:server": "tsx src/index.ts serve",
+    "dashboard:build": "cd src/dashboard-ui && npx vite build",
+    "dashboard:dev": "cd src/dashboard-ui && npx vite",
+    "train:build": "tsx src/scripts/buildTrainingSet.ts",
+    "train:eval": "tsx src/scripts/evaluateMatching.ts",
+    "train:add": "tsx src/scripts/addTrainingExample.ts",
+    "postinstall": "cd src/dashboard-ui && npm install"
+  },
+  "dependencies": {
+    "@ethersproject/bignumber": "^5.7.0",
+    "@ethersproject/constants": "^5.7.0",
+    "@ethersproject/contracts": "^5.7.0",
+    "@ethersproject/providers": "^5.7.0",
+    "@ethersproject/wallet": "^5.7.0",
+    "@polymarket/clob-client": "^5.2.4",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "axios": "^1.7.0",
+    "better-sqlite3": "^12.6.2",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.0",
+    "express": "^5.2.1",
+    "vite": "^7.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.5.0"
+  }
+}
