@@ -389,7 +389,9 @@ export type StopReason =
   | "annualized_edge_below_min"
   | "kalshi_depth_exhausted"
   | "polymarket_depth_exhausted"
-  | "depth_exhausted";
+  | "depth_exhausted"
+  | "no_depth_data"
+  | "stale_snapshot";
 
 export type ArbStrategy = "BUY_KY_BUY_PN" | "BUY_KN_BUY_PY";
 
@@ -542,6 +544,7 @@ export interface PairSnapshot {
   polyYesTokenId: string;
   polyNoTokenId: string;
   resolutionTimeUtc: string;
+  snapshotTimeUtc?: string; // when prices were captured — used for stale price guard
   category: string;
   kalshi: MarketQuote;
   polymarket: MarketQuote;

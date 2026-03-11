@@ -18,6 +18,11 @@ import { PortfolioTracker } from "../services/portfolioTracker";
 import { RiskManager, DEFAULT_RISK_CONFIG } from "../services/riskManager";
 import { ExecutionEngine, DEFAULT_LIVE_SAFETY } from "../services/executionEngine";
 import { ManualPairsService } from "../services/manualPairsService";
+import {
+  evaluatePairSnapshot,
+  DEFAULT_STRATEGY_PARAMS,
+} from "../services/depthWalkingEngine";
+import type { PairSnapshot, PairDepth, DepthLevel } from "../types";
 
 const app = express();
 const runtime = getSettings();
@@ -105,6 +110,68 @@ async function getCachedKalshiScreenerData() {
   return data;
 }
 
+// ---- Depth fetching for manual pairs ----
+
+const KALSHI_API_BASE = getSettings().externalApis?.kalshiApiUrl || "https://api.elections.kalshi.com/trade-api/v2";
+const CLOB_API_BASE = getSettings().externalApis?.clobHttpUrl || "https://clob.polymarket.com";
+
+async function fetchPairDepth(
+  kalshiTicker: string,
+  polyYesTokenId: string,
+  polyNoTokenId: string,
+  timeoutMs = 5000,
+): Promise<PairDepth> {
+  const empty: PairDepth = {
+    kalshi: { buyYes: [], buyNo: [] },
+    polymarket: { yesAsks: [], noAsks: [] },
+  };
+
+  try {
+    const [kalshiBook, polyYesBook, polyNoBook] = await Promise.all([
+      kalshiTicker
+        ? axios.get(`${KALSHI_API_BASE}/markets/${kalshiTicker}/orderbook`, {
+            params: { depth: 10 }, timeout: timeoutMs,
+          }).then(r => r.data?.orderbook_fp || r.data?.orderbook || null).catch(() => null)
+        : Promise.resolve(null),
+      polyYesTokenId
+        ? axios.get(`${CLOB_API_BASE}/book`, {
+            params: { token_id: polyYesTokenId }, timeout: timeoutMs,
+          }).then(r => r.data).catch(() => null)
+        : Promise.resolve(null),
+      polyNoTokenId
+        ? axios.get(`${CLOB_API_BASE}/book`, {
+            params: { token_id: polyNoTokenId }, timeout: timeoutMs,
+          }).then(r => r.data).catch(() => null)
+        : Promise.resolve(null),
+    ]);
+
+    const parseKalshi = (levels: any[]): DepthLevel[] =>
+      (levels || []).map((l: any) => ({
+        price: (l.price || 0) / 100,
+        size: l.contracts || l.quantity || 0,
+      })).filter((l: DepthLevel) => l.size > 0);
+
+    const parsePoly = (book: any, side: "asks" | "bids"): DepthLevel[] => {
+      if (!book) return [];
+      return (book[side] || []).map((l: any) => ({
+        price: parseFloat(l.price || "0"),
+        size: parseFloat(l.size || "0"),
+      })).filter((l: DepthLevel) => l.size > 0);
+    };
+
+    if (kalshiBook) {
+      empty.kalshi.buyYes = parseKalshi(kalshiBook.yes || kalshiBook.asks);
+      empty.kalshi.buyNo = parseKalshi(kalshiBook.no || []);
+    }
+    if (polyYesBook) empty.polymarket.yesAsks = parsePoly(polyYesBook, "asks");
+    if (polyNoBook) empty.polymarket.noAsks = parsePoly(polyNoBook, "asks");
+  } catch {
+    // Return empty depth on any error
+  }
+
+  return empty;
+}
+
 // ---- API Routes ----
 
 
@@ -187,66 +254,102 @@ app.get("/api/cross-platform/arbs", async (_req, res) => {
     const { verifiedOnly } = stateStore.getRuntimeControl();
 
     if (verifiedOnly) {
-      // Manual mode: build arbs from Excel pairs with live prices
-      const settings = getSettings();
-      const maxTradeUsd = settings.execution.maxTradeUsd ?? 100;
+      // Manual mode: build arbs from Excel pairs with depth-walking
       const manualPairs = await manualPairsService.getPairs();
+      const arbPairs = manualPairs.filter(p => p.hasArb);
+
+      // Fetch depth for manual arb pairs in parallel
+      const depthResults = await Promise.allSettled(
+        arbPairs.map(p =>
+          fetchPairDepth(p.kalshiTicker, p.polyYesTokenId || "", p.polyNoTokenId || "", 5000)
+        )
+      );
 
       const arbs: import("../crossPlatformScreener").CrossPlatformArb[] = [];
-      for (const p of manualPairs) {
-        if (!p.hasArb) continue;
+      for (let i = 0; i < arbPairs.length; i++) {
+        const p = arbPairs[i];
+        const dr = depthResults[i];
+        const depth: PairDepth = dr.status === "fulfilled" ? dr.value : {
+          kalshi: { buyYes: [], buyNo: [] },
+          polymarket: { yesAsks: [], noAsks: [] },
+        };
 
-        // Determine cheapest arb direction
-        const cost1 = p.kalshiYesAsk > 0 && p.polyYesBid > 0
-          ? p.kalshiYesAsk + (1 - p.polyYesBid) : 1; // Buy Kalshi YES + Poly NO
-        const cost2 = p.polyYesAsk > 0 && p.kalshiYesBid > 0
-          ? p.polyYesAsk + (1 - p.kalshiYesBid) : 1; // Buy Poly YES + Kalshi NO
+        // Compute days to resolution
+        const endDate = p.endDate || "";
+        const endMs = endDate ? Date.parse(endDate) : NaN;
+        const daysToResolution = Number.isFinite(endMs) ? Math.max(0.001, (endMs - Date.now()) / 86_400_000) : 30;
 
-        const useDir1 = cost1 <= cost2;
-        const totalCost = useDir1 ? cost1 : cost2;
-        if (totalCost >= 1) continue;
-
-        const grossProfit = 1 - totalCost;
-        const contracts = totalCost > 0 ? Math.max(1, Math.floor(maxTradeUsd / totalCost)) : 0;
-
-        arbs.push({
-          event: p.polymarketTitle || p.kalshiTitle,
-          outcome: "YES",
-          polymarketSlug: p.polymarketSlug,
+        // Build PairSnapshot and run depth-walking evaluation
+        const snapshot: PairSnapshot = {
+          pairId: `${p.polymarketSlug}|${p.kalshiTicker}`,
           kalshiTicker: p.kalshiTicker,
-          polyYesBid: p.polyYesBid,
-          polyYesAsk: p.polyYesAsk,
-          kalshiYesBid: p.kalshiYesBid,
-          kalshiYesAsk: p.kalshiYesAsk,
-          buyYesVenue: useDir1 ? "KALSHI" : "POLYMARKET",
-          buyYesPrice: useDir1 ? p.kalshiYesAsk : p.polyYesAsk,
-          buyNoVenue: useDir1 ? "POLYMARKET" : "KALSHI",
-          buyNoPrice: useDir1 ? (1 - p.polyYesBid) : (1 - p.kalshiYesBid),
-          grossProfit,
-          netProfit: grossProfit,
-          roi: totalCost > 0 ? grossProfit / totalCost : 0,
-          priceDiff: Math.abs(p.polyYesAsk - p.kalshiYesAsk),
-          polymarketUrl: p.polymarketUrl,
-          kalshiUrl: p.kalshiUrl,
-          similarityScore: p.similarityScore,
+          polymarketSlug: p.polymarketSlug,
+          polyYesTokenId: p.polyYesTokenId || "",
+          polyNoTokenId: p.polyNoTokenId || "",
+          resolutionTimeUtc: endDate,
+          snapshotTimeUtc: new Date().toISOString(),
           category: p.category,
-          polymarketLiquidity: 0,
-          kalshiLiquidity: 0,
-          polymarketVolume24h: 0,
-          kalshiVolume24h: 0,
-          endDate: "",
-          polyConditionId: "",
-          polyYesTokenId: "",
-          polyNoTokenId: "",
-          polyNegRisk: false,
-          contracts,
-          kpTotalCost: contracts * totalCost,
-          edgeDollar: contracts * grossProfit,
-          edgePct: grossProfit / totalCost,
-          annualizedEdge: 0,
-          strategy: useDir1 ? "BUY_KY_BUY_PN" : "BUY_KN_BUY_PY",
-          stopReason: "manual_pair",
-        });
+          kalshi: { yesBid: p.kalshiYesBid, yesAsk: p.kalshiYesAsk, noBid: 1 - p.kalshiYesAsk, noAsk: 1 - p.kalshiYesBid },
+          polymarket: { yesBid: p.polyYesBid, yesAsk: p.polyYesAsk, noBid: 1 - p.polyYesAsk, noAsk: 1 - p.polyYesBid },
+          daysToResolution,
+          depth,
+        };
+
+        const dwDecisions = evaluatePairSnapshot(snapshot, DEFAULT_STRATEGY_PARAMS);
+
+        // Find the best strategy
+        for (const dw of dwDecisions) {
+          if (!dw.trade) continue;
+
+          const isKY = dw.strategy === "BUY_KY_BUY_PN";
+          const totalCost = (dw.kpTotalCost ?? 0) / Math.max(1, dw.contracts ?? 1);
+          const grossProfit = totalCost < 1 ? 1 - totalCost : 0;
+
+          arbs.push({
+            event: p.polymarketTitle || p.kalshiTitle,
+            outcome: "YES",
+            polymarketSlug: p.polymarketSlug,
+            kalshiTicker: p.kalshiTicker,
+            polyYesBid: p.polyYesBid,
+            polyYesAsk: p.polyYesAsk,
+            kalshiYesBid: p.kalshiYesBid,
+            kalshiYesAsk: p.kalshiYesAsk,
+            buyYesVenue: isKY ? "KALSHI" : "POLYMARKET",
+            buyYesPrice: isKY ? (dw.kalshiPrice ?? p.kalshiYesAsk) : (dw.polymarketPrice ?? p.polyYesAsk),
+            buyNoVenue: isKY ? "POLYMARKET" : "KALSHI",
+            buyNoPrice: isKY ? (dw.polymarketPrice ?? (1 - p.polyYesBid)) : (dw.kalshiPrice ?? (1 - p.kalshiYesBid)),
+            grossProfit,
+            netProfit: grossProfit,
+            roi: totalCost > 0 ? grossProfit / totalCost : 0,
+            priceDiff: Math.abs(p.polyYesAsk - p.kalshiYesAsk),
+            polymarketUrl: p.polymarketUrl,
+            kalshiUrl: p.kalshiUrl,
+            similarityScore: p.similarityScore,
+            category: p.category,
+            polymarketLiquidity: 0,
+            kalshiLiquidity: 0,
+            polymarketVolume24h: 0,
+            kalshiVolume24h: 0,
+            endDate,
+            polyConditionId: p.polyConditionId || "",
+            polyYesTokenId: p.polyYesTokenId || "",
+            polyNoTokenId: p.polyNoTokenId || "",
+            polyNegRisk: p.polyNegRisk || false,
+            contracts: dw.contracts,
+            kpTotalCost: dw.kpTotalCost,
+            edgeDollar: dw.edgeDollar,
+            edgePct: dw.edgePct,
+            annualizedEdge: dw.annualizedEdge,
+            kalshiLimitPrice: dw.kalshiPrice,
+            polymarketLimitPrice: dw.polymarketPrice,
+            kalshiFee: dw.metadata?.kalshiFee as number | undefined,
+            polymarketFee: dw.metadata?.polymarketFee as number | undefined,
+            daysToResolution,
+            strategy: dw.strategy as "BUY_KY_BUY_PN" | "BUY_KN_BUY_PY",
+            stopReason: dw.metadata?.arbStopReason as string | undefined,
+          });
+          break; // Take best strategy only
+        }
       }
 
       return res.json({
@@ -275,20 +378,51 @@ app.get("/api/cross-platform/arbs", async (_req, res) => {
 app.get("/api/cross-platform/pairs", async (req, res) => {
   try {
     const filter = (req.query.filter as string) || "all"; // all | arb | no-arb
+    // Allow explicit source override via query param; fall back to global toggle
+    const sourceParam = req.query.source as string | undefined; // "manual" | "ai" | "both"
     const { verifiedOnly } = stateStore.getRuntimeControl();
+    const effectiveSource = sourceParam || (verifiedOnly ? "manual" : "ai");
 
-    let allPairs: import("../crossPlatformScreener").MatchedPairInfo[];
-    let timestamp: string;
+    let allPairs: import("../crossPlatformScreener").MatchedPairInfo[] = [];
+    let timestamp = new Date().toISOString();
+    const sources: string[] = [];
 
-    if (verifiedOnly) {
-      // Manual mode: load pairs from V2 Excel file
-      allPairs = await manualPairsService.getPairs();
-      timestamp = new Date().toISOString();
-    } else {
-      // AI mode: use fuzzy-matched screener results
-      const results = await crossPlatformScreener.getResults();
-      allPairs = results.pairs;
-      timestamp = results.timestamp;
+    if (effectiveSource === "manual" || effectiveSource === "both") {
+      try {
+        const manualPairs = await manualPairsService.getPairs();
+        // Tag manual pairs for source identification
+        for (const p of manualPairs) {
+          (p as any)._source = "manual";
+        }
+        allPairs.push(...manualPairs);
+        sources.push("manual");
+      } catch (err: any) {
+        console.log(`Manual pairs fetch failed: ${err.message}`);
+      }
+    }
+
+    if (effectiveSource === "ai" || effectiveSource === "both") {
+      try {
+        const results = await crossPlatformScreener.getResults();
+        // Tag AI pairs for source identification
+        for (const p of results.pairs) {
+          (p as any)._source = "ai";
+        }
+        if (effectiveSource === "both") {
+          // Deduplicate: if a pair exists in both manual and AI, keep manual version
+          const manualKeys = new Set(allPairs.map(p => `${p.kalshiTicker}::${p.polymarketSlug}`));
+          const newAiPairs = results.pairs.filter(
+            p => !manualKeys.has(`${p.kalshiTicker}::${p.polymarketSlug}`)
+          );
+          allPairs.push(...newAiPairs);
+        } else {
+          allPairs.push(...results.pairs);
+        }
+        timestamp = results.timestamp;
+        sources.push("ai");
+      } catch (err: any) {
+        console.log(`AI pairs fetch failed: ${err.message}`);
+      }
     }
 
     let pairs = allPairs;
@@ -300,7 +434,8 @@ app.get("/api/cross-platform/pairs", async (req, res) => {
       total: allPairs.length,
       filtered: pairs.length,
       timestamp,
-      source: verifiedOnly ? "manual" : "ai",
+      source: effectiveSource,
+      sources,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -326,6 +461,31 @@ app.get("/api/cross-platform/signals", async (_req, res) => {
     const results = await crossPlatformScreener.getResults();
     signalTracker.tick(results.arbs);
     res.json(signalTracker.getState());
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Cross-Platform: scan status (lightweight — no API calls, just cached state)
+app.get("/api/cross-platform/status", (_req, res) => {
+  try {
+    const status = crossPlatformScreener.getStatus();
+    const { verifiedOnly } = stateStore.getRuntimeControl();
+    const nowMs = Date.now();
+    const nextScanIn = status.cacheExpiresAt > nowMs
+      ? Math.ceil((status.cacheExpiresAt - nowMs) / 1000)
+      : 0;
+
+    res.json({
+      lastScanAt: status.lastScanAt,
+      scanning: status.scanning,
+      lastScanDurationMs: status.lastScanDurationMs,
+      nextScanIn,
+      matchedPairs: status.matchedPairs,
+      arbCount: status.arbCount,
+      embeddingEnabled: status.embeddingEnabled,
+      source: verifiedOnly ? "manual" : "ai",
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

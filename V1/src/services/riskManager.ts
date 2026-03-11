@@ -16,6 +16,8 @@ export const DEFAULT_RISK_CONFIG: RiskConfig = {
 
 export class RiskManager {
   private config: RiskConfig;
+  /** Timestamp (ms) when the circuit breaker last tripped. 0 = never tripped. */
+  private _lastCircuitBreakerTripMs = 0;
 
   constructor(
     config: Partial<RiskConfig>,
@@ -28,9 +30,13 @@ export class RiskManager {
    * Run all pre-trade risk checks. Returns { allowed, reason }.
    */
   checkPreTrade(decision: OpportunityDecision): RiskCheckResult {
-    // 1. Circuit breaker
+    // 1. Circuit breaker (drawdown check + cooldown timer)
     if (this.circuitBreakerActive()) {
-      return { allowed: false, reason: "Circuit breaker active: drawdown exceeds limit" };
+      const cooldownRemaining = this.circuitBreakerCooldownRemainingMin();
+      const reason = cooldownRemaining > 0
+        ? `Circuit breaker active: cooldown ${Math.ceil(cooldownRemaining)}min remaining`
+        : "Circuit breaker active: drawdown exceeds limit";
+      return { allowed: false, reason };
     }
 
     // 2. Per-pair position count
@@ -66,9 +72,45 @@ export class RiskManager {
   }
 
   /**
-   * True if portfolio drawdown exceeds the configured max.
+   * True if portfolio drawdown exceeds the configured max OR cooldown is still active.
+   * When drawdown first exceeds the limit, we record the trip time. Trading stays blocked
+   * until BOTH drawdown recovers AND the cooldown period has elapsed.
    */
   circuitBreakerActive(): boolean {
+    const drawdownExceeded = this._isDrawdownExceeded();
+
+    // Track when the breaker first trips
+    if (drawdownExceeded && this._lastCircuitBreakerTripMs === 0) {
+      this._lastCircuitBreakerTripMs = Date.now();
+      console.warn(
+        `[RiskManager] ⚡ Circuit breaker TRIPPED — cooldown ${this.config.circuitBreakerCooldownMin}min started`
+      );
+    }
+
+    // If drawdown has recovered, check if cooldown is still active
+    if (!drawdownExceeded && this._lastCircuitBreakerTripMs > 0) {
+      const elapsedMin = (Date.now() - this._lastCircuitBreakerTripMs) / 60_000;
+      if (elapsedMin >= this.config.circuitBreakerCooldownMin) {
+        // Cooldown expired — reset and allow trading
+        this._lastCircuitBreakerTripMs = 0;
+        console.log("[RiskManager] ✅ Circuit breaker cooldown expired — trading resumed");
+        return false;
+      }
+      // Drawdown recovered but still in cooldown window
+      return true;
+    }
+
+    return drawdownExceeded;
+  }
+
+  /** Returns remaining cooldown in minutes (0 if not in cooldown). */
+  circuitBreakerCooldownRemainingMin(): number {
+    if (this._lastCircuitBreakerTripMs === 0) return 0;
+    const elapsedMin = (Date.now() - this._lastCircuitBreakerTripMs) / 60_000;
+    return Math.max(0, this.config.circuitBreakerCooldownMin - elapsedMin);
+  }
+
+  private _isDrawdownExceeded(): boolean {
     const summary = this.portfolio.getPortfolioSummary();
     if (summary.totalCost <= 0) return false;
     const drawdown = summary.totalPnl < 0 ? -summary.totalPnl / summary.totalCost : 0;
@@ -81,6 +123,7 @@ export class RiskManager {
 
   getRiskStatus(): {
     circuitBreakerActive: boolean;
+    circuitBreakerCooldownRemainingMin: number;
     currentExposure: number;
     maxExposure: number;
     drawdownPct: number;
@@ -93,6 +136,7 @@ export class RiskManager {
 
     return {
       circuitBreakerActive: this.circuitBreakerActive(),
+      circuitBreakerCooldownRemainingMin: Math.round(this.circuitBreakerCooldownRemainingMin() * 10) / 10,
       currentExposure: summary.totalCost,
       maxExposure: this.config.maxTotalExposure,
       drawdownPct: Math.round(drawdown * 10000) / 10000,

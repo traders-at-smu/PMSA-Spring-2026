@@ -1,5 +1,4 @@
-- [ ] Fix Annualized edge for screener
-- [ ] Implement Manual Pair selection on execution tab
-- [ ] Clean up execution tab
-- [ ] Fix execution date being pulled through manual pair table 
-
+- [x] Fix Annualized edge for screener
+- [x] Implement Manual Pair selection on execution tab
+- [x] Clean up execution tab
+- [x] Fix execution date being pulled through manual pair table

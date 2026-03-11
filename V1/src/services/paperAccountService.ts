@@ -71,6 +71,8 @@ export interface PaperAccountState {
   maxDrawdown: number;
   annualizedRoi: number; // weighted by capital and hold time
   avgHoldDays: number;
+  balanceFloor: number; // minimum balance before trading pauses
+  balanceBelowFloor: boolean; // true if trading is paused due to balance floor
   openPositions: OpenPosition[];
   resolvedTrades: ResolvedTrade[]; // most recent 100
   equityCurve: EquitySnapshot[];
@@ -80,6 +82,8 @@ export interface PaperAccountState {
 // ---- Constants ----
 
 const STARTING_BALANCE = 100_000;
+const BALANCE_FLOOR_PCT = 0.10; // pause trading at 10% of starting balance
+const BALANCE_FLOOR = STARTING_BALANCE * BALANCE_FLOOR_PCT;
 const MAX_RESOLVED_IN_MEMORY = 100;
 const MAX_EQUITY_POINTS = 500;
 
@@ -178,15 +182,30 @@ export class PaperAccountService {
     return resolved;
   }
 
+  /** True when available balance is at or below the safety floor (10% of starting). */
+  isBalanceBelowFloor(): boolean {
+    return this.availableBalance <= BALANCE_FLOOR;
+  }
+
   executeTrade(arb: CrossPlatformArb): OpenPosition | null {
     const arbKey = `${arb.polymarketSlug}|${arb.kalshiTicker}`;
     if (this.executedArbKeys.has(arbKey)) return null;
+
+    // Safety: refuse trades when balance is at the floor
+    if (this.isBalanceBelowFloor()) {
+      console.warn(
+        `[PaperAccount] Trade rejected: balance $${this.availableBalance.toFixed(2)} is at or below safety floor $${BALANCE_FLOOR.toFixed(2)} (${(BALANCE_FLOOR_PCT * 100).toFixed(0)}% of starting $${STARTING_BALANCE})`
+      );
+      return null;
+    }
 
     const costPerContract = arb.buyYesPrice + arb.buyNoPrice;
     if (costPerContract >= 1) return null;
 
     const maxTradeUsd = getSettings().execution.maxTradeUsd;
-    const maxNotional = Math.min(maxTradeUsd, this.availableBalance);
+    // Ensure we don't trade below the floor
+    const usableBalance = Math.max(0, this.availableBalance - BALANCE_FLOOR);
+    const maxNotional = Math.min(maxTradeUsd, usableBalance);
     const contracts = Math.floor(maxNotional / costPerContract);
     if (contracts < 1) return null;
 
@@ -300,6 +319,8 @@ export class PaperAccountService {
       maxDrawdown: this.maxDrawdown,
       annualizedRoi,
       avgHoldDays,
+      balanceFloor: BALANCE_FLOOR,
+      balanceBelowFloor: this.isBalanceBelowFloor(),
       openPositions: this.openPositions,
       resolvedTrades: this.resolvedTrades,
       equityCurve: this.equityCurve,

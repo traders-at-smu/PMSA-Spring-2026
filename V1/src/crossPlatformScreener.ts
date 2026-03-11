@@ -1,3 +1,4 @@
+import axios from "axios";
 import { ArbitrageScreener } from "./screener";
 import { KalshiScreener } from "./kalshiScreener";
 import { KalshiMarket } from "./types";
@@ -9,7 +10,7 @@ import {
   evaluatePairSnapshot,
   DEFAULT_STRATEGY_PARAMS,
 } from "./services/depthWalkingEngine";
-import type { PairSnapshot, StrategyParams, DepthLevel } from "./types";
+import type { PairSnapshot, StrategyParams, DepthLevel, PairDepth } from "./types";
 
 // ---- Types ----
 
@@ -102,6 +103,13 @@ export interface MatchedPairInfo {
   kalshiYesBid: number;
   kalshiYesAsk: number;
   hasArb: boolean;
+  endDate?: string;
+  // Execution data (optional — populated when available)
+  polyYesTokenId?: string;
+  polyNoTokenId?: string;
+  polyConditionId?: string;
+  polyNegRisk?: boolean;
+  _source?: "manual" | "ai";
 }
 
 export interface CrossPlatformResults {
@@ -663,7 +671,7 @@ function buildKalshiUrl(
 
 // ---- Screener ----
 
-const PRIMARY_THRESHOLD = 0.40;
+const PRIMARY_THRESHOLD = 0.50;
 const FALLBACK_THRESHOLD = 0.25;
 
 // Embedding re-ranker thresholds
@@ -681,6 +689,11 @@ export class CrossPlatformScreener {
   private cacheExpiry = 0;
   private fetchInFlight: Promise<CrossPlatformResults> | null = null;
   private readonly CACHE_TTL = 300_000; // 5 min – Kalshi fetch is slow, cache aggressively
+
+  // Status tracking for UI
+  private _lastScanAt: string | null = null;
+  private _scanning = false;
+  private _lastScanDurationMs = 0;
 
   constructor(polyScreener?: ArbitrageScreener, kalshiScreener?: KalshiScreener) {
     this.polyScreener = polyScreener || new ArbitrageScreener();
@@ -701,13 +714,114 @@ export class CrossPlatformScreener {
     this.cacheExpiry = 0;
   }
 
+  /** Status info for the UI status endpoint */
+  getStatus(): {
+    lastScanAt: string | null;
+    scanning: boolean;
+    lastScanDurationMs: number;
+    cacheTtlMs: number;
+    cacheExpiresAt: number;
+    embeddingEnabled: boolean;
+    matchedPairs: number;
+    arbCount: number;
+  } {
+    return {
+      lastScanAt: this._lastScanAt,
+      scanning: this._scanning,
+      lastScanDurationMs: this._lastScanDurationMs,
+      cacheTtlMs: this.CACHE_TTL,
+      cacheExpiresAt: this.cacheExpiry,
+      embeddingEnabled: this.embeddingService !== null,
+      matchedPairs: this.cachedResults?.matchedPairs ?? 0,
+      arbCount: this.cachedResults?.arbs.length ?? 0,
+    };
+  }
+
+  /**
+   * Fetch real orderbook depth for a matched pair.
+   * Returns PairDepth with actual ask levels (or empty arrays on failure).
+   */
+  private async fetchDepthForPair(
+    pm: NormalizedMarket,
+    km: NormalizedMarket,
+    timeoutMs = 5000,
+  ): Promise<PairDepth> {
+    const empty: PairDepth = {
+      kalshi: { buyYes: [], buyNo: [] },
+      polymarket: { yesAsks: [], noAsks: [] },
+    };
+    const settings = getSettings();
+    const kalshiBase = settings.externalApis?.kalshiApiUrl || "https://api.elections.kalshi.com/trade-api/v2";
+    const clobBase = settings.externalApis?.clobHttpUrl || "https://clob.polymarket.com";
+
+    try {
+      // Fetch all books in parallel with timeout
+      const [kalshiBook, polyYesBook, polyNoBook] = await Promise.all([
+        axios.get(`${kalshiBase}/markets/${km.slug}/orderbook`, {
+          params: { depth: 10 },
+          timeout: timeoutMs,
+        }).then(r => r.data?.orderbook_fp || r.data?.orderbook || null).catch(() => null),
+
+        pm.clobTokenIds?.[0]
+          ? axios.get(`${clobBase}/book`, {
+              params: { token_id: pm.clobTokenIds[0] },
+              timeout: timeoutMs,
+            }).then(r => r.data).catch(() => null)
+          : Promise.resolve(null),
+
+        pm.clobTokenIds?.[1]
+          ? axios.get(`${clobBase}/book`, {
+              params: { token_id: pm.clobTokenIds[1] },
+              timeout: timeoutMs,
+            }).then(r => r.data).catch(() => null)
+          : Promise.resolve(null),
+      ]);
+
+      // Parse Kalshi orderbook (fp format: prices in cents)
+      if (kalshiBook) {
+        const parseKalshi = (levels: any[]): DepthLevel[] =>
+          (levels || []).map((l: any) => ({
+            price: (l.price || 0) / 100,
+            size: l.contracts || l.quantity || 0,
+          })).filter((l: DepthLevel) => l.size > 0);
+
+        empty.kalshi.buyYes = parseKalshi(kalshiBook.yes || kalshiBook.asks);
+        empty.kalshi.buyNo = parseKalshi(kalshiBook.no || []);
+      }
+
+      // Parse Polymarket CLOB book
+      const parsePoly = (book: any, side: "asks" | "bids"): DepthLevel[] => {
+        if (!book) return [];
+        const levels = book[side] || [];
+        return levels.map((l: any) => ({
+          price: parseFloat(l.price || "0"),
+          size: parseFloat(l.size || "0"),
+        })).filter((l: DepthLevel) => l.size > 0);
+      };
+
+      if (polyYesBook) {
+        empty.polymarket.yesAsks = parsePoly(polyYesBook, "asks");
+      }
+      if (polyNoBook) {
+        empty.polymarket.noAsks = parsePoly(polyNoBook, "asks");
+      }
+    } catch {
+      // Return empty depth on any error
+    }
+
+    return empty;
+  }
+
   async getResults(): Promise<CrossPlatformResults> {
     if (this.cachedResults && Date.now() < this.cacheExpiry) {
       return this.cachedResults;
     }
     if (this.fetchInFlight) return this.fetchInFlight;
 
-    this.fetchInFlight = this.computeResults();
+    this.fetchInFlight = this.computeResults().catch((err) => {
+      this._scanning = false;
+      throw err;
+    });
     try {
       return await this.fetchInFlight;
     } finally {
@@ -716,6 +830,8 @@ export class CrossPlatformScreener {
   }
 
   private async computeResults(): Promise<CrossPlatformResults> {
+    this._scanning = true;
+    const scanStart = Date.now();
     console.log("Cross-platform screener: scanning both venues...");
 
     // Fetch markets from both platforms in parallel
@@ -740,8 +856,8 @@ export class CrossPlatformScreener {
     // Match events across platforms (async to yield event loop)
     const pairs = await this.matchEvents(normalizedPoly, normalizedKalshi);
 
-    // Find arbitrage opportunities
-    const arbs = this.findArbitrage(pairs);
+    // Find arbitrage opportunities (async: fetches depth for top candidates)
+    const arbs = await this.findArbitrage(pairs);
 
     // Find price differences
     const diffs = this.findPriceDiffs(pairs);
@@ -768,6 +884,11 @@ export class CrossPlatformScreener {
         kalshiYesBid: p.kalshi.yesBid,
         kalshiYesAsk: p.kalshi.yesAsk,
         hasArb: arbSlugs.has(`${p.polymarket.slug}|${p.kalshi.id}`),
+        endDate: p.kalshi.endDate || p.polymarket.endDate || undefined,
+        polyYesTokenId: p.polymarket.clobTokenIds?.[0] || undefined,
+        polyNoTokenId: p.polymarket.clobTokenIds?.[1] || undefined,
+        polyConditionId: p.polymarket.conditionId || undefined,
+        polyNegRisk: p.polymarket.negRisk || undefined,
       }));
 
     const results: CrossPlatformResults = {
@@ -783,9 +904,12 @@ export class CrossPlatformScreener {
 
     this.cachedResults = results;
     this.cacheExpiry = Date.now() + this.CACHE_TTL;
+    this._lastScanAt = results.timestamp;
+    this._lastScanDurationMs = Date.now() - scanStart;
+    this._scanning = false;
 
     console.log(
-      `  Cross-platform: ${pairs.length} matched pairs, ${arbs.length} arbs, ${diffs.length} diffs`
+      `  Cross-platform: ${pairs.length} matched pairs, ${arbs.length} arbs, ${diffs.length} diffs (${this._lastScanDurationMs}ms)`
     );
 
     return results;
@@ -1112,7 +1236,7 @@ export class CrossPlatformScreener {
 
   // ---- Arbitrage Detection ----
 
-  private findArbitrage(pairs: MatchedPair[]): CrossPlatformArb[] {
+  private async findArbitrage(pairs: MatchedPair[]): Promise<CrossPlatformArb[]> {
     const arbs: CrossPlatformArb[] = [];
     const MIN_LIQUIDITY = 500; // Skip markets with <$500 liquidity (likely stale/illiquid)
     const minAnnualizedReturn = getSettings().execution.minAnnualizedReturn;
@@ -1141,7 +1265,7 @@ export class CrossPlatformScreener {
           : 30; // fallback 30 days
 
         // Build a lightweight PairSnapshot for depth-walking evaluation
-        // (depth data is empty — uses fallback single-level pricing)
+        // (depth data is empty — will be rejected by no-depth guard unless enriched later)
         const snapshot: PairSnapshot = {
           pairId: `${pm.slug}|${km.slug}`,
           kalshiTicker: km.slug,
@@ -1149,6 +1273,7 @@ export class CrossPlatformScreener {
           polyYesTokenId: pm.clobTokenIds?.[0] || "",
           polyNoTokenId: pm.clobTokenIds?.[1] || "",
           resolutionTimeUtc: endDateStr,
+          snapshotTimeUtc: new Date().toISOString(),
           category: pm.category,
           kalshi: { yesBid: km.yesBid, yesAsk: km.yesAsk, noBid: km.noBid, noAsk: km.noAsk },
           polymarket: { yesBid: pm.yesBid, yesAsk: pm.yesAsk, noBid: pm.noBid, noAsk: pm.noAsk },
@@ -1216,6 +1341,78 @@ export class CrossPlatformScreener {
           stopReason: dwMatch?.metadata?.arbStopReason as string | undefined,
         });
       }
+    }
+
+    // ── Enrich top arbs with real orderbook depth ──
+    // Sort by ROI and fetch depth for top 15 candidates for more accurate evaluation
+    const TOP_N_DEPTH = 15;
+    if (arbs.length > 0) {
+      const topCandidates = [...arbs]
+        .sort((a, b) => b.roi - a.roi)
+        .slice(0, TOP_N_DEPTH);
+
+      // Build a lookup from the original pairs for depth fetching
+      const pairLookup = new Map<string, MatchedPair>();
+      for (const p of pairs) {
+        pairLookup.set(`${p.polymarket.slug}|${p.kalshi.id}`, p);
+      }
+
+      const depthPromises = topCandidates.map(async (arb) => {
+        const pair = pairLookup.get(`${arb.polymarketSlug}|${arb.kalshiTicker}`);
+        if (!pair) return;
+
+        try {
+          const depth = await this.fetchDepthForPair(pair.polymarket, pair.kalshi, 5000);
+          // Only re-evaluate if we got meaningful depth data
+          const hasDepth =
+            depth.kalshi.buyYes.length > 0 ||
+            depth.kalshi.buyNo.length > 0 ||
+            depth.polymarket.yesAsks.length > 0 ||
+            depth.polymarket.noAsks.length > 0;
+          if (!hasDepth) return;
+
+          const endDateStr = pair.kalshi.endDate || pair.polymarket.endDate || "";
+          const daysToRes = endDateStr
+            ? Math.max((Date.parse(endDateStr) - Date.now()) / 86400000, 0.001)
+            : 30;
+
+          const snapshot: PairSnapshot = {
+            pairId: `${pair.polymarket.slug}|${pair.kalshi.slug}`,
+            kalshiTicker: pair.kalshi.slug,
+            polymarketSlug: pair.polymarket.slug,
+            polyYesTokenId: pair.polymarket.clobTokenIds?.[0] || "",
+            polyNoTokenId: pair.polymarket.clobTokenIds?.[1] || "",
+            resolutionTimeUtc: endDateStr,
+            snapshotTimeUtc: new Date().toISOString(),
+            category: pair.polymarket.category,
+            kalshi: { yesBid: pair.kalshi.yesBid, yesAsk: pair.kalshi.yesAsk, noBid: pair.kalshi.noBid, noAsk: pair.kalshi.noAsk },
+            polymarket: { yesBid: pair.polymarket.yesBid, yesAsk: pair.polymarket.yesAsk, noBid: pair.polymarket.noBid, noAsk: pair.polymarket.noAsk },
+            daysToResolution: daysToRes,
+            depth,
+          };
+
+          const dwDecisions = evaluatePairSnapshot(snapshot, DEFAULT_STRATEGY_PARAMS);
+          const matchStrategy = arb.strategy || (arb.buyYesVenue === "KALSHI" ? "BUY_KY_BUY_PN" : "BUY_KN_BUY_PY");
+          const dwMatch = dwDecisions.find((d) => d.strategy === matchStrategy);
+
+          if (dwMatch) {
+            arb.contracts = dwMatch.contracts;
+            arb.kpTotalCost = dwMatch.kpTotalCost;
+            arb.edgeDollar = dwMatch.edgeDollar;
+            arb.edgePct = dwMatch.edgePct;
+            arb.annualizedEdge = dwMatch.annualizedEdge;
+            arb.kalshiLimitPrice = dwMatch.kalshiPrice;
+            arb.polymarketLimitPrice = dwMatch.polymarketPrice;
+            arb.kalshiFee = dwMatch.metadata?.kalshiFee as number | undefined;
+            arb.polymarketFee = dwMatch.metadata?.polymarketFee as number | undefined;
+            arb.stopReason = dwMatch.metadata?.arbStopReason as string | undefined;
+          }
+        } catch {
+          // Depth fetch failed — keep original fallback values
+        }
+      });
+
+      await Promise.allSettled(depthPromises);
     }
 
     return arbs;

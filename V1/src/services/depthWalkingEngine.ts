@@ -203,6 +203,9 @@ export function walkDepthUntilArbEnds(
 
 // ---- Stop Reason Text ----
 
+/** Max age in seconds for a snapshot before it's considered stale */
+export const STALE_SNAPSHOT_MAX_AGE_S = 60;
+
 export function stopReasonText(code: StopReason): string {
   switch (code) {
     case "no_positive_edge": return "Arbitrage ended: KP(c) >= c";
@@ -210,6 +213,8 @@ export function stopReasonText(code: StopReason): string {
     case "annualized_edge_below_min": return "Arbitrage ended: annualized edge below A_min";
     case "kalshi_depth_exhausted": return "Arbitrage ended: Kalshi depth exhausted";
     case "polymarket_depth_exhausted": return "Arbitrage ended: Polymarket depth exhausted";
+    case "no_depth_data": return "Rejected: no order book depth data";
+    case "stale_snapshot": return "Rejected: snapshot prices are stale (>60s old)";
     default: return "Arbitrage ended";
   }
 }
@@ -219,22 +224,30 @@ export function stopReasonText(code: StopReason): string {
 function levelsForCandidate(
   snapshot: PairSnapshot,
   candidate: { kalshiSide: "yes" | "no"; polymarketSide: "yes" | "no"; kalshiPrice: number; polymarketPrice: number },
-  minContracts: number
-): [DepthLevel[], DepthLevel[]] {
+  _minContracts: number
+): [DepthLevel[], DepthLevel[], string | null] {
   const kDepth = snapshot.depth?.kalshi;
   const pDepth = snapshot.depth?.polymarket;
 
-  let kLevels = normalizeDepthLevels(
+  const kLevels = normalizeDepthLevels(
     candidate.kalshiSide === "yes" ? (kDepth?.buyYes ?? []) : (kDepth?.buyNo ?? [])
   );
-  let pLevels = normalizeDepthLevels(
+  const pLevels = normalizeDepthLevels(
     candidate.polymarketSide === "yes" ? (pDepth?.yesAsks ?? []) : (pDepth?.noAsks ?? [])
   );
 
-  if (kLevels.length === 0) kLevels = fallbackLevels(candidate.kalshiPrice, minContracts);
-  if (pLevels.length === 0) pLevels = fallbackLevels(candidate.polymarketPrice, minContracts);
+  // Safety: reject arbs when real depth data is missing instead of fabricating depth
+  if (kLevels.length === 0 && pLevels.length === 0) {
+    return [[], [], "No depth data available for either venue"];
+  }
+  if (kLevels.length === 0) {
+    return [[], pLevels, "No Kalshi depth data available"];
+  }
+  if (pLevels.length === 0) {
+    return [kLevels, [], "No Polymarket depth data available"];
+  }
 
-  return [kLevels, pLevels];
+  return [kLevels, pLevels, null];
 }
 
 export function evaluatePairSnapshot(
@@ -250,6 +263,41 @@ export function evaluatePairSnapshot(
   const polyFeeConfig = params.fees.polymarket;
   const category = snapshot.category || "default";
   const categoryFee = polyFeeConfig.categories[category] ?? polyFeeConfig.default;
+
+  // ---- Stale price guard ----
+  // If snapshot has a timestamp and it's older than 60s, reject all strategies
+  if (snapshot.snapshotTimeUtc) {
+    const snapshotAge = (Date.now() - new Date(snapshot.snapshotTimeUtc).getTime()) / 1000;
+    if (snapshotAge > STALE_SNAPSHOT_MAX_AGE_S) {
+      const staleReason = `Snapshot is ${Math.round(snapshotAge)}s old (max ${STALE_SNAPSHOT_MAX_AGE_S}s)`;
+      return [
+        {
+          pairId: snapshot.pairId, strategy: "BUY_KY_BUY_PN", contracts: 0,
+          kpTotalCost: 0, edgeDollar: 0, edgePct: 0, annualizedEdge: 0,
+          kalshiSide: "yes", polymarketSide: "no",
+          kalshiPrice: snapshot.kalshi.yesAsk, polymarketPrice: snapshot.polymarket.noAsk,
+          trade: false, reasons: [staleReason],
+          metadata: { daysToResolution: days, kalshiFee: 0, polymarketFee: 0,
+            avgKalshiPrice: 0, avgPolymarketPrice: 0, category,
+            contractsAvailableKalshi: 0, contractsAvailablePoly: 0,
+            contractsBeforeArbEnds: 0, fixedContractSizeMinimum: minContractSize,
+            arbStopReason: "stale_snapshot" },
+        },
+        {
+          pairId: snapshot.pairId, strategy: "BUY_KN_BUY_PY", contracts: 0,
+          kpTotalCost: 0, edgeDollar: 0, edgePct: 0, annualizedEdge: 0,
+          kalshiSide: "no", polymarketSide: "yes",
+          kalshiPrice: snapshot.kalshi.noAsk, polymarketPrice: snapshot.polymarket.yesAsk,
+          trade: false, reasons: [staleReason],
+          metadata: { daysToResolution: days, kalshiFee: 0, polymarketFee: 0,
+            avgKalshiPrice: 0, avgPolymarketPrice: 0, category,
+            contractsAvailableKalshi: 0, contractsAvailablePoly: 0,
+            contractsBeforeArbEnds: 0, fixedContractSizeMinimum: minContractSize,
+            arbStopReason: "stale_snapshot" },
+        },
+      ];
+    }
+  }
 
   const candidates: Array<{
     strategy: ArbStrategy;
@@ -277,7 +325,32 @@ export function evaluatePairSnapshot(
   const decisions: OpportunityDecision[] = [];
 
   for (const candidate of candidates) {
-    const [kLevels, pLevels] = levelsForCandidate(snapshot, candidate, minContractSize);
+    const [kLevels, pLevels, depthError] = levelsForCandidate(snapshot, candidate, minContractSize);
+
+    // If depth data is missing, reject this candidate instead of fabricating depth
+    if (depthError) {
+      decisions.push({
+        pairId: snapshot.pairId,
+        strategy: candidate.strategy,
+        contracts: 0,
+        kpTotalCost: 0, edgeDollar: 0, edgePct: 0, annualizedEdge: 0,
+        kalshiSide: candidate.kalshiSide,
+        polymarketSide: candidate.polymarketSide,
+        kalshiPrice: candidate.kalshiPrice,
+        polymarketPrice: candidate.polymarketPrice,
+        trade: false,
+        reasons: [depthError],
+        metadata: {
+          daysToResolution: days, kalshiFee: 0, polymarketFee: 0,
+          avgKalshiPrice: 0, avgPolymarketPrice: 0, category,
+          contractsAvailableKalshi: 0, contractsAvailablePoly: 0,
+          contractsBeforeArbEnds: 0, fixedContractSizeMinimum: minContractSize,
+          arbStopReason: "no_depth_data",
+        },
+      });
+      continue;
+    }
+
     const walk = walkDepthUntilArbEnds(
       kLevels, pLevels, days, kpMax, aMin,
       kalshiFeeConfig, polyFeeConfig, categoryFee
