@@ -480,7 +480,7 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
   const [verifiedPairKeys, setVerifiedPairKeys] = useState<Set<string>>(new Set());
 
   const arbData = usePolling<ArbResponse>("/api/cross-platform/arbs", 30_000, paused);
-  const pairsData = usePolling<PairsResponse>(`/api/cross-platform/pairs?filter=${pairsFilter}`, 30_000, paused);
+  const pairsData = usePolling<PairsResponse>(`/api/cross-platform/pairs?filter=all`, 30_000, paused);
   const signalData = usePolling<SignalResponse>("/api/cross-platform/signals", 30_000, paused);
   const runtimeData = usePolling<RuntimeControlResponse>("/api/execution/runtime-control", 10_000, paused);
 
@@ -650,14 +650,19 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
 
   const liveArbs = arbData.data?.arbs ?? [];
   const arbs = liveArbs;
-  const pairs = pairsData.data?.pairs ?? [];
+  const allPairs = pairsData.data?.pairs ?? [];
+  const pairs = pairsFilter === "arb"
+    ? allPairs.filter(p => p.hasArb)
+    : pairsFilter === "no-arb"
+    ? allPairs.filter(p => !p.hasArb)
+    : allPairs;
   const matchedPairs = arbData.data?.matchedPairs ?? 0;
   const polyScanned = arbData.data?.polymarketsScanned ?? 0;
   const kalshiScanned = arbData.data?.kalshiMarketsScanned ?? 0;
 
   const tabs: { id: typeof tab; label: string; count: number }[] = [
     { id: "arb", label: "Arb", count: arbs.length },
-    { id: "pairs", label: "Pairs", count: pairsData.data?.total ?? 0 },
+    { id: "pairs", label: "Pairs", count: allPairs.length },
     { id: "signal", label: "Signal", count: signalData.data?.stats.currentLive ?? 0 },
   ];
 
@@ -1116,7 +1121,7 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
                   </button>
                 ))}
                 <span className="text-[11px] text-zinc-600 ml-1">
-                  {pairsData.data?.filtered ?? 0} / {pairsData.data?.total ?? 0} pairs
+                  {pairs.length} / {allPairs.length} pairs
                 </span>
                 {pairsData.data?.source && (
                   <span className={`ml-1 px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider ${

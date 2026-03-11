@@ -9,7 +9,7 @@
     "mode": "PAPER",
     "autoExecute": false,
     "bankrollUsd": 10000,
-    "minNetEdge": 0.005,
+    "minNetEdge": 1e-9,
     "defaultLegTickSize": "0.01",
     "kalshiUseMakerFees": false
   },

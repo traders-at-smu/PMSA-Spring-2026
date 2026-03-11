@@ -1,10 +1,2 @@
-- [x] Fees Not populating, showing 0s on each row.
-- [x] Keep overview tab cached, update it live after first load
-- [x] On the Scanner Pairs page, only shows Poly Yes / Kalshi Yes, include Poly No / Kalshi No
-- [x] On manual, always shows " (a number based on the excel sheet) matched pairs across 0 Polymarket & 0 Kalshi markets" show full the count for each market
-- [x] Dates not pulling correctly, many contracts resolve in 2028 when they end in 2026.
-- [ ] Add Polytoken and check_and_append functionality to v1 UI
-- [x] Add sort functionality by clicking headers on table in Scanner
-- [x] Fix Realized/ Unrealized PnL in paper trading mode in the execution tab for both whole sum and within the table
 - [ ] Pairs generation is broken on Ties for Football Games - AI Ignore this
-- [x] Link Markets to each row in the Scanner Table
+- [ ] Re-add sorting functionality to scanner
