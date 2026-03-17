@@ -7,3 +7,5 @@
     - [ ] Add script to find and fix failed pairs in V4
     - [X] If contract is returning 429, we need to add a clock to wait, not add it to failed pairs
     - [ ] Add array of slippage of prices for output json
+Test  
+- [ ] do a test of dates pulling
