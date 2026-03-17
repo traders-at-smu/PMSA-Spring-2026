@@ -77,7 +77,7 @@ def _validate_config(cfg: dict) -> list[str]:
     """Return a list of error strings (empty list = config is valid)."""
     errors: list[str] = []
 
-    for key in ("mode", "min_arr", "kp_max_per_trade", "fees", "pairs_file"):
+    for key in ("mode", "min_arr", "max_contracts", "fees", "pairs_file"):
         if key not in cfg:
             errors.append(f"Missing required key: '{key}'")
 
@@ -131,7 +131,7 @@ def _print_banner(cfg: dict, pairs_count: int) -> None:
         else f"{Fore.YELLOW}{Style.BRIGHT}PAPER{Style.RESET_ALL}"
     )
     arr_pct = float(cfg.get("min_arr", 0.1)) * 100
-    kp_max = float(cfg.get("kp_max_per_trade", 0))
+    max_contracts = int(cfg.get("max_contracts", 0))
     log_path = cfg.get("trade_log", "trades.json")
     interval = cfg.get("scan_interval_seconds", 5)
 
@@ -140,7 +140,7 @@ def _print_banner(cfg: dict, pairs_count: int) -> None:
     print(f"  {'─' * 42}")
     print(f"  {'Mode':<{label_w}}{mode_str}")
     print(f"  {'Min ARR':<{label_w}}{arr_pct:.1f}%")
-    print(f"  {'Max cost':<{label_w}}${kp_max:.2f} / trade")
+    print(f"  {'Max contracts':<{label_w}}{max_contracts} per trade")
     print(f"  {'Interval':<{label_w}}{interval}s")
     print(f"  {'Pairs':<{label_w}}{pairs_count} active")
     print(f"  {'Trade log':<{label_w}}{log_path}")

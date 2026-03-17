@@ -1,9 +1,9 @@
 """Core arbitrage engine: depth-walking, opportunity evaluation, execution, logging.
 
 Trading rules (from Trade Rules.md):
-  1. KP(c) < c           — total cost must be less than the number of contracts
-  2. KP(c) < kp_max      — total cost must be within the per-trade budget cap
-  3. ARR >= min_arr       — annualised return must meet the minimum threshold
+  1. KP(c) < c              — total cost must be less than the number of contracts
+  2. c <= max_contracts      — position size must not exceed the contract cap
+  3. ARR >= min_arr          — annualised return must meet the minimum threshold
 
 ARR = (edge_pct * 365) / days_to_resolution
 edge_pct = (c - KP(c)) / KP(c)
@@ -22,6 +22,35 @@ from typing import Any
 from colorama import Fore, Style
 
 from fees import apply_fee
+
+
+# ── Error classification ───────────────────────────────────────────────────────
+
+def _is_transient_error(exc: Exception) -> bool:
+    """Return True if the error is likely temporary (rate limit, timeout, etc.).
+
+    Transient errors should NOT permanently blacklist a pair — the pair will
+    simply be skipped for this scan cycle and retried next time.
+
+    Permanent errors (404, bad ticker, parse failures) DO warrant blacklisting.
+    """
+    import requests
+    msg = str(exc).lower()
+
+    # HTTP status-based: 429 Too Many Requests, 503 Service Unavailable
+    if isinstance(exc, requests.HTTPError):
+        code = getattr(exc.response, "status_code", None)
+        if code in (429, 503, 502, 504):
+            return True
+
+    # Connection / timeout errors
+    if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
+        return True
+
+    # Check message text as a fallback (covers wrapped exceptions)
+    transient_phrases = ("429", "too many requests", "503", "502", "504",
+                         "timeout", "timed out", "connection", "rate limit")
+    return any(phrase in msg for phrase in transient_phrases)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -80,7 +109,7 @@ def _walk_depth(
     k_levels: list[dict[str, Any]],
     p_levels: list[dict[str, Any]],
     days: float,
-    kp_max: float,
+    max_contracts: int,
     min_arr: float,
     kalshi_fee_fn,
     poly_fee_fn,
@@ -93,9 +122,9 @@ def _walk_depth(
     valid position (which may be zero contracts if no arb exists at all).
 
     Stop reasons:
-        no_positive_edge     — marginal cost of next contract >= $1.00
-        kp_max_hit           — total cost would exceed budget cap
-        arr_below_min        — annualised return fell below threshold
+        no_positive_edge         — marginal cost of next contract >= $1.00
+        max_contracts_hit        — position would exceed the contract cap
+        arr_below_min            — annualised return fell below threshold
         kalshi_depth_exhausted
         polymarket_depth_exhausted
     """
@@ -159,9 +188,9 @@ def _walk_depth(
 
         next_kp = k_spend + nk + p_spend + np_ + next_kf + next_pf
 
-        # Rule 2: total cost must stay under budget cap
-        if next_kp >= kp_max:
-            stop_reason = "kp_max_hit"
+        # Rule 2: position size must not exceed the contract cap
+        if nc > max_contracts:
+            stop_reason = "max_contracts_hit"
             break
 
         # Rule 3: annualised return must meet minimum threshold
@@ -217,7 +246,7 @@ def evaluate_pair(
 
     Returns a list of tradeable opportunity dicts (empty if no arb found).
     """
-    kp_max = float(cfg["kp_max_per_trade"])
+    max_contracts = int(cfg["max_contracts"])
     min_arr = float(cfg["min_arr"])
     days = _days_to_resolution(pair.get("resolution_date", ""))
 
@@ -268,7 +297,7 @@ def evaluate_pair(
             p_levels = [{"price": strat["p_price_hint"], "size": 200}]
 
         walk = _walk_depth(
-            k_levels, p_levels, days, kp_max, min_arr,
+            k_levels, p_levels, days, max_contracts, min_arr,
             k_fee_fn, p_fee_fn, k_round_up,
         )
 
@@ -536,14 +565,21 @@ def run_scan(
         result = results.get(pair["pair_id"])
 
         if isinstance(result, Exception):
-            # Permanently skip this pair going forward
-            failed_ids.add(pair["pair_id"])
-            _log_failed_pair(pair, str(result), failed_log)
-            new_failures += 1
-            print(
-                f"  {Fore.YELLOW}! {label}: {result}  → logged to failed pairs{Style.RESET_ALL}",
-                file=sys.stderr,
-            )
+            if _is_transient_error(result):
+                # Rate limit / timeout — skip this cycle, do NOT blacklist
+                print(
+                    f"  {Fore.YELLOW}~ {label}: {result}  (transient — will retry){Style.RESET_ALL}",
+                    file=sys.stderr,
+                )
+            else:
+                # Permanent error (bad ticker, parse failure, 404, etc.)
+                failed_ids.add(pair["pair_id"])
+                _log_failed_pair(pair, str(result), failed_log)
+                new_failures += 1
+                print(
+                    f"  {Fore.YELLOW}! {label}: {result}  → logged to failed pairs{Style.RESET_ALL}",
+                    file=sys.stderr,
+                )
             continue
 
         try:
