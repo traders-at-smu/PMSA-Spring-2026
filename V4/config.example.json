@@ -1,0 +1,66 @@
+{
+  "_doc": "Kalshi × Polymarket Arb Bot v4 — Configuration. Copy to config.json and fill in your values. Keys starting with _ are documentation only and are ignored by the bot.",
+
+  "_doc_mode": "Trading mode. 'paper' = simulate trades, fetch live prices but never place real orders (default, no credentials needed). 'live' = place real orders. If mode is 'live' but credentials are missing the bot automatically falls back to paper.",
+  "mode": "paper",
+
+  "_doc_min_arr": "Minimum annualised return (ARR) required to trigger a trade. 0.10 = 10% ARR. Raise this to be more selective; lower it to trade more frequently. ARR = (edge% × 365) / days_to_resolution.",
+  "min_arr": 0.10,
+
+  "_doc_kp_max_per_trade": "Maximum total dollar cost per arbitrage trade (the KP_max rule from Trade Rules.md). The bot stops adding contracts once this cap would be exceeded.",
+  "kp_max_per_trade": 100.0,
+
+  "_doc_scan_interval_seconds": "Seconds between full scan cycles when running in 'run' mode.",
+  "scan_interval_seconds": 3,
+
+  "_doc_max_workers": "Number of parallel threads used to fetch orderbook data. Higher = faster scans across many pairs, but may hit API rate limits. 30 is a safe default for 1000+ pairs. Raise to 50-100 if scans are too slow and you're not seeing rate limit errors.",
+  "max_workers": 30,
+
+  "_doc_pairs_file": "Path to the Excel (.xlsx) or CSV pairs file. Can be relative to where you run the bot, or absolute. Required columns: pair_id, kalshi_ticker, polymarket_yes_token_id, polymarket_no_token_id, resolution_date, category, active.",
+  "pairs_file": "Pairs_for_Kalshi_and_Polymarket.xlsx",
+
+  "_doc_trade_log": "File where executed trades are logged (one JSON object per line, appended). Created automatically if it does not exist.",
+  "trade_log": "trades.json",
+
+  "_doc_failed_log": "File where pairs that fail to fetch are permanently logged (one JSON object per line). On each run, this file is read at startup and those pairs are skipped for the entire session — they will never be fetched again unless you remove them from this file.",
+  "failed_log": "failed_pairs.json",
+
+  "_doc_fees": "Fee formulas as math expressions. Available variables: p = contract price/probability (0–1), q = 1−p (complement), c = number of contracts. Operators: + − * / ** ( ). No function calls allowed.",
+  "_doc_fees_examples": "Common formulas — Kalshi standard: 'p * (1 - p) * 0.007 * c'  |  Polymarket standard: 'p * (1 - p) * 0.0175 * c'  |  Flat fee: '0.02 * c'  |  Using q shorthand: 'p * q * 0.007 * c'",
+  "fees": {
+    "kalshi": {
+      "_doc": "Kalshi taker fee. round_up_to_cent=true matches Kalshi's actual billing (rounds fee up to the nearest cent).",
+      "formula": "p * (1 - p) * 0.0175 * c",
+      "round_up_to_cent": true
+    },
+    "polymarket": {
+      "_doc": "Polymarket taker fee.",
+      "formula": "0"
+    }
+  },
+
+  "_doc_api": "Public API base URLs. These are the live production endpoints — no changes needed for normal use. Orderbook data from both APIs is publicly accessible without authentication, so paper trading works with the defaults below and empty credentials.",
+  "api": {
+    "kalshi_base_url": "https://api.elections.kalshi.com/trade-api/v2",
+    "polymarket_clob_url": "https://clob.polymarket.com",
+    "polymarket_gamma_url": "https://gamma-api.polymarket.com"
+  },
+
+  "_doc_kalshi": "Kalshi API credentials. Leave blank for paper trading — market data is publicly accessible without a key.",
+  "kalshi": {
+    "_doc_api_key": "Your Kalshi API key ID (from Kalshi account → Settings → API).",
+    "api_key": "",
+    "_doc_private_key_base64": "RSA private key in base64-encoded PEM format. Encode with:  base64 -w0 your_private_key.pem  (Linux/Mac)  or  [Convert]::ToBase64String([IO.File]::ReadAllBytes('key.pem'))  (PowerShell).",
+    "private_key_base64": ""
+  },
+
+  "_doc_polymarket": "Polymarket CLOB credentials. Leave blank for paper trading — orderbook data is publicly accessible without a key.",
+  "polymarket": {
+    "_doc_private_key": "Ethereum wallet private key (starts with 0x). Used for signing orders.",
+    "private_key": "",
+    "_doc_clob_creds": "CLOB API credentials — generate at clob.polymarket.com after connecting your wallet.",
+    "api_key": "",
+    "api_secret": "",
+    "api_passphrase": ""
+  }
+}

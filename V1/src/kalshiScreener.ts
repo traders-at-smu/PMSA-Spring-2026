@@ -198,11 +198,11 @@ export class KalshiScreener {
       const book = await this.fetchOrderbook(opp.ticker);
       if (book) {
         opp.bidDepthDollars = (book.yes || []).reduce(
-          (sum: number, lvl: any) => sum + ((lvl.price || 0) * (lvl.contracts || 0)) / 100,
+          (sum: number, lvl: any) => sum + ((lvl.price || 0) * (lvl.count || lvl.contracts || lvl.quantity || 0)) / 100,
           0
         );
         opp.askDepthDollars = (book.no || []).reduce(
-          (sum: number, lvl: any) => sum + ((lvl.price || 0) * (lvl.contracts || 0)) / 100,
+          (sum: number, lvl: any) => sum + ((lvl.price || 0) * (lvl.count || lvl.contracts || lvl.quantity || 0)) / 100,
           0
         );
       }

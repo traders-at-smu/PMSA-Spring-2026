@@ -1,0 +1,441 @@
+"""API connectors for Kalshi and Polymarket, plus the Excel/CSV pairs loader.
+
+All network calls are synchronous (requests library).
+No credentials are required for orderbook data — only for placing live orders.
+"""
+
+from __future__ import annotations
+
+import base64
+import json
+import time
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Any
+
+import requests
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
+
+_KALSHI_BASE = "https://api.elections.kalshi.com/trade-api/v2"
+_POLY_CLOB = "https://clob.polymarket.com"
+_POLY_GAMMA = "https://gamma-api.polymarket.com"
+_TIMEOUT = 10  # seconds
+
+
+# ── Kalshi ────────────────────────────────────────────────────────────────────
+
+class KalshiConnector:
+    """Minimal Kalshi client: fetch orderbook quotes and place limit orders."""
+
+    def __init__(self, api_key: str = "", private_key_base64: str = "", base_url: str = ""):
+        # Use the public production URL by default — no key required for read access
+        self.base = (base_url or _KALSHI_BASE).rstrip("/")
+        self.api_key = api_key.strip()
+        self._private_key = None
+        if private_key_base64.strip():
+            key_bytes = base64.b64decode(private_key_base64.strip())
+            self._private_key = serialization.load_pem_private_key(key_bytes, password=None)
+
+    def _signed_headers(self, method: str, path: str) -> dict[str, str]:
+        if not self._private_key or not self.api_key:
+            raise RuntimeError(
+                "Kalshi live trading requires 'api_key' and 'private_key_base64' in config"
+            )
+        ts_ms = str(int(time.time() * 1000))
+        msg = f"{ts_ms}{method.upper()}{path}".encode()
+        sig = self._private_key.sign(
+            msg,
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.DIGEST_LENGTH,
+            ),
+            hashes.SHA256(),
+        )
+        return {
+            "KALSHI-ACCESS-KEY": self.api_key,
+            "KALSHI-ACCESS-TIMESTAMP": ts_ms,
+            "KALSHI-ACCESS-SIGNATURE": base64.b64encode(sig).decode(),
+            "Content-Type": "application/json",
+        }
+
+    @staticmethod
+    def _parse_level(level: Any) -> tuple[int, int]:
+        """Return (price_cents, qty) from a raw orderbook level."""
+        if isinstance(level, dict):
+            price = level.get("price", level.get("yes_price", level.get("no_price", 0)))
+            size = level.get("count", level.get("quantity", level.get("size", 0)))
+        elif isinstance(level, (list, tuple)) and len(level) >= 2:
+            price, size = level[0], level[1]
+        else:
+            return 0, 0
+        try:
+            return int(float(price)), int(float(size))
+        except (TypeError, ValueError):
+            return 0, 0
+
+    @classmethod
+    def _derive_asks(cls, opposite_bids: list[Any]) -> list[dict[str, Any]]:
+        """Kalshi only exposes bids; asks are derived from the opposite side.
+
+        A bid for NO at 65 cents implies an ask for YES at 35 cents.
+        """
+        by_price: dict[float, int] = {}
+        for level in opposite_bids:
+            cents, qty = cls._parse_level(level)
+            if qty <= 0:
+                continue
+            ask = round((100 - cents) / 100.0, 6)
+            if 0.0 <= ask <= 1.0:
+                by_price[ask] = by_price.get(ask, 0) + qty
+        return [{"price": p, "size": by_price[p]} for p in sorted(by_price)]
+
+    def get_quotes(self, ticker: str) -> dict[str, Any]:
+        """Fetch and normalise orderbook quotes for a Kalshi market ticker.
+
+        Returns:
+            yes_bid, yes_ask, no_bid, no_ask (all floats in [0,1])
+            depth.buy_yes  — ask levels for buying YES  [{price, size}, ...]
+            depth.buy_no   — ask levels for buying NO   [{price, size}, ...]
+        """
+        res = requests.get(
+            f"{self.base}/markets/{ticker}/orderbook", timeout=_TIMEOUT
+        )
+        res.raise_for_status()
+        ob = res.json().get("orderbook", {})
+        yes_bids: list[Any] = ob.get("yes", [])
+        no_bids: list[Any] = ob.get("no", [])
+
+        def _best_bid(bids: list[Any]) -> float:
+            best = max(
+                (self._parse_level(b)[0] for b in bids), default=0
+            )
+            return max(0.0, min(1.0, best / 100.0))
+
+        yes_bid = _best_bid(yes_bids)
+        no_bid = _best_bid(no_bids)
+        return {
+            "yes_bid": yes_bid,
+            "yes_ask": max(0.0, 1.0 - no_bid),
+            "no_bid": no_bid,
+            "no_ask": max(0.0, 1.0 - yes_bid),
+            "depth": {
+                "buy_yes": self._derive_asks(no_bids),   # to buy YES, cross NO bids
+                "buy_no": self._derive_asks(yes_bids),   # to buy NO, cross YES bids
+            },
+        }
+
+    def place_order(
+        self,
+        ticker: str,
+        side: str,
+        contracts: int,
+        price: float,
+        client_order_id: str,
+    ) -> dict[str, Any]:
+        """Place a limit buy order on Kalshi (live mode only)."""
+        path = "/portfolio/orders"
+        payload: dict[str, Any] = {
+            "ticker": ticker,
+            "client_order_id": client_order_id,
+            "type": "limit",
+            "action": "buy",
+            "side": side,
+            "count": contracts,
+        }
+        price_cents = int(round(price * 100))
+        if side == "yes":
+            payload["yes_price"] = price_cents
+        else:
+            payload["no_price"] = price_cents
+        headers = self._signed_headers("POST", path)
+        res = requests.post(
+            f"{self.base}{path}", json=payload, headers=headers, timeout=_TIMEOUT
+        )
+        res.raise_for_status()
+        return res.json()
+
+
+# ── Polymarket ────────────────────────────────────────────────────────────────
+
+class PolymarketConnector:
+    """Minimal Polymarket CLOB client: fetch quotes and place GTC limit orders."""
+
+    def __init__(
+        self,
+        private_key: str = "",
+        api_key: str = "",
+        api_secret: str = "",
+        api_passphrase: str = "",
+        clob_url: str = "",
+        gamma_url: str = "",
+    ):
+        # Use the public production URLs by default — no key required for read access
+        self.clob_host = (clob_url or _POLY_CLOB).rstrip("/")
+        self.gamma_host = (gamma_url or _POLY_GAMMA).rstrip("/")
+        self.private_key = private_key.strip()
+        self.api_key = api_key.strip()
+        self.api_secret = api_secret.strip()
+        self.api_passphrase = api_passphrase.strip()
+        self._client = None  # lazy-init on first live order
+
+    def _ensure_client(self) -> None:
+        if self._client is not None:
+            return
+        try:
+            from py_clob_client.client import ClobClient  # type: ignore
+        except ImportError as exc:
+            raise RuntimeError(
+                "py-clob-client is required for live Polymarket trading. "
+                "Install with: pip install py-clob-client"
+            ) from exc
+        if not self.private_key:
+            raise RuntimeError(
+                "polymarket.private_key required for live mode"
+            )
+        creds = (
+            {
+                "key": self.api_key,
+                "secret": self.api_secret,
+                "passphrase": self.api_passphrase,
+            }
+            if self.api_key and self.api_secret and self.api_passphrase
+            else None
+        )
+        self._client = ClobClient(
+            host=self.clob_host,
+            key=self.private_key,
+            chain_id=137,
+            creds=creds,
+        )
+
+    def _resolve_tokens(self, market_slug: str) -> tuple[str, str]:
+        """Look up YES and NO token IDs for a market slug via Gamma API."""
+        res = requests.get(
+            f"{self.gamma_host}/markets",
+            params={"slug": market_slug},
+            timeout=_TIMEOUT,
+        )
+        res.raise_for_status()
+        payload = res.json()
+        if not isinstance(payload, list) or not payload:
+            raise RuntimeError(
+                f"No Polymarket market found for slug '{market_slug}'"
+            )
+        market = payload[0]
+        raw_ids = market.get("clobTokenIds", [])
+        if isinstance(raw_ids, str):
+            raw_ids = json.loads(raw_ids)
+        outcomes = [o.strip().lower() for o in market.get("outcomes", ["yes", "no"])]
+        yes_idx = outcomes.index("yes") if "yes" in outcomes else 0
+        no_idx = outcomes.index("no") if "no" in outcomes else 1
+        if len(raw_ids) < 2:
+            raise RuntimeError(
+                f"Polymarket market '{market_slug}' has fewer than 2 token IDs"
+            )
+        return str(raw_ids[yes_idx]), str(raw_ids[no_idx])
+
+    @staticmethod
+    def _parse_ask_levels(book: dict[str, Any]) -> list[dict[str, Any]]:
+        by_price: dict[float, int] = {}
+        for level in book.get("asks", []):
+            try:
+                if isinstance(level, dict):
+                    p = float(level["price"])
+                    q = int(float(level.get("size", level.get("quantity", 0))))
+                elif isinstance(level, (list, tuple)):
+                    p, q = float(level[0]), int(float(level[1]))
+                else:
+                    continue
+            except (TypeError, ValueError, KeyError):
+                continue
+            if q > 0 and 0.0 <= p <= 1.0:
+                rp = round(p, 6)
+                by_price[rp] = by_price.get(rp, 0) + q
+        return [{"price": p, "size": by_price[p]} for p in sorted(by_price)]
+
+    @staticmethod
+    def _best_ask(book: dict[str, Any]) -> float:
+        prices = []
+        for level in book.get("asks", []):
+            try:
+                p = float(level["price"]) if isinstance(level, dict) else float(level[0])
+                if 0.0 <= p <= 1.0:
+                    prices.append(p)
+            except (TypeError, ValueError, KeyError, IndexError):
+                pass
+        return min(prices) if prices else 1.0
+
+    @staticmethod
+    def _best_bid(book: dict[str, Any]) -> float:
+        prices = []
+        for level in book.get("bids", []):
+            try:
+                p = float(level["price"]) if isinstance(level, dict) else float(level[0])
+                if 0.0 <= p <= 1.0:
+                    prices.append(p)
+            except (TypeError, ValueError, KeyError, IndexError):
+                pass
+        return max(prices) if prices else 0.0
+
+    def _fetch_book(self, token_id: str) -> dict[str, Any]:
+        res = requests.get(
+            f"{self.clob_host}/book",
+            params={"token_id": token_id},
+            timeout=_TIMEOUT,
+        )
+        res.raise_for_status()
+        return res.json()
+
+    def get_quotes(
+        self,
+        yes_token_id: str,
+        no_token_id: str,
+        market_slug: str = "",
+    ) -> dict[str, Any]:
+        """Fetch and normalise orderbook quotes for both YES and NO tokens.
+
+        If token IDs are empty, resolves them from market_slug via Gamma API.
+
+        Returns:
+            yes_bid, yes_ask, no_bid, no_ask (floats in [0,1])
+            depth.yes_asks  — ask levels for buying YES  [{price, size}, ...]
+            depth.no_asks   — ask levels for buying NO   [{price, size}, ...]
+            yes_token_id, no_token_id (resolved)
+        """
+        yid = yes_token_id.strip()
+        nid = no_token_id.strip()
+        if not yid or not nid:
+            if not market_slug:
+                raise RuntimeError(
+                    "Polymarket: need yes_token_id + no_token_id, or market_slug for auto-resolution"
+                )
+            yid, nid = self._resolve_tokens(market_slug)
+
+        # Fetch YES and NO orderbooks in parallel — halves per-pair Polymarket latency
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            yes_fut = pool.submit(self._fetch_book, yid)
+            no_fut = pool.submit(self._fetch_book, nid)
+            yes_book = yes_fut.result()
+            no_book = no_fut.result()
+
+        return {
+            "yes_bid": self._best_bid(yes_book),
+            "yes_ask": self._best_ask(yes_book),
+            "no_bid": self._best_bid(no_book),
+            "no_ask": self._best_ask(no_book),
+            "depth": {
+                "yes_asks": self._parse_ask_levels(yes_book),
+                "no_asks": self._parse_ask_levels(no_book),
+            },
+            "yes_token_id": yid,
+            "no_token_id": nid,
+        }
+
+    def place_order(
+        self, token_id: str, side: str, size: int, price: float
+    ) -> dict[str, Any]:
+        """Place a GTC limit order on Polymarket (live mode only)."""
+        self._ensure_client()
+        from py_clob_client.clob_types import OrderArgs  # type: ignore
+
+        order = self._client.create_order(
+            OrderArgs(token_id=token_id, price=float(price), size=float(size), side="BUY")
+        )
+        return self._client.post_order(order, order_type="GTC")
+
+
+# ── Excel / CSV pairs loader ──────────────────────────────────────────────────
+
+def _pick(row: dict, *keys: str, default: str = "") -> str:
+    """Return the first non-empty string value found among the given keys."""
+    for key in keys:
+        v = row.get(key)
+        if v is not None:
+            s = str(v).strip()
+            if s:
+                return s
+    return default
+
+
+def load_pairs(path: str) -> list[dict[str, Any]]:
+    """Load the manual pairs list from an Excel (.xlsx) or CSV file.
+
+    Accepts the actual column names used in Pairs_for_Kalshi_and_Polymarket.xlsx
+    as well as the generic fallback names:
+
+        Kalshi ticker  : kalshi_market_id  | kalshi_ticker
+        Polymarket slug: poly_slug         | polymarket_market_slug
+        YES token ID   : polymarket_yes_token_id   (optional — resolved via slug at scan time)
+        NO  token ID   : polymarket_no_token_id    (optional)
+        Title          : title_clean       | title
+        Category       : category_tag      | category
+        Resolution date: time to expiration (2 months out) | resolution_time_utc | resolution_date
+        Active flag    : active  (optional — if absent all rows are treated as active)
+        Row ID         : pair_id
+
+    Returns a list of dicts for active pairs only.
+    """
+    p = Path(path)
+    if not p.exists():
+        raise FileNotFoundError(f"Pairs file not found: {path}")
+
+    rows: list[dict[str, Any]] = []
+
+    if p.suffix.lower() in {".xlsx", ".xls"}:
+        import openpyxl  # type: ignore
+        wb = openpyxl.load_workbook(p, read_only=True, data_only=True)
+        ws = wb.active
+        raw_headers = [
+            str(cell.value or "").strip().lower()
+            for cell in next(ws.iter_rows(min_row=1, max_row=1))
+        ]
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            rows.append({
+                raw_headers[i]: row[i]
+                for i in range(min(len(raw_headers), len(row)))
+            })
+        wb.close()
+    else:
+        import csv
+        with p.open(newline="", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            rows = [{k.strip().lower(): v for k, v in r.items()} for r in reader]
+
+    has_active_col = any("active" in (row or {}) for row in rows[:5])
+
+    pairs: list[dict[str, Any]] = []
+    for row in rows:
+        # Respect an explicit active column if present; otherwise include all rows
+        if has_active_col:
+            active = str(row.get("active", "true") or "true").strip().lower()
+            if active in {"false", "0", "no"}:
+                continue
+
+        pair_id = _pick(row, "pair_id")
+        # Accept both "kalshi_market_id" (actual file) and "kalshi_ticker" (generic)
+        kalshi_ticker = _pick(row, "kalshi_market_id", "kalshi_ticker")
+        if not pair_id or not kalshi_ticker:
+            continue
+
+        pairs.append({
+            "pair_id": pair_id,
+            "title": _pick(row, "title_clean", "title", default=pair_id),
+            "kalshi_ticker": kalshi_ticker,
+            # Token IDs are optional — if absent they are resolved via slug at scan time
+            "polymarket_yes_token_id": _pick(row, "polymarket_yes_token_id"),
+            "polymarket_no_token_id": _pick(row, "polymarket_no_token_id"),
+            # Accept both "poly_slug" (actual file) and "polymarket_market_slug" (generic)
+            "polymarket_market_slug": _pick(row, "poly_slug", "polymarket_market_slug"),
+            # Accept several resolution-date column name variants
+            "resolution_date": _pick(
+                row,
+                "time to expiration (2 months out)",
+                "resolution_time_utc",
+                "resolution_date",
+            ),
+            # Accept both "category_tag" (actual file) and "category" (generic)
+            "category": _pick(row, "category_tag", "category", default="default"),
+        })
+
+    return pairs

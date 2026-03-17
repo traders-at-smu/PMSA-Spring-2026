@@ -21,6 +21,8 @@ import { ManualPairsService } from "../services/manualPairsService";
 import {
   evaluatePairSnapshot,
   DEFAULT_STRATEGY_PARAMS,
+  computeKalshiFee,
+  computePolymarketFee,
 } from "../services/depthWalkingEngine";
 import type { PairSnapshot, PairDepth, DepthLevel } from "../types";
 
@@ -150,7 +152,7 @@ async function fetchPairDepth(
     const parseKalshi = (levels: any[]): DepthLevel[] =>
       (levels || []).map((l: any) => ({
         price: (l.price || 0) / 100,
-        size: l.contracts || l.quantity || 0,
+        size: l.count || l.contracts || l.quantity || l.size || 0,
       })).filter((l: DepthLevel) => l.size > 0);
 
     const parsePoly = (book: any, side: "asks" | "bids"): DepthLevel[] => {
@@ -256,162 +258,97 @@ app.get("/api/cross-platform/arbs", async (_req, res) => {
     const { verifiedOnly } = stateStore.getRuntimeControl();
 
     if (verifiedOnly) {
-      // Manual mode: build arbs from Excel pairs with depth-walking
+      // Manual mode: build arbs from Excel pairs using mid-price arithmetic + fee calculation
+      const settings = getSettings();
+      const maxTradeUsd = settings.execution.maxTradeUsd ?? 100;
       const manualPairs = await manualPairsService.getPairs();
-      const arbPairs = manualPairs.filter(p => p.hasArb);
-
-      // Fetch depth for manual arb pairs in parallel
-      const depthResults = await Promise.allSettled(
-        arbPairs.map(p =>
-          fetchPairDepth(p.kalshiTicker, p.polyYesTokenId || "", p.polyNoTokenId || "", 5000)
-        )
-      );
 
       const arbs: import("../crossPlatformScreener").CrossPlatformArb[] = [];
-      for (let i = 0; i < arbPairs.length; i++) {
-        const p = arbPairs[i];
-        const dr = depthResults[i];
-        const depth: PairDepth = dr.status === "fulfilled" ? dr.value : {
-          kalshi: { buyYes: [], buyNo: [] },
-          polymarket: { yesAsks: [], noAsks: [] },
-        };
+      for (const p of manualPairs) {
+        if (!p.hasArb) continue;
 
-        // Compute days to resolution
-        const endDate = p.endDate || "";
+        // Determine cheapest arb direction
+        const cost1 = p.kalshiYesAsk > 0 && p.polyYesBid > 0
+          ? p.kalshiYesAsk + (1 - p.polyYesBid) : 1; // Buy Kalshi YES + Poly NO
+        const cost2 = p.polyYesAsk > 0 && p.kalshiYesBid > 0
+          ? p.polyYesAsk + (1 - p.kalshiYesBid) : 1; // Buy Poly YES + Kalshi NO
+
+        const useDir1 = cost1 <= cost2;
+        const totalCost = useDir1 ? cost1 : cost2;
+        if (totalCost >= 1) continue;
+
+        const grossProfit = 1 - totalCost;
+        const contracts = totalCost > 0 ? Math.max(1, Math.floor(maxTradeUsd / totalCost)) : 1;
+
+        // Calculate fees per contract at mid-price
+        const kalshiPrice = useDir1 ? p.kalshiYesAsk : (1 - p.kalshiYesBid);
+        const polyPrice   = useDir1 ? (1 - p.polyYesBid) : p.polyYesAsk;
+        const kalshiFeeAmt  = computeKalshiFee(contracts, kalshiPrice, 0.07);
+        const polyFeeAmt    = computePolymarketFee(contracts, polyPrice, 0.0175, 1);
+        const totalFees     = kalshiFeeAmt + polyFeeAmt;
+
+        const netEdgeDollar = contracts * grossProfit - totalFees;
+        const netProfit     = grossProfit - totalFees / contracts; // per-contract net
+        if (netProfit <= 0) continue; // skip if fees eat the entire edge
+
+        const endDate = p.endDate || p.resolutionTimeUtc || "";
         const endMs = endDate ? Date.parse(endDate) : NaN;
-        const daysToResolution = Number.isFinite(endMs) ? Math.max(0.001, (endMs - Date.now()) / 86_400_000) : 30;
+        const daysToResolution = Number.isFinite(endMs)
+          ? Math.max((endMs - Date.now()) / 86_400_000, 0)
+          : 0;
+        const edgePct = totalCost > 0 ? netProfit / totalCost : 0;
+        const annualizedEdge = daysToResolution > 0 ? (edgePct * 365) / daysToResolution : 0;
 
-        // Build PairSnapshot and run depth-walking evaluation
-        const snapshot: PairSnapshot = {
-          pairId: `${p.polymarketSlug}|${p.kalshiTicker}`,
-          kalshiTicker: p.kalshiTicker,
+        arbs.push({
+          event: p.polymarketTitle || p.kalshiTitle,
+          outcome: "YES",
           polymarketSlug: p.polymarketSlug,
+          kalshiTicker: p.kalshiTicker,
+          polyYesBid: p.polyYesBid,
+          polyYesAsk: p.polyYesAsk,
+          kalshiYesBid: p.kalshiYesBid,
+          kalshiYesAsk: p.kalshiYesAsk,
+          buyYesVenue: useDir1 ? "KALSHI" : "POLYMARKET",
+          buyYesPrice: useDir1 ? p.kalshiYesAsk : p.polyYesAsk,
+          buyNoVenue: useDir1 ? "POLYMARKET" : "KALSHI",
+          buyNoPrice: useDir1 ? (1 - p.polyYesBid) : (1 - p.kalshiYesBid),
+          grossProfit,
+          netProfit,
+          roi: totalCost > 0 ? netProfit / totalCost : 0,
+          priceDiff: Math.abs(p.polyYesAsk - p.kalshiYesAsk),
+          polymarketUrl: p.polymarketUrl,
+          kalshiUrl: p.kalshiUrl,
+          similarityScore: p.similarityScore,
+          category: p.category,
+          polymarketLiquidity: 0,
+          kalshiLiquidity: 0,
+          polymarketVolume24h: 0,
+          kalshiVolume24h: 0,
+          endDate,
+          polyConditionId: p.polyConditionId || "",
           polyYesTokenId: p.polyYesTokenId || "",
           polyNoTokenId: p.polyNoTokenId || "",
-          resolutionTimeUtc: endDate,
-          snapshotTimeUtc: new Date().toISOString(),
-          category: p.category,
-          kalshi: { yesBid: p.kalshiYesBid, yesAsk: p.kalshiYesAsk, noBid: 1 - p.kalshiYesAsk, noAsk: 1 - p.kalshiYesBid },
-          polymarket: { yesBid: p.polyYesBid, yesAsk: p.polyYesAsk, noBid: 1 - p.polyYesAsk, noAsk: 1 - p.polyYesBid },
+          polyNegRisk: p.polyNegRisk || false,
+          contracts,
+          kpTotalCost: contracts * totalCost,
+          edgeDollar: netEdgeDollar,
+          edgePct,
+          annualizedEdge,
+          kalshiLimitPrice: kalshiPrice,
+          polymarketLimitPrice: polyPrice,
+          kalshiFee: kalshiFeeAmt,
+          polymarketFee: polyFeeAmt,
           daysToResolution,
-          depth,
-        };
-
-        const dwDecisions = evaluatePairSnapshot(snapshot, DEFAULT_STRATEGY_PARAMS);
-
-        // Find the best depth-walked strategy; fall back to mid-price arb if depth unavailable
-        const bestDw = dwDecisions.find(dw => dw.trade);
-        if (bestDw) {
-          const dw = bestDw;
-          const isKY = dw.strategy === "BUY_KY_BUY_PN";
-          const totalCost = (dw.kpTotalCost ?? 0) / Math.max(1, dw.contracts ?? 1);
-          const grossProfit = totalCost < 1 ? 1 - totalCost : 0;
-
-          arbs.push({
-            event: p.polymarketTitle || p.kalshiTitle,
-            outcome: "YES",
-            polymarketSlug: p.polymarketSlug,
-            kalshiTicker: p.kalshiTicker,
-            polyYesBid: p.polyYesBid,
-            polyYesAsk: p.polyYesAsk,
-            kalshiYesBid: p.kalshiYesBid,
-            kalshiYesAsk: p.kalshiYesAsk,
-            buyYesVenue: isKY ? "KALSHI" : "POLYMARKET",
-            buyYesPrice: isKY ? (dw.kalshiPrice ?? p.kalshiYesAsk) : (dw.polymarketPrice ?? p.polyYesAsk),
-            buyNoVenue: isKY ? "POLYMARKET" : "KALSHI",
-            buyNoPrice: isKY ? (dw.polymarketPrice ?? (1 - p.polyYesBid)) : (dw.kalshiPrice ?? (1 - p.kalshiYesBid)),
-            grossProfit,
-            netProfit: grossProfit,
-            roi: totalCost > 0 ? grossProfit / totalCost : 0,
-            priceDiff: Math.abs(p.polyYesAsk - p.kalshiYesAsk),
-            polymarketUrl: p.polymarketUrl,
-            kalshiUrl: p.kalshiUrl,
-            similarityScore: p.similarityScore,
-            category: p.category,
-            polymarketLiquidity: 0,
-            kalshiLiquidity: 0,
-            polymarketVolume24h: 0,
-            kalshiVolume24h: 0,
-            endDate,
-            polyConditionId: p.polyConditionId || "",
-            polyYesTokenId: p.polyYesTokenId || "",
-            polyNoTokenId: p.polyNoTokenId || "",
-            polyNegRisk: p.polyNegRisk || false,
-            contracts: dw.contracts,
-            kpTotalCost: dw.kpTotalCost,
-            edgeDollar: dw.edgeDollar,
-            edgePct: dw.edgePct,
-            annualizedEdge: dw.annualizedEdge,
-            kalshiLimitPrice: dw.kalshiPrice,
-            polymarketLimitPrice: dw.polymarketPrice,
-            kalshiFee: dw.metadata?.kalshiFee as number | undefined,
-            polymarketFee: dw.metadata?.polymarketFee as number | undefined,
-            daysToResolution,
-            strategy: dw.strategy as "BUY_KY_BUY_PN" | "BUY_KN_BUY_PY",
-            stopReason: dw.metadata?.arbStopReason as string | undefined,
-          });
-        } else {
-          // Fallback: depth-walking found no tradeable decision (empty books / annualized edge
-          // below threshold / not enough contracts), but hasArb mid-price check passed.
-          // Include using best-available reason so the opportunity is visible in the UI.
-          const arbCost1 = p.polyYesAsk + (1 - p.kalshiYesBid); // buy YES poly + NO kalshi
-          const arbCost2 = p.kalshiYesAsk + (1 - p.polyYesBid); // buy YES kalshi + NO poly
-          const isKY = arbCost2 < arbCost1;
-          const totalCost = isKY ? arbCost2 : arbCost1;
-          const grossProfit = Math.max(0, 1 - totalCost);
-          const bestDecision = dwDecisions[0];
-
-          arbs.push({
-            event: p.polymarketTitle || p.kalshiTitle,
-            outcome: "YES",
-            polymarketSlug: p.polymarketSlug,
-            kalshiTicker: p.kalshiTicker,
-            polyYesBid: p.polyYesBid,
-            polyYesAsk: p.polyYesAsk,
-            kalshiYesBid: p.kalshiYesBid,
-            kalshiYesAsk: p.kalshiYesAsk,
-            buyYesVenue: isKY ? "KALSHI" : "POLYMARKET",
-            buyYesPrice: isKY ? p.kalshiYesAsk : p.polyYesAsk,
-            buyNoVenue: isKY ? "POLYMARKET" : "KALSHI",
-            buyNoPrice: isKY ? (1 - p.polyYesBid) : (1 - p.kalshiYesBid),
-            grossProfit,
-            netProfit: grossProfit,
-            roi: totalCost > 0 ? grossProfit / totalCost : 0,
-            priceDiff: Math.abs(p.polyYesAsk - p.kalshiYesAsk),
-            polymarketUrl: p.polymarketUrl,
-            kalshiUrl: p.kalshiUrl,
-            similarityScore: p.similarityScore,
-            category: p.category,
-            polymarketLiquidity: 0,
-            kalshiLiquidity: 0,
-            polymarketVolume24h: 0,
-            kalshiVolume24h: 0,
-            endDate,
-            polyConditionId: p.polyConditionId || "",
-            polyYesTokenId: p.polyYesTokenId || "",
-            polyNoTokenId: p.polyNoTokenId || "",
-            polyNegRisk: p.polyNegRisk || false,
-            contracts: undefined,
-            kpTotalCost: undefined,
-            edgeDollar: undefined,
-            edgePct: undefined,
-            annualizedEdge: undefined,
-            kalshiLimitPrice: undefined,
-            polymarketLimitPrice: undefined,
-            kalshiFee: undefined,
-            polymarketFee: undefined,
-            daysToResolution,
-            strategy: isKY ? "BUY_KY_BUY_PN" : "BUY_KN_BUY_PY",
-            stopReason: bestDecision?.metadata?.arbStopReason as string | undefined ?? "no_depth",
-          });
-        }
+          strategy: useDir1 ? "BUY_KY_BUY_PN" : "BUY_KN_BUY_PY",
+          stopReason: "manual_pair",
+        });
       }
 
       return res.json({
         arbs,
         matchedPairs: manualPairs.length,
-        polymarketsScanned: manualPairs.filter(p => p.polymarketSlug).length,
-        kalshiMarketsScanned: manualPairs.filter(p => p.kalshiTicker).length,
+        polymarketsScanned: 0,
+        kalshiMarketsScanned: 0,
         timestamp: new Date().toISOString(),
       });
     }

@@ -811,7 +811,7 @@ export class CrossPlatformScreener {
         const parseKalshi = (levels: any[]): DepthLevel[] =>
           (levels || []).map((l: any) => ({
             price: (l.price || 0) / 100,
-            size: l.contracts || l.quantity || 0,
+            size: l.count || l.contracts || l.quantity || l.size || 0,
           })).filter((l: DepthLevel) => l.size > 0);
 
         empty.kalshi.buyYes = parseKalshi(kalshiBook.yes || kalshiBook.asks);
