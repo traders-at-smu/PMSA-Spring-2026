@@ -151,6 +151,10 @@ def _walk_depth(
     cur_kp = 0.0
     stop_reason = "depth_exhausted"
 
+    # Slippage tracking: one entry per distinct (k_price, p_price) level pair,
+    # updated in-place as contracts accumulate at the same prices.
+    slippage: list[dict[str, Any]] = []
+
     while k_idx < len(k_levels) and p_idx < len(p_levels):
         # Advance Kalshi level pointer if exhausted
         if k_rem <= 0:
@@ -212,6 +216,24 @@ def _walk_depth(
         k_rem -= 1
         p_rem -= 1
 
+        # Record slippage: one entry per distinct price-level combination.
+        # If prices unchanged from the last entry, update it in-place so each
+        # entry reflects the cumulative state at the END of that price level.
+        edge_d = contracts - cur_kp
+        arr_now = (edge_d / cur_kp * 365.0 / days) if cur_kp > 0 and days > 0 else 0.0
+        if slippage and slippage[-1]["k_price"] == nk and slippage[-1]["p_price"] == np_:
+            slippage[-1]["contracts"] = contracts
+            slippage[-1]["total_profit"] = round(edge_d, 4)
+            slippage[-1]["arr"] = round(arr_now, 4)
+        else:
+            slippage.append({
+                "k_price": round(nk, 6),
+                "p_price": round(np_, 6),
+                "contracts": contracts,
+                "total_profit": round(edge_d, 4),
+                "arr": round(arr_now, 4),
+            })
+
     final_kp = cur_kp
     final_edge_pct = (contracts - final_kp) / final_kp if final_kp > 0 else 0.0
     final_arr = (final_edge_pct * 365.0) / days if days > 0 else 0.0
@@ -227,6 +249,7 @@ def _walk_depth(
         "edge_pct": final_edge_pct,
         "total_fee": cur_kf + cur_pf,
         "stop_reason": stop_reason,
+        "slippage": slippage,
     }
 
 
@@ -307,6 +330,7 @@ def evaluate_pair(
                 "pair_id": pair["pair_id"],
                 "title": pair.get("title", pair["pair_id"]),
                 "kalshi_ticker": pair["kalshi_ticker"],
+                "polymarket_slug": pair.get("polymarket_market_slug", ""),
                 "strategy": strat["strategy"],
                 "k_side": strat["k_side"],
                 "p_side": strat["p_side"],
@@ -319,6 +343,7 @@ def evaluate_pair(
                 "arr": walk["arr"],
                 "total_fee": walk["total_fee"],
                 "days": days,
+                "slippage": walk["slippage"],
             })
 
     return results
@@ -349,6 +374,36 @@ def _next_trade_number(log_path: str) -> str:
 
 
 def _write_trade_log(entry: dict[str, Any], log_path: str) -> None:
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+    with Path(log_path).open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+_KALSHI_BASE_URL = "https://kalshi.com/markets"
+_POLY_BASE_URL   = "https://polymarket.com/event"
+
+
+def _write_opportunity_log(opp: dict[str, Any], log_path: str) -> None:
+    """Append one opportunity (with market links) to the opportunity log."""
+    ticker = opp.get("kalshi_ticker", "")
+    slug   = opp.get("polymarket_slug", "")
+    entry = {
+        "timestamp":       datetime.now(timezone.utc).isoformat(),
+        "pair_id":         opp["pair_id"],
+        "title":           opp.get("title", opp["pair_id"]),
+        "strategy":        opp["strategy"],
+        "contracts":       opp["contracts"],
+        "k_price":         round(opp["k_price"], 4),
+        "p_price":         round(opp["p_price"], 4),
+        "kp_cost":         round(opp["kp_cost"], 4),
+        "edge_dollar":     round(opp["edge_dollar"], 4),
+        "arr_pct":         round(opp["arr"] * 100, 2),
+        "total_fee":       round(opp["total_fee"], 4),
+        "days":            round(opp["days"], 2),
+        "kalshi_url":      f"{_KALSHI_BASE_URL}/{ticker}" if ticker else "",
+        "polymarket_url":  f"{_POLY_BASE_URL}/{slug}"     if slug   else "",
+        "slippage":        opp.get("slippage", []),
+    }
     Path(log_path).parent.mkdir(parents=True, exist_ok=True)
     with Path(log_path).open("a", encoding="utf-8") as f:
         f.write(json.dumps(entry) + "\n")
@@ -512,6 +567,7 @@ def run_scan(
 
     mode = cfg["mode"]
     log_path = cfg.get("trade_log", "trades.json")
+    opp_log_path = cfg.get("opportunities_log", "opportunities.json")
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     max_workers = int(cfg.get("max_workers", 30))
     ts = datetime.now().strftime("%H:%M:%S")
@@ -595,8 +651,49 @@ def run_scan(
             )
             continue
 
+        # Optional per-pair market status line (enabled via print_market_status in config).
+        if cfg.get("print_market_status", False):
+            k_yes_mp = (kq["yes_bid"] + kq["yes_ask"]) / 2
+            k_no_mp  = (kq["no_bid"]  + kq["no_ask"])  / 2
+            p_yes_mp = (pq["yes_bid"] + pq["yes_ask"]) / 2
+            p_no_mp  = (pq["no_bid"]  + pq["no_ask"])  / 2
+            days_left = _days_to_resolution(pair.get("resolution_date", ""))
+            # Net-of-fees marginal edge for 1 contract in each direction
+            fee_cfg   = cfg["fees"]
+            k_fee_fn  = fee_cfg["kalshi"]["_fn"]
+            p_fee_fn  = fee_cfg["polymarket"]["_fn"]
+            k_rup     = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
+            def _net_edge(ka: float, pa: float) -> float:
+                return 1.0 - (ka + pa
+                               + apply_fee(k_fee_fn, ka, 1, k_rup)
+                               + apply_fee(p_fee_fn, pa, 1, False))
+            net_edge_dollar = max(
+                _net_edge(kq["yes_ask"], pq["no_ask"]),
+                _net_edge(kq["no_ask"],  pq["yes_ask"]),
+            )
+            # kp_cost = what it costs to buy both legs for 1 contract
+            kp_cost_1c = 1.0 - net_edge_dollar
+            # edge_pct and ARR consistent with the depth-walk formula:
+            #   edge_pct = edge_dollar / kp_cost
+            #   ARR      = edge_pct * 365 / days
+            edge_pct = (net_edge_dollar / kp_cost_1c) if kp_cost_1c > 0 else 0.0
+            net_arr  = (edge_pct * 365.0 / days_left) if days_left > 0 else 0.0
+            edge_color = Fore.GREEN if edge_pct > 0 else Fore.RED
+            print(
+                f"  {Style.DIM}{label:<38}{Style.RESET_ALL}"
+                f"  K YES/NO: {k_yes_mp:.3f}/{k_no_mp:.3f}"
+                f"  P YES/NO: {p_yes_mp:.3f}/{p_no_mp:.3f}"
+                f"  exp={days_left:.1f}d"
+                f"  edge={edge_color}{edge_pct * 100:+.1f}%"
+                f"  ARR={net_arr * 100:+.1f}%{Style.RESET_ALL}"
+            )
+
         if opps:
             for opp in opps:
+                ticker = opp.get("kalshi_ticker", "")
+                slug   = opp.get("polymarket_slug", "")
+                k_url  = f"{_KALSHI_BASE_URL}/{ticker}" if ticker else ""
+                p_url  = f"{_POLY_BASE_URL}/{slug}"     if slug   else ""
                 print(
                     f"  {Fore.GREEN}✓{Style.RESET_ALL} {label:<38} "
                     f"{opp['strategy']:<16} "
@@ -604,6 +701,11 @@ def run_scan(
                     f"ARR={opp['arr'] * 100:.1f}%  "
                     f"edge=${opp['edge_dollar']:.2f}"
                 )
+                if k_url:
+                    print(f"    {Style.DIM}Kalshi:      {k_url}{Style.RESET_ALL}")
+                if p_url:
+                    print(f"    {Style.DIM}Polymarket:  {p_url}{Style.RESET_ALL}")
+                _write_opportunity_log(opp, opp_log_path)
                 if execute:
                     if mode == "paper":
                         trade = execute_paper(opp, log_path)
@@ -613,6 +715,7 @@ def run_scan(
                         status = "PARTIAL FILL" if trade.get("partial_fill") else "filled"
                         color = Fore.RED if trade.get("partial_fill") else Fore.GREEN
                         print(f"    → {trade['trade_number']} {color}{status}{Style.RESET_ALL}")
+                    _print_fill_breakdown(opp)
                 else:
                     print(f"    {Style.DIM}(scan-only — use 'run' to execute){Style.RESET_ALL}")
             all_opps.extend(opps)

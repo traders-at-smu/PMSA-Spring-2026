@@ -13,6 +13,9 @@
   "_doc_scan_interval_seconds": "Seconds between full scan cycles when running in 'run' mode.",
   "scan_interval_seconds": 3,
 
+  "_doc_print_market_status": "Print a one-line market snapshot for every pair on each scan cycle, even when no arb is found. Shows Kalshi and Polymarket mid-prices, days to expiry, net-of-fees marginal edge%, and net-of-fees ARR for the better direction (1-contract). Useful for monitoring market conditions without needing to find a trade. Set to false (default) to suppress this output.",
+  "print_market_status": false,
+
   "_doc_max_workers": "Number of parallel threads used to fetch orderbook data. Higher = faster scans, but too high will trigger 429 rate-limit errors from Kalshi. 10 is a safe default; raise to 20-30 if scans are too slow and you are not seeing rate-limit warnings.",
   "max_workers": 6,
 
@@ -21,6 +24,9 @@
 
   "_doc_trade_log": "File where executed trades are logged (one JSON object per line, appended). Created automatically if it does not exist.",
   "trade_log": "trades.json",
+
+  "_doc_opportunities_log": "File where every detected arbitrage opportunity is logged (one JSON object per line, appended), including Kalshi and Polymarket market URLs and the full slippage breakdown. Written on every scan cycle regardless of whether a trade is executed.",
+  "opportunities_log": "opportunities.json",
 
   "_doc_failed_log": "File where pairs that fail to fetch are permanently logged (one JSON object per line). On each run, this file is read at startup and those pairs are skipped for the entire session — they will never be fetched again unless you remove them from this file.",
   "failed_log": "failed_pairs.json",

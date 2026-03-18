@@ -61,7 +61,13 @@ class KalshiConnector:
 
     @staticmethod
     def _parse_level(level: Any) -> tuple[int, int]:
-        """Return (price_cents, qty) from a raw orderbook level."""
+        """Return (price_cents, qty) from a raw orderbook level.
+
+        Handles both integer-cents format (e.g. 45 → 45¢) and decimal format
+        (e.g. 0.45 → 45¢).  Kalshi's API has been observed returning either;
+        using int() directly on a decimal truncates 0.45 → 0, making every
+        derived ask resolve to $1.00.
+        """
         if isinstance(level, dict):
             price = level.get("price", level.get("yes_price", level.get("no_price", 0)))
             size = level.get("count", level.get("quantity", level.get("size", 0)))
@@ -70,7 +76,11 @@ class KalshiConnector:
         else:
             return 0, 0
         try:
-            return int(float(price)), int(float(size))
+            raw = float(price)
+            # Prices > 1.0 are already in cents (e.g. 45); prices ≤ 1.0 are
+            # decimal probabilities (e.g. 0.45) and must be scaled up.
+            cents = int(round(raw * 100)) if raw <= 1.0 else int(round(raw))
+            return cents, int(float(size))
         except (TypeError, ValueError):
             return 0, 0
 
@@ -93,35 +103,71 @@ class KalshiConnector:
     def get_quotes(self, ticker: str) -> dict[str, Any]:
         """Fetch and normalise orderbook quotes for a Kalshi market ticker.
 
+        Makes two parallel requests:
+          - GET /markets/{ticker}          → scalar bid/ask prices (V1-consistent)
+          - GET /markets/{ticker}/orderbook → depth levels for slippage walking
+
         Returns:
             yes_bid, yes_ask, no_bid, no_ask (all floats in [0,1])
             depth.buy_yes  — ask levels for buying YES  [{price, size}, ...]
             depth.buy_no   — ask levels for buying NO   [{price, size}, ...]
         """
-        res = requests.get(
-            f"{self.base}/markets/{ticker}/orderbook", timeout=_TIMEOUT
-        )
-        res.raise_for_status()
-        ob = res.json().get("orderbook", {})
-        yes_bids: list[Any] = ob.get("yes", [])
-        no_bids: list[Any] = ob.get("no", [])
+        def _fetch_orderbook() -> dict[str, Any]:
+            r = requests.get(f"{self.base}/markets/{ticker}/orderbook", timeout=_TIMEOUT)
+            r.raise_for_status()
+            return r.json()
 
-        def _best_bid(bids: list[Any]) -> float:
-            best = max(
-                (self._parse_level(b)[0] for b in bids), default=0
-            )
-            return max(0.0, min(1.0, best / 100.0))
+        def _fetch_market() -> dict[str, Any]:
+            r = requests.get(f"{self.base}/markets/{ticker}", timeout=_TIMEOUT)
+            r.raise_for_status()
+            return r.json()
 
-        yes_bid = _best_bid(yes_bids)
-        no_bid = _best_bid(no_bids)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            ob_fut  = pool.submit(_fetch_orderbook)
+            mkt_fut = pool.submit(_fetch_market)
+            ob_data  = ob_fut.result()
+            mkt_data = mkt_fut.result()
+
+        # Orderbook depth — used for slippage depth-walk only
+        ob = ob_data.get("orderbook_fp", {})
+        yes_bids: list[Any] = ob.get("yes_dollars", [])
+        no_bids:  list[Any] = ob.get("no_dollars", [])
+
+        def _scalar(val: Any) -> float:
+            """Parse a scalar price that may be integer cents (>1) or decimal (≤1)."""
+            try:
+                v = float(val or 0)
+                return max(0.0, min(1.0, v / 100.0 if v > 1.0 else v))
+            except (TypeError, ValueError):
+                return 0.0
+
+        # Scalar bid/ask from the market summary endpoint — same as V1
+        mkt = mkt_data.get("market", {})
+        yes_bid = _scalar(mkt.get("yes_bid_dollars"))
+        yes_ask = _scalar(mkt.get("yes_ask_dollars"))
+        no_bid  = _scalar(mkt.get("no_bid_dollars"))
+        no_ask  = _scalar(mkt.get("no_ask_dollars"))
+
+        # Fall back to orderbook-derived prices only if market endpoint returns all zeros
+        if yes_bid == 0.0 and yes_ask == 0.0 and no_bid == 0.0 and no_ask == 0.0:
+            def _best_bid_ob(bids: list[Any]) -> float:
+                best = max((self._parse_level(b)[0] for b in bids), default=0)
+                return max(0.0, min(1.0, best / 100.0))
+            yes_bid_ob = _best_bid_ob(yes_bids)
+            no_bid_ob  = _best_bid_ob(no_bids)
+            yes_bid = yes_bid_ob
+            yes_ask = max(0.0, 1.0 - no_bid_ob)
+            no_bid  = no_bid_ob
+            no_ask  = max(0.0, 1.0 - yes_bid_ob)
+
         return {
             "yes_bid": yes_bid,
-            "yes_ask": max(0.0, 1.0 - no_bid),
-            "no_bid": no_bid,
-            "no_ask": max(0.0, 1.0 - yes_bid),
+            "yes_ask": yes_ask,
+            "no_bid":  no_bid,
+            "no_ask":  no_ask,
             "depth": {
                 "buy_yes": self._derive_asks(no_bids),   # to buy YES, cross NO bids
-                "buy_no": self._derive_asks(yes_bids),   # to buy NO, cross YES bids
+                "buy_no":  self._derive_asks(yes_bids),  # to buy NO, cross YES bids
             },
         }
 
