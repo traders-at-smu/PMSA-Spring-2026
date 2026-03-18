@@ -6,6 +6,4 @@
     - [ ] Re-add sorting functionality to scanner
     - [ ] Add spread calculation in scanner pairs tab 
     
-- V4
-    - [  ] Kalshi price not populating correctly based on the book
-    
+- V4    

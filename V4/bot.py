@@ -133,7 +133,7 @@ def _walk_depth(
             "contracts": 0, "k_spend": 0.0, "p_spend": 0.0,
             "k_price": 0.0, "p_price": 0.0, "kp_cost": 0.0,
             "arr": 0.0, "edge_pct": 0.0, "total_fee": 0.0,
-            "stop_reason": "no_levels",
+            "stop_reason": "no_levels", "slippage": [], "remaining": [],
         }
 
     k_idx = p_idx = 0
@@ -238,6 +238,39 @@ def _walk_depth(
     final_edge_pct = (contracts - final_kp) / final_kp if final_kp > 0 else 0.0
     final_arr = (final_edge_pct * 365.0) / days if days > 0 else 0.0
 
+    # After hitting max_contracts, count profitable contracts still available in the book.
+    # Walk level-by-level in bulk (not one contract at a time — only counting, not scoring).
+    remaining: list[dict[str, Any]] = []
+    if stop_reason == "max_contracts_hit":
+        r_ki, r_pi = k_idx, p_idx
+        r_kr, r_pr = k_rem, p_rem
+        while r_ki < len(k_levels) and r_pi < len(p_levels):
+            if r_kr <= 0:
+                r_ki += 1
+                if r_ki >= len(k_levels):
+                    break
+                r_kr = int(k_levels[r_ki]["size"])
+                continue
+            if r_pr <= 0:
+                r_pi += 1
+                if r_pi >= len(p_levels):
+                    break
+                r_pr = int(p_levels[r_pi]["size"])
+                continue
+            nk = float(k_levels[r_ki]["price"])
+            np_ = float(p_levels[r_pi]["price"])
+            if nk + np_ >= 1.0:
+                break
+            count = min(r_kr, r_pr)
+            r_nk = round(nk, 6)
+            r_np = round(np_, 6)
+            if remaining and remaining[-1]["k_price"] == r_nk and remaining[-1]["p_price"] == r_np:
+                remaining[-1]["contracts"] += count
+            else:
+                remaining.append({"k_price": r_nk, "p_price": r_np, "contracts": count})
+            r_kr -= count
+            r_pr -= count
+
     return {
         "contracts": contracts,
         "k_spend": k_spend,
@@ -250,6 +283,7 @@ def _walk_depth(
         "total_fee": cur_kf + cur_pf,
         "stop_reason": stop_reason,
         "slippage": slippage,
+        "remaining": remaining,
     }
 
 
@@ -344,6 +378,7 @@ def evaluate_pair(
                 "total_fee": walk["total_fee"],
                 "days": days,
                 "slippage": walk["slippage"],
+                "remaining": walk["remaining"],
             })
 
     return results
@@ -530,6 +565,40 @@ def _log_failed_pair(pair: dict[str, Any], error: str, log_path: str) -> None:
         f.write(json.dumps(entry) + "\n")
 
 
+# ── Fill breakdown ────────────────────────────────────────────────────────────
+
+def _print_fill_breakdown(opp: dict[str, Any]) -> None:
+    """Print traded fill levels and any remaining arb contracts in the book."""
+    slippage  = opp.get("slippage", [])
+    remaining = opp.get("remaining", [])
+    if not slippage:
+        return
+
+    # Traded breakdown — convert cumulative slippage entries to per-level counts
+    parts: list[str] = []
+    prev_c = 0
+    for entry in slippage:
+        level_c = entry["contracts"] - prev_c
+        prev_c = entry["contracts"]
+        parts.append(
+            f"{level_c}c @ K{entry['k_price']:.4f}/P{entry['p_price']:.4f}"
+        )
+    traded_str = ", ".join(parts)
+    print(f"    {Style.DIM}Traded {opp['contracts']}c: {traded_str}{Style.RESET_ALL}")
+
+    # Remaining arb in the book beyond our cap
+    if remaining:
+        rem_total = sum(r["contracts"] for r in remaining)
+        rem_parts = [
+            f"{r['contracts']}c @ K{r['k_price']:.4f}/P{r['p_price']:.4f}"
+            for r in remaining
+        ]
+        print(
+            f"    {Style.DIM}{rem_total}c remain of arb: "
+            f"{', '.join(rem_parts)}{Style.RESET_ALL}"
+        )
+
+
 # ── Scan cycle ────────────────────────────────────────────────────────────────
 
 def _fetch_pair(pair: dict[str, Any], kalshi, poly) -> tuple[dict, dict, dict]:
@@ -615,6 +684,9 @@ def run_scan(
     # Phase 2: evaluate and execute in original pair order
     all_opps: list[dict[str, Any]] = []
     new_failures = 0
+    # Deduplicate executions: if the same (ticker, strategy) appears more than once
+    # (e.g. duplicate rows in the pairs file) only execute it the first time.
+    executed_keys: set[tuple[str, str]] = set()
 
     for pair in active_pairs:
         label = f"{pair['kalshi_ticker']}/{pair['pair_id']}"
@@ -690,6 +762,7 @@ def run_scan(
 
         if opps:
             for opp in opps:
+                exec_key = (opp.get("kalshi_ticker", ""), opp["strategy"])
                 ticker = opp.get("kalshi_ticker", "")
                 slug   = opp.get("polymarket_slug", "")
                 k_url  = f"{_KALSHI_BASE_URL}/{ticker}" if ticker else ""
@@ -707,17 +780,25 @@ def run_scan(
                     print(f"    {Style.DIM}Polymarket:  {p_url}{Style.RESET_ALL}")
                 _write_opportunity_log(opp, opp_log_path)
                 if execute:
-                    if mode == "paper":
-                        trade = execute_paper(opp, log_path)
-                        print(f"    {Style.DIM}→ logged {trade['trade_number']} (paper){Style.RESET_ALL}")
-                    elif mode == "live":
-                        trade = execute_live(opp, kalshi, poly, log_path)
-                        status = "PARTIAL FILL" if trade.get("partial_fill") else "filled"
-                        color = Fore.RED if trade.get("partial_fill") else Fore.GREEN
-                        print(f"    → {trade['trade_number']} {color}{status}{Style.RESET_ALL}")
-                    _print_fill_breakdown(opp)
+                    if exec_key in executed_keys:
+                        print(
+                            f"    {Fore.YELLOW}⚠ duplicate {exec_key[0]}/{exec_key[1]} "
+                            f"— skipping (already executed this cycle){Style.RESET_ALL}"
+                        )
+                    else:
+                        executed_keys.add(exec_key)
+                        if mode == "paper":
+                            trade = execute_paper(opp, log_path)
+                            print(f"    {Style.DIM}→ logged {trade['trade_number']} (paper){Style.RESET_ALL}")
+                        elif mode == "live":
+                            trade = execute_live(opp, kalshi, poly, log_path)
+                            status = "PARTIAL FILL" if trade.get("partial_fill") else "filled"
+                            color = Fore.RED if trade.get("partial_fill") else Fore.GREEN
+                            print(f"    → {trade['trade_number']} {color}{status}{Style.RESET_ALL}")
+                        _print_fill_breakdown(opp)
                 else:
                     print(f"    {Style.DIM}(scan-only — use 'run' to execute){Style.RESET_ALL}")
+                    _print_fill_breakdown(opp)
             all_opps.extend(opps)
 
     parts = [f"{len(all_opps)} opportunity(ies) found"]
