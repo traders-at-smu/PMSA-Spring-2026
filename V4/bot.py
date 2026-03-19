@@ -642,11 +642,28 @@ def run_scan(
     ts = datetime.now().strftime("%H:%M:%S")
     t0 = time.monotonic()
 
-    # Filter out pairs that have previously failed
-    active_pairs = [p for p in pairs if p["pair_id"] not in failed_ids]
+    # Filter out pairs that have previously failed or whose resolution date has passed
+    from datetime import date as _date
+    today = _date.today()
+
+    def _is_expired(p: dict) -> bool:
+        rd = p.get("resolution_date")
+        if not rd:
+            return False
+        try:
+            if hasattr(rd, "date"):
+                return rd.date() < today
+            if hasattr(rd, "year"):   # date object
+                return rd < today
+            s = str(rd).strip()[:10]
+            return _date.fromisoformat(s) < today
+        except Exception:
+            return False
+
+    active_pairs = [p for p in pairs if p["pair_id"] not in failed_ids and not _is_expired(p)]
     skipped = len(pairs) - len(active_pairs)
 
-    skip_note = f"  {Style.DIM}({skipped} skipped — in failed log){Style.RESET_ALL}" if skipped else ""
+    skip_note = f"  {Style.DIM}({skipped} skipped — failed/expired){Style.RESET_ALL}" if skipped else ""
     print(
         f"\n{Style.DIM}[{ts}]{Style.RESET_ALL} "
         f"Fetching quotes for {len(active_pairs)} pair(s)  "
@@ -772,7 +789,8 @@ def run_scan(
                     f"{opp['strategy']:<16} "
                     f"{opp['contracts']}c  "
                     f"ARR={opp['arr'] * 100:.1f}%  "
-                    f"edge=${opp['edge_dollar']:.2f}"
+                    f"edge=${opp['edge_dollar']:.2f}  "
+                    f"K={opp['k_price']:.4f}  P={opp['p_price']:.4f}"
                 )
                 if k_url:
                     print(f"    {Style.DIM}Kalshi:      {k_url}{Style.RESET_ALL}")

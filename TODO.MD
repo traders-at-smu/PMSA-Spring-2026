@@ -7,3 +7,7 @@
     - [ ] Add spread calculation in scanner pairs tab 
     
 - V4    
+
+Ian
+ - Traders@SMU: check into Portfolio value and cash balance api possibility
+
