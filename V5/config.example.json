@@ -5,10 +5,10 @@
   "mode": "paper",
 
   "_doc_min_arr": "Minimum annualised return (ARR) required to trigger a trade. 0.10 = 10% ARR. Raise this to be more selective; lower it to trade more frequently. ARR = (edge% × 365) / days_to_resolution.",
-  "min_arr": 0.10,
+  "min_arr": 0.03,
 
   "_doc_max_contracts": "Maximum number of contracts to accumulate in a single arbitrage trade. The depth-walk stops as soon as adding one more contract would exceed this cap. E.g. 100 means the bot will buy at most 100 YES + 100 NO contracts per opportunity.",
-  "max_contracts": 100,
+  "max_contracts": 1000,
 
   "_doc_scan_interval_seconds": "Seconds between full scan cycles when running in 'run' mode.",
   "scan_interval_seconds": 3,
