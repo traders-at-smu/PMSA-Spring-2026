@@ -1,7 +1,7 @@
 """
 model_v1.py -- Decision Engine (Physical Model) v1
 ===================================================
-Authors: Davis Lynn, Hayden Kreikemeier
+Authors: Statistical Arbitrage
 
 Ports the TypeScript heuristic from src/services/arbitrageExecutionService.ts
 (lines 456-485) into a standalone Python function for sizing + edge estimation.

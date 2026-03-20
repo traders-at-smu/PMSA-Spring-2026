@@ -14,10 +14,10 @@
     "dashboard:dev": "cd src/dashboard-ui && npx vite",
     "dashboard:smoke": "tsx src/scripts/smokeDashboard.ts",
     "kalshi-screener": "tsx src/kalshiScreener.ts",
-    "miguel:pairs": "python python/build_pairs.py --output pairs.csv --min-pairs 50",
-    "miguel:quotes:once": "python python/live_quotes.py --pairs pairs.csv --out python/data/live_quotes.csv --once",
-    "miguel:quotes": "python python/live_quotes.py --pairs pairs.csv --out python/data/live_quotes.csv --interval 30",
-    "miguel:raw": "python python/raw_boxed_filter.py --pairs pairs.csv --quotes python/data/live_quotes.csv --out opportunities_raw.csv",
+    "trader:pairs": "python python/build_pairs.py --output pairs.csv --min-pairs 50",
+    "trader:quotes:once": "python python/live_quotes.py --pairs pairs.csv --out python/data/live_quotes.csv --once",
+    "trader:quotes": "python python/live_quotes.py --pairs pairs.csv --out python/data/live_quotes.csv --interval 30",
+    "trader:raw": "python python/raw_boxed_filter.py --pairs pairs.csv --quotes python/data/live_quotes.csv --out opportunities_raw.csv",
     "postinstall": "cd src/dashboard-ui && npm install"
   },
   "dependencies": {

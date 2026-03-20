@@ -44,8 +44,8 @@ interface Settings {
   python: {
     pythonExecutable: string;
     modelBridgePath: string;
-    miguelScriptsDir: string;
-    miguel: {
+    traderScriptsDir: string;
+    trader: {
       pollIntervalSec: number;
       minPairs: number;
     };
@@ -586,24 +586,24 @@ export function SettingsPanel() {
                           mono
                         />
                       </FieldRow>
-                      <FieldRow label="Miguel Scripts Dir">
+                      <FieldRow label="Trader Scripts Dir">
                         <TextInput
-                          value={getValue("python.miguelScriptsDir")}
-                          onChange={(v) => updateDraft("python.miguelScriptsDir", v)}
+                          value={getValue("python.traderScriptsDir")}
+                          onChange={(v) => updateDraft("python.traderScriptsDir", v)}
                           mono
                         />
                       </FieldRow>
                       <FieldRow label="Poll Interval (sec)">
                         <NumberInput
-                          value={getValue("python.miguel.pollIntervalSec")}
-                          onChange={(v) => updateDraft("python.miguel.pollIntervalSec", v)}
+                          value={getValue("python.trader.pollIntervalSec")}
+                          onChange={(v) => updateDraft("python.trader.pollIntervalSec", v)}
                           min={1}
                         />
                       </FieldRow>
                       <FieldRow label="Min Pairs">
                         <NumberInput
-                          value={getValue("python.miguel.minPairs")}
-                          onChange={(v) => updateDraft("python.miguel.minPairs", v)}
+                          value={getValue("python.trader.minPairs")}
+                          onChange={(v) => updateDraft("python.trader.minPairs", v)}
                           min={1}
                         />
                       </FieldRow>

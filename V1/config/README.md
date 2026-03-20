@@ -15,7 +15,7 @@ Precedence:
 - `execution`: PAPER/LIVE mode and execution thresholds
 - `apiKeys`: Polymarket and Kalshi credentials
 - `externalApis`: upstream market data endpoints
-- `python`: Python executable + model/miguel script paths
+- `python`: Python executable + model/trader script paths
 
 ## Python settings
 
@@ -23,17 +23,17 @@ Current keys:
 
 - `python.pythonExecutable` (default: `python`)
 - `python.modelBridgePath` (default: `python/model_v1_bridge.py`)
-- `python.miguelScriptsDir` (default: `python`)
-- `python.miguel.pollIntervalSec` (default: `30`)
-- `python.miguel.minPairs` (default: `50`)
+- `python.traderScriptsDir` (default: `python`)
+- `python.trader.pollIntervalSec` (default: `30`)
+- `python.trader.minPairs` (default: `50`)
 
 Environment variable overrides:
 
 - `PYTHON_EXECUTABLE`
 - `MODEL_V1_BRIDGE_PATH`
-- `MIGUEL_SCRIPTS_DIR`
-- `MIGUEL_POLL_INTERVAL_SEC`
-- `MIGUEL_MIN_PAIRS`
+- `TRADER_SCRIPTS_DIR`
+- `TRADER_POLL_INTERVAL_SEC`
+- `TRADER_MIN_PAIRS`
 
 Additional model rule environment variables (read directly by `model_v1.py`):
 

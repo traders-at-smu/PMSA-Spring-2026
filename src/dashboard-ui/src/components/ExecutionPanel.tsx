@@ -60,7 +60,7 @@ interface ExecutionState {
   };
 }
 
-interface MiguelStatus {
+interface TraderStatus {
   running: boolean;
   pairsCount: number;
   opportunitiesCount: number;
@@ -102,7 +102,7 @@ function toUserError(err: unknown): string {
 
 export function ExecutionPanel({ paused }: { paused: boolean }) {
   const [state, setState] = useState<ExecutionState | null>(null);
-  const [miguelStatus, setMiguelStatus] = useState<MiguelStatus | null>(null);
+  const [traderStatus, setTraderStatus] = useState<TraderStatus | null>(null);
   const [sectionDRows, setSectionDRows] = useState<any[]>([]);
   const [phase, setPhase] = useState<PanelPhase>("bootstrapping");
   const [loading, setLoading] = useState(false);
@@ -141,11 +141,11 @@ export function ExecutionPanel({ paused }: { paused: boolean }) {
     }
   }, [scheduleRetry, state]);
 
-  const loadMiguel = useCallback(async () => {
+  const loadTrader = useCallback(async () => {
     try {
-      const status = await api<any>("/api/miguel/status", undefined, 20_000);
-      setMiguelStatus(status);
-      const top = await api<any>("/api/miguel/model-v1/top?limit=3", undefined, 30_000);
+      const status = await api<any>("/api/trader/status", undefined, 20_000);
+      setTraderStatus(status);
+      const top = await api<any>("/api/trader/model-v1/top?limit=3", undefined, 30_000);
       setSectionDRows(Array.isArray(top?.rows) ? top.rows : []);
     } catch {
       // best effort
@@ -155,16 +155,16 @@ export function ExecutionPanel({ paused }: { paused: boolean }) {
   useEffect(() => {
     if (paused) return;
     void loadState();
-    void loadMiguel();
+    void loadTrader();
     const poll = window.setInterval(() => {
       void loadState();
-      void loadMiguel();
+      void loadTrader();
     }, 20_000);
     return () => {
       window.clearInterval(poll);
       clearRetry();
     };
-  }, [paused, loadState, loadMiguel]);
+  }, [paused, loadState, loadTrader]);
 
   const readyPlans = useMemo(() => state?.plans.filter((p) => p.status === "READY") ?? [], [state]);
 
@@ -233,11 +233,11 @@ export function ExecutionPanel({ paused }: { paused: boolean }) {
     }
   };
 
-  const runMiguelAction = async (url: string) => {
+  const runTraderAction = async (url: string) => {
     setLoading(true);
     try {
       await api(url, { method: "POST" }, 90_000);
-      await loadMiguel();
+      await loadTrader();
       setError(null);
     } catch (err) {
       setError(toUserError(err));
@@ -372,16 +372,16 @@ export function ExecutionPanel({ paused }: { paused: boolean }) {
 
       <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 className="text-sm font-medium text-zinc-200 mr-2">Miguel Pipeline + Section D</h3>
-          <button onClick={() => runMiguelAction("/api/miguel/pairs/rebuild")} disabled={loading} className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">Rebuild Pairs</button>
-          <button onClick={() => runMiguelAction("/api/miguel/live-quotes/start")} disabled={loading} className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">Start Quotes</button>
-          <button onClick={() => runMiguelAction("/api/miguel/live-quotes/stop")} disabled={loading} className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">Stop Quotes</button>
-          <button onClick={() => runMiguelAction("/api/miguel/opportunities/rebuild")} disabled={loading} className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">Rebuild Opportunities</button>
+          <h3 className="text-sm font-medium text-zinc-200 mr-2">Trader Pipeline + Section D</h3>
+          <button onClick={() => runTraderAction("/api/trader/pairs/rebuild")} disabled={loading} className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">Rebuild Pairs</button>
+          <button onClick={() => runTraderAction("/api/trader/live-quotes/start")} disabled={loading} className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">Start Quotes</button>
+          <button onClick={() => runTraderAction("/api/trader/live-quotes/stop")} disabled={loading} className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">Stop Quotes</button>
+          <button onClick={() => runTraderAction("/api/trader/opportunities/rebuild")} disabled={loading} className="px-2.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 text-xs">Rebuild Opportunities</button>
         </div>
         <div className="mt-2 text-xs text-zinc-400">
-          Running: <span className="text-zinc-200">{miguelStatus?.running ? "yes" : "no"}</span>
-          {" | "}Pairs: <span className="text-zinc-200">{miguelStatus?.pairsCount ?? 0}</span>
-          {" | "}Opportunities: <span className="text-zinc-200">{miguelStatus?.opportunitiesCount ?? 0}</span>
+          Running: <span className="text-zinc-200">{traderStatus?.running ? "yes" : "no"}</span>
+          {" | "}Pairs: <span className="text-zinc-200">{traderStatus?.pairsCount ?? 0}</span>
+          {" | "}Opportunities: <span className="text-zinc-200">{traderStatus?.opportunitiesCount ?? 0}</span>
         </div>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-xs">

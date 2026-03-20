@@ -16,6 +16,21 @@
   "_doc_print_market_status": "Print a one-line market snapshot for every pair on each scan cycle, even when no arb is found. Shows Kalshi and Polymarket mid-prices, days to expiry, net-of-fees marginal edge%, and net-of-fees ARR for the better direction (1-contract). Useful for monitoring market conditions without needing to find a trade. Set to false (default) to suppress this output.",
   "print_market_status": false,
 
+  "_doc_exit_enabled": "Enable exit/close logic for open positions. When true, open positions are monitored and sold at bids when the exit rule is met or max hold expires.",
+  "exit_enabled": true,
+
+  "_doc_exit_target_total_price": "Target combined bid-quote total for YES+NO to trigger exit, e.g. 0.99 means sell when yes_bid + no_bid >= 0.99.",
+  "exit_target_total_price": 0.99,
+
+  "_doc_exit_max_hold_seconds": "Maximum time in seconds to hold an open position before forcing an exit (default 1800s = 30 min).",
+  "exit_max_hold_seconds": 1800,
+
+  "_doc_entry_cooldown_seconds": "Minimum time after entry during which the same pair cannot be reopened (default 3600s = 1h).",
+  "entry_cooldown_seconds": 3600,
+
+  "_doc_position_file": "JSON file that stores currently open positions across restarts.",
+  "position_file": "open_positions.json",
+
   "_doc_max_workers": "Number of parallel threads used to fetch orderbook data. Higher = faster scans, but too high will trigger 429 rate-limit errors from Kalshi. 10 is a safe default; raise to 20-30 if scans are too slow and you are not seeing rate-limit warnings.",
   "max_workers": 6,
 

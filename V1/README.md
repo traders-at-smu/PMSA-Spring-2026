@@ -8,7 +8,7 @@ TypeScript + Python trading system for monitoring opportunities, scoring them wi
 - React dashboard (`src/dashboard-ui`)
 - Arbitrage execution service and planner (`src/services/arbitrageExecutionService.ts`)
 - Python bridge + model (`python/model_v1_bridge.py`, `model_v1.py`)
-- Miguel pipeline scripts for pairs/quotes/opportunities (`python/*.py`)
+- Trader pipeline scripts for pairs/quotes/opportunities (`python/*.py`)
 
 ## Requirements
 
@@ -49,13 +49,13 @@ npm run build              # Build TypeScript backend
 npm run dashboard:smoke    # Basic dashboard smoke script
 ```
 
-## Miguel pipeline commands
+## Trader pipeline commands
 
 ```bash
-npm run miguel:pairs
-npm run miguel:quotes:once
-npm run miguel:quotes
-npm run miguel:raw
+npm run trader:pairs
+npm run trader:quotes:once
+npm run trader:quotes
+npm run trader:raw
 ```
 
 Generated pipeline artifacts are local runtime files and are gitignored (`pairs.csv`, `opportunities_raw.csv`, and `python/data/*` outputs).
@@ -91,7 +91,7 @@ Keep secrets in `config/settings.local.json` only.
 - `POST /api/arbitrage/execution/execute-top`
 - `GET /api/model-v1/health`
 - `POST /api/model-v1/evaluate`
-- `GET /api/miguel/status`
+- `GET /api/trader/status`
 
 ## Validation
 

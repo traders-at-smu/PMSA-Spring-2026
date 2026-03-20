@@ -231,7 +231,7 @@ def main() -> int:
         edge_persistence = (pos / len(recent)) if recent else 0.0
 
         rows.append({
-            "id": f"miguel-{pair_id}",
+            "id": f"trader-{pair_id}",
             "venue": "KALSHI",
             "strategy": "BINARY_BUY_BOTH",
             "market": pair.get("title_clean", pair_id),
