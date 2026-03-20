@@ -450,6 +450,7 @@ def _build_log_entry(opp: dict[str, Any], mode: str, **overrides) -> dict[str, A
     now = datetime.now(timezone.utc)
     entry: dict[str, Any] = {
         "trade_number": overrides.pop("trade_number", "T?????"),
+        "pair_id": opp["pair_id"],
         "title": opp["title"],
         "kalshi_token": opp["kalshi_ticker"],
         "polymarket_token": opp["p_token_id"],
@@ -701,6 +702,7 @@ def run_scan(
     # Phase 2: evaluate and execute in original pair order
     all_opps: list[dict[str, Any]] = []
     new_failures = 0
+    rate_limited = 0
     # Deduplicate executions: if the same (ticker, strategy) appears more than once
     # (e.g. duplicate rows in the pairs file) only execute it the first time.
     executed_keys: set[tuple[str, str]] = set()
@@ -712,6 +714,7 @@ def run_scan(
         if isinstance(result, Exception):
             if _is_transient_error(result):
                 # Rate limit / timeout — skip this cycle, do NOT blacklist
+                rate_limited += 1
                 print(
                     f"  {Fore.YELLOW}~ {label}: {result}  (transient — will retry){Style.RESET_ALL}",
                     file=sys.stderr,
@@ -805,6 +808,13 @@ def run_scan(
                         )
                     else:
                         executed_keys.add(exec_key)
+                        min_profit = float(cfg.get("min_profit_dollars", 1.0))
+                        if opp["edge_dollar"] < min_profit:
+                            print(
+                                f"    {Fore.YELLOW}⚠ skipping — profit ${opp['edge_dollar']:.2f} "
+                                f"below min ${min_profit:.2f}{Style.RESET_ALL}"
+                            )
+                            continue
                         if mode == "paper":
                             trade = execute_paper(opp, log_path)
                             print(f"    {Style.DIM}→ logged {trade['trade_number']} (paper){Style.RESET_ALL}")
@@ -820,6 +830,8 @@ def run_scan(
             all_opps.extend(opps)
 
     parts = [f"{len(all_opps)} opportunity(ies) found"]
+    if rate_limited:
+        parts.append(f"{Fore.YELLOW}{rate_limited} rate-limited (retry next cycle){Style.RESET_ALL}")
     if new_failures:
         parts.append(f"{Fore.YELLOW}{new_failures} new failure(s) logged → {failed_log}{Style.RESET_ALL}")
     print(f"  {Style.DIM}{' | '.join(parts)}{Style.RESET_ALL}")

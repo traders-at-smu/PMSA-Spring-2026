@@ -9,5 +9,16 @@
 - V4    
 
 Ian
- - Traders@SMU: check into Portfolio value and cash balance api possibility
+ - File 1 hour paper trade from yesterday
+ - Make a gameplan
+    - Traders@SMU: check into Portfolio value and cash balance api possibility
+ - / delete bad contracts like michigan state and south florida and iowa state
+ - / Figure out why contracts will mess up and then the same contract works
+ - Edit outputs
+    - Add % egde
+ - Add LOB to trades.json output
+ - Fix URLs
+ - Fix duplicate trades on the trades.json
+ - Reminders
+
 
