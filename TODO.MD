@@ -14,10 +14,9 @@ Ian
     - Traders@SMU: check into Portfolio value and cash balance api possibility
  - Reminders
 - PHASE 2
-   - Fix duplicate trades on the trades.json
-- Run from 6-8pm
-   - Make laptop stay on during run
-- 
+   - Update the expected edge to be if sold at 0.99
+   - Make sure that fees are calulcated when sold as well
+- Should errors when looking up a pair automatically be added to failed pairs or should it be re run a couple times incase it shouldnt have been
 
 Davis:
   - Get the URL's corrected so we can easily verify contracts

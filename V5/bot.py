@@ -787,12 +787,28 @@ def _process_exit_positions(
 
     for pair_id, position in list(positions.items()):
         age = _position_age_seconds(position)
-        try:
-            kq = kalshi.get_quotes(position["kalshi_ticker"])
-            pq = poly.get_quotes(position.get("yes_token_id", ""), position.get("no_token_id", ""), "")
-        except Exception as exc:
-            print(f"  {Fore.YELLOW}Exit fetch failed for {pair_id}: {exc}{Style.RESET_ALL}")
+        fetch_delay = 2
+        while True:
+            try:
+                kq = kalshi.get_quotes(position["kalshi_ticker"])
+                pq = poly.get_quotes(position.get("yes_token_id", ""), position.get("no_token_id", ""), "")
+                break
+            except Exception as exc:
+                if "429" in str(exc):
+                    print(f"  {Fore.YELLOW}Rate limited fetching {pair_id} — retrying in {fetch_delay}s...{Style.RESET_ALL}")
+                    time.sleep(fetch_delay)
+                    fetch_delay = min(fetch_delay * 2, 60)
+                elif shutdown:
+                    print(f"  {Fore.YELLOW}Exit fetch failed for {pair_id}: {exc} — retrying in {fetch_delay}s...{Style.RESET_ALL}")
+                    time.sleep(fetch_delay)
+                    fetch_delay = min(fetch_delay * 2, 60)
+                else:
+                    print(f"  {Fore.YELLOW}Exit fetch failed for {pair_id}: {exc}{Style.RESET_ALL}")
+                    break
+        else:
             continue
+        if shutdown:
+            time.sleep(1.5)
 
         if position["strategy"] == "BUY_KY_BUY_PN":
             k_bid = kq["yes_bid"]
@@ -1008,7 +1024,7 @@ def run_scan(
         failed_ids = set()
 
     mode = cfg["mode"]
-    log_path = cfg.get("trade_log", "trades.json")
+    log_path = cfg.get("entry_log", "entry_trades.json")
     opp_log_path = cfg.get("opportunities_log", "opportunities.json")
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     max_workers = int(cfg.get("max_workers", 30))
@@ -1264,6 +1280,9 @@ def run_loop(
         cooldown_seconds = int(cfg.get("entry_cooldown_seconds", 3600))
         _record_open_position(positions, opp, trade, position_file, cooldown_seconds=cooldown_seconds)
 
+    pairs_per_cycle = int(cfg.get("pairs_per_cycle", len(pairs)))
+    pair_offset = 0
+
     print(f"\n{Fore.CYAN}Bot running — press Ctrl+C to stop.{Style.RESET_ALL}")
     while True:
         try:
@@ -1274,7 +1293,7 @@ def run_loop(
                     poly=poly,
                     cfg=cfg,
                     mode=cfg.get("mode", "paper"),
-                    log_path=cfg.get("trade_log", "trades.json"),
+                    log_path=cfg.get("exit_log", "exit_trades.json"),
                     position_file=position_file,
                     cooldowns=cooldowns,
                     shutdown=False,
@@ -1297,8 +1316,17 @@ def run_loop(
                 except Exception:
                     pass
 
+            # Always put open-position pairs first, then rotate through the rest
+            open_pair_ids = {pos["pair_id"] for pos in positions.values()}
+            priority_pairs = [p for p in pairs if p["pair_id"] in open_pair_ids]
+            remaining_pairs = [p for p in pairs if p["pair_id"] not in open_pair_ids]
+            rotated_remaining = remaining_pairs[pair_offset:] + remaining_pairs[:pair_offset]
+            rotated_pairs = priority_pairs + rotated_remaining
+            rotated_pairs = rotated_pairs[:pairs_per_cycle]
+            pair_offset = (pair_offset + max(pairs_per_cycle - len(priority_pairs), 0)) % max(len(remaining_pairs), 1)
+
             opps = run_scan(
-                pairs,
+                rotated_pairs,
                 kalshi,
                 poly,
                 cfg,
@@ -1322,7 +1350,7 @@ def run_loop(
                     poly=poly,
                     cfg=cfg,
                     mode=cfg.get("mode", "paper"),
-                    log_path=cfg.get("trade_log", "trades.json"),
+                    log_path=cfg.get("exit_log", "exit_trades.json"),
                     position_file=position_file,
                     cooldowns=cooldowns,
                     shutdown=True,

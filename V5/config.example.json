@@ -31,14 +31,19 @@
   "_doc_position_file": "JSON file that stores currently open positions across restarts.",
   "position_file": "open_positions.json",
 
+  "_doc_pairs_per_cycle": "Max pairs to scan per cycle. Pairs with open positions are always scanned first, then the rest rotate so every pair gets checked evenly over time. Set to total pairs count to scan all each cycle (default behavior).",
+  "pairs_per_cycle": 200,
+
   "_doc_max_workers": "Number of parallel threads used to fetch orderbook data. Higher = faster scans, but too high will trigger 429 rate-limit errors from Kalshi. 10 is a safe default; raise to 20-30 if scans are too slow and you are not seeing rate-limit warnings.",
   "max_workers": 6,
 
   "_doc_pairs_file": "Path to the Excel (.xlsx) or CSV pairs file. Can be relative to where you run the bot, or absolute. Required columns: pair_id, kalshi_ticker, polymarket_yes_token_id, polymarket_no_token_id, resolution_date, category, active.",
   "pairs_file": "Pairs_for_Kalshi_and_Polymarket.xlsx",
 
-  "_doc_trade_log": "File where executed trades are logged (one JSON object per line, appended). Created automatically if it does not exist.",
-  "trade_log": "trades.json",
+  "_doc_entry_log": "File where entry trades are logged (one JSON object per line, appended). Created automatically if it does not exist.",
+  "entry_log": "entry_trades.json",
+  "_doc_exit_log": "File where exit trades are logged (one JSON object per line, appended). Created automatically if it does not exist.",
+  "exit_log": "exit_trades.json",
 
   "_doc_opportunities_log": "File where every detected arbitrage opportunity is logged (one JSON object per line, appended), including Kalshi and Polymarket market URLs and the full slippage breakdown. Written on every scan cycle regardless of whether a trade is executed.",
   "opportunities_log": "opportunities.json",

@@ -136,7 +136,7 @@ def _print_banner(cfg: dict, pairs_count: int) -> None:
     interval = cfg.get("scan_interval_seconds", 5)
 
     label_w = 12
-    print(f"\n  {Style.BRIGHT}Kalshi × Polymarket Arb Bot{Style.RESET_ALL}  v4.0")
+    print(f"\n  {Style.BRIGHT}Kalshi × Polymarket Arb Bot{Style.RESET_ALL}  v5.0")
     print(f"  {'─' * 42}")
     print(f"  {'Mode':<{label_w}}{mode_str}")
     print(f"  {'Min ARR':<{label_w}}{arr_pct:.1f}%")
