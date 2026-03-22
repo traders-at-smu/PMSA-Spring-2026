@@ -24,6 +24,12 @@ from fees import apply_fee
 
 # ── Error classification ───────────────────────────────────────────────────────
 
+def _is_404_error(exc: Exception) -> bool:
+    """Return True if the error is a 404 Not Found (market closed/resolved on exchange)."""
+    import requests
+    return isinstance(exc, requests.HTTPError) and getattr(exc.response, "status_code", None) == 404
+
+
 def _is_transient_error(exc: Exception) -> bool:
     """Return True if the error is likely temporary (rate limit, timeout, etc.).
 
@@ -36,16 +42,17 @@ def _is_transient_error(exc: Exception) -> bool:
     msg = str(exc).lower()
 
     # HTTP status-based: 429 Too Many Requests, 503 Service Unavailable
+    # For HTTPError, only check the status code — never the message string,
+    # since the URL may contain token IDs with substrings like "503" or "504".
     if isinstance(exc, requests.HTTPError):
         code = getattr(exc.response, "status_code", None)
-        if code in (429, 503, 502, 504):
-            return True
+        return code in (429, 503, 502, 504)
 
     # Connection / timeout errors
     if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
         return True
 
-    # Check message text as a fallback (covers wrapped exceptions)
+    # Check message text as a fallback (covers wrapped/non-HTTP exceptions only)
     transient_phrases = ("429", "too many requests", "503", "502", "504",
                          "timeout", "timed out", "connection", "rate limit")
     return any(phrase in msg for phrase in transient_phrases)
@@ -159,6 +166,7 @@ def _walk_depth(
     kalshi_fee_fn,
     poly_fee_fn,
     kalshi_round_up: bool,
+    exit_target: float = 1.0,
 ) -> dict[str, Any]:
     """Walk the combined orderbook depth, accumulating contracts while profitable.
 
@@ -229,8 +237,8 @@ def _walk_depth(
         next_pf = apply_fee(poly_fee_fn, avg_p, nc, False)
         delta_fee = (next_kf - cur_kf) + (next_pf - cur_pf)
 
-        # Rule 1: marginal cost of one more contract must be < $1 (positive edge)
-        if nk + np_ + delta_fee >= 1.0:
+        # Rule 1: marginal cost of one more contract must be < exit_target (positive edge)
+        if nk + np_ + delta_fee >= exit_target:
             stop_reason = "no_positive_edge"
             break
 
@@ -256,7 +264,7 @@ def _walk_depth(
         # Record slippage: one entry per distinct price-level combination.
         # If prices unchanged from the last entry, update it in-place so each
         # entry reflects the cumulative state at the END of that price level.
-        edge_d = contracts - cur_kp
+        edge_d = contracts * exit_target - cur_kp
         arr_now = (edge_d / cur_kp * 365.0 / days) if cur_kp > 0 and days > 0 else 0.0
         if slippage and slippage[-1]["k_price"] == nk and slippage[-1]["p_price"] == np_:
             slippage[-1]["contracts"] = contracts
@@ -272,7 +280,7 @@ def _walk_depth(
             })
 
     final_kp = cur_kp
-    final_edge_pct = (contracts - final_kp) / final_kp if final_kp > 0 else 0.0
+    final_edge_pct = (contracts * exit_target - final_kp) / final_kp if final_kp > 0 else 0.0
     final_arr = (final_edge_pct * 365.0) / days if days > 0 else 0.0
 
     # After hitting max_contracts, count profitable contracts still available in the book.
@@ -296,7 +304,7 @@ def _walk_depth(
                 continue
             nk = float(k_levels[r_ki]["price"])
             np_ = float(p_levels[r_pi]["price"])
-            if nk + np_ >= 1.0:
+            if nk + np_ >= exit_target:
                 break
             count = min(r_kr, r_pr)
             r_nk = round(nk, 6)
@@ -433,6 +441,7 @@ def evaluate_pair(
     """
     max_contracts = int(cfg["max_contracts"])
     days = _days_to_resolution(pair.get("resolution_date", ""))
+    exit_target = float(cfg.get("exit_target_total_price", 0.98))
 
     fee_cfg = cfg["fees"]
     k_fee_fn = fee_cfg["kalshi"]["_fn"]
@@ -482,11 +491,11 @@ def evaluate_pair(
 
         walk = _walk_depth(
             k_levels, p_levels, days, max_contracts,
-            k_fee_fn, p_fee_fn, k_round_up,
+            k_fee_fn, p_fee_fn, k_round_up, exit_target,
         )
 
         if walk["contracts"] > 0:
-            edge_dollar = walk["contracts"] - walk["kp_cost"]
+            edge_dollar = walk["contracts"] * exit_target - walk["kp_cost"]
             results.append({
                 "pair_id": pair["pair_id"],
                 "title": pair.get("title", pair["pair_id"]),
@@ -778,6 +787,7 @@ def _process_exit_positions(
     for pair_id, position in list(positions.items()):
         age = _position_age_seconds(position)
         fetch_delay = 2
+        kq = pq = None
         while True:
             try:
                 kq = kalshi.get_quotes(position["kalshi_ticker"])
@@ -795,7 +805,7 @@ def _process_exit_positions(
                 else:
                     print(f"  {Fore.YELLOW}Exit fetch failed for {pair_id}: {exc}{Style.RESET_ALL}")
                     break
-        else:
+        if kq is None or pq is None:
             continue
         if shutdown:
             time.sleep(1.5)
@@ -911,6 +921,44 @@ def _process_exit_positions(
 
 # ── Failed-pairs tracking ─────────────────────────────────────────────────────
 
+def load_expired_ids(log_path: str) -> set[str]:
+    """Read the expired-pairs log and return the set of pair_ids to skip."""
+    p = Path(log_path)
+    ids: set[str] = set()
+    if not p.exists():
+        return ids
+    try:
+        with p.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    pid = entry.get("pair_id", "")
+                    if pid:
+                        ids.add(pid)
+                except json.JSONDecodeError:
+                    pass
+    except OSError:
+        pass
+    return ids
+
+
+def _log_expired_pair(pair: dict[str, Any], log_path: str) -> None:
+    """Append one entry to the expired-pairs log file."""
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "pair_id": pair["pair_id"],
+        "kalshi_ticker": pair.get("kalshi_ticker", ""),
+        "title": pair.get("title", ""),
+        "resolution_date": str(pair.get("resolution_date", "")),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    with Path(log_path).open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
 def load_failed_ids(log_path: str) -> set[str]:
     """Read the failed-pairs log and return the set of pair_ids to skip."""
     p = Path(log_path)
@@ -1020,6 +1068,7 @@ def run_scan(
     cfg: dict[str, Any],
     execute: bool = False,
     failed_ids: set[str] | None = None,
+    expired_ids: set[str] | None = None,
     skip_pair_ids: set[str] | None = None,
     on_new_position: Any | None = None,
 ) -> list[dict[str, Any]]:
@@ -1036,11 +1085,14 @@ def run_scan(
     """
     if failed_ids is None:
         failed_ids = set()
+    if expired_ids is None:
+        expired_ids = set()
 
     mode = cfg["mode"]
     log_path = cfg.get("entry_log", "entry_trades.json")
     opp_log_path = cfg.get("opportunities_log", "opportunities.json")
     failed_log = cfg.get("failed_log", "failed_pairs.json")
+    expired_log = cfg.get("expired_log", "expired_pairs.json")
     max_workers = int(cfg.get("max_workers", 30))
     ts = datetime.now().strftime("%H:%M:%S")
     t0 = time.monotonic()
@@ -1064,11 +1116,18 @@ def run_scan(
             return False
 
     skip_pair_ids = skip_pair_ids or set()
+
+    # Log newly-expired pairs to expired_ids so they are never rechecked
+    for p in pairs:
+        if p["pair_id"] not in expired_ids and _is_expired(p):
+            expired_ids.add(p["pair_id"])
+            _log_expired_pair(p, expired_log)
+
     active_pairs = [
         p for p in pairs
         if p["pair_id"] not in failed_ids
+        and p["pair_id"] not in expired_ids
         and p["pair_id"] not in skip_pair_ids
-        and not _is_expired(p)
     ]
     skipped = len(pairs) - len(active_pairs)
 
@@ -1127,8 +1186,17 @@ def run_scan(
                     f"  {Fore.YELLOW}~ {label}: {result}  (transient — will retry){Style.RESET_ALL}",
                     file=sys.stderr,
                 )
+            elif _is_404_error(result):
+                # 404 = market closed/resolved on exchange — treat as expired
+                expired_ids.add(pair["pair_id"])
+                _log_expired_pair(pair, expired_log)
+                new_failures += 1
+                print(
+                    f"  {Fore.YELLOW}! {label}: 404 — market gone, logged to expired pairs{Style.RESET_ALL}",
+                    file=sys.stderr,
+                )
             else:
-                # Permanent error (bad ticker, parse failure, 404, etc.)
+                # Permanent error (bad ticker, parse failure, etc.)
                 failed_ids.add(pair["pair_id"])
                 _log_failed_pair(pair, str(result), failed_log)
                 new_failures += 1
@@ -1262,7 +1330,10 @@ def run_loop(
     in memory across cycles — they are never fetched again within this session.
     """
     interval = max(1, int(cfg.get("scan_interval_seconds", 5)))
+    pairs_per_cycle = int(cfg.get("pairs_per_cycle", len(pairs)))
+    pair_offset = 0
     failed_log = cfg.get("failed_log", "failed_pairs.json")
+    expired_log = cfg.get("expired_log", "expired_pairs.json")
     position_file = cfg.get("position_file", "open_positions.json")
     cooldown_file = cfg.get("cooldown_file", "cooldowns.json")
 
@@ -1272,6 +1343,14 @@ def run_loop(
         print(
             f"  {Style.DIM}Loaded {len(failed_ids)} previously failed pair(s) from "
             f"{failed_log} — these will be skipped.{Style.RESET_ALL}"
+        )
+
+    # Load any previously expired pairs so they are skipped from the first cycle
+    expired_ids = load_expired_ids(expired_log)
+    if expired_ids:
+        print(
+            f"  {Style.DIM}Loaded {len(expired_ids)} previously expired pair(s) from "
+            f"{expired_log} — these will be skipped.{Style.RESET_ALL}"
         )
 
     positions = _load_open_positions(position_file)
@@ -1334,9 +1413,13 @@ def run_loop(
                 except Exception:
                     pass
 
-            # Scan ALL non-position pairs every cycle — no rotation cap
+            # Rotate through non-position pairs, keeping open-position pairs first
             open_pair_ids = {pos["pair_id"] for pos in positions.values()}
-            scan_pairs = [p for p in pairs if p["pair_id"] not in open_pair_ids]
+            priority_pairs = [p for p in pairs if p["pair_id"] in open_pair_ids]
+            remaining_pairs = [p for p in pairs if p["pair_id"] not in open_pair_ids]
+            rotated_remaining = remaining_pairs[pair_offset:] + remaining_pairs[:pair_offset]
+            scan_pairs = (priority_pairs + rotated_remaining)[:pairs_per_cycle]
+            pair_offset = (pair_offset + max(pairs_per_cycle - len(priority_pairs), 0)) % max(len(remaining_pairs), 1)
 
             opps = run_scan(
                 scan_pairs,
@@ -1345,6 +1428,7 @@ def run_loop(
                 cfg,
                 execute=True,
                 failed_ids=failed_ids,
+                expired_ids=expired_ids,
                 skip_pair_ids=skip_pair_ids,
                 on_new_position=_on_new_position,
             )

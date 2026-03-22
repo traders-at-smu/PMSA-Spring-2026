@@ -16,8 +16,10 @@ Ian
 - PHASE 2
    - Update the expected edge to be if sold at 0.99
    - Make sure that fees are calulcated when sold as well
-- Should errors when looking up a pair automatically be added to failed pairs or should it be re run a couple times incase it shouldnt have been
+
 - Connect github to server, choose between droplet and app platform
+- OHHHHH i see what happened, we are paper trading so someone placed a bid and in theory we would have bought it but in reality we didnt because were paper trading so when the cycle went around again it still saw the bid and took it again
+- Buy many servers to not get rate liimited?
 
 Davis:
   - Get the URL's corrected so we can easily verify contracts
@@ -28,8 +30,15 @@ Jackson:
   - We keep getting similar team contracts ip mixed up
    - Ex: Texas Longhorn and Texas A&M, Mighican state and Michigan
   - We also keep getting the spotify wrong
-!! The most successful ones are in groups because the entire grouping is wrong
+!! The most successful ones are in groups because the entire grouping is wrong so several pop up
    !! EX: all 4 2024 NFC championship odds are showing an edge(smaller groups better)
+- The longer the expiration date, the less movement, forced to hold longer
+   - Look for lower expiration dates?
+- High volume pairs better for convergence
+- 5x more pairs = 5x more profit
+
+
+
 
 
 
@@ -42,5 +51,5 @@ DONE
     - Add LOB walk down trades
    - Add LOB to trades.json output
 - Fix Fees
-
+- Should errors when looking up a pair automatically be added to failed pairs or should it be re run a couple times incase it shouldnt have been
  
