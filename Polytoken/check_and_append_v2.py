@@ -33,11 +33,11 @@ V2_CONTRACTS_FILENAME = "Pairs_for_Kalshi_and_Polymarket.xlsx"
 def _resolve_default_v2_contracts_path() -> Path:
     script_path = Path(__file__).resolve()
     for base in script_path.parents:
-        candidate = base / "V2" / V2_CONTRACTS_FILENAME
+        candidate = base / "V5" / V2_CONTRACTS_FILENAME
         if candidate.exists():
             return candidate
     # Fallback to normal repo layout even if the file doesn't exist yet.
-    return script_path.parents[1] / "V2" / V2_CONTRACTS_FILENAME
+    return script_path.parents[1] / "V5" / V2_CONTRACTS_FILENAME
 
 
 DEFAULT_V2_CONTRACTS_PATH = _resolve_default_v2_contracts_path()
