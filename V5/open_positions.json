@@ -937,5 +937,102 @@
     "entry_timestamp": "2026-03-24T03:31:07.045210+00:00",
     "entry_trade_number": "T00027",
     "cooldown_until": "2026-03-24T04:31:07.045210+00:00"
+  },
+  "pair-622": {
+    "pair_id": "pair-622",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXNBACOY-26-MJOH",
+    "p_token_id": "61176411792307069682087867455827081841465614685733318866140415916573316178793",
+    "yes_token_id": "25475523485165949975510012377759235530663609002114542535065321675093084569420",
+    "no_token_id": "61176411792307069682087867455827081841465614685733318866140415916573316178793",
+    "title": "Will Mitch Johnson win the 2025\u20132026 NBA Coach of the Year?",
+    "contracts": 732,
+    "entry_k_price": 0.05,
+    "entry_p_price": 0.91,
+    "entry_kp_cost": 705.1600000000009,
+    "entry_fills": [
+      {
+        "k_price": 0.05,
+        "p_price": 0.91,
+        "contracts": 732
+      }
+    ],
+    "entry_fee": 2.44,
+    "entry_edge_dollar": 19.52,
+    "entry_arr": 0.02768166089965263,
+    "entry_edge_pct": 0.02768166089965263,
+    "entry_timestamp": "2026-03-24T03:59:30.843904+00:00",
+    "entry_trade_number": "T00028",
+    "cooldown_until": "2026-03-24T04:59:30.843904+00:00"
+  },
+  "pair-570": {
+    "pair_id": "pair-570",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXMLB-26-SEA",
+    "p_token_id": "63091623343687297303606592004867326730200634937409195873045953355010416684623",
+    "yes_token_id": "63091623343687297303606592004867326730200634937409195873045953355010416684623",
+    "no_token_id": "102039975525536046545638924824798876480719469785837400983070764668444799295423",
+    "title": "Will the Seattle Mariners win the 2026 World Series?",
+    "contracts": 74,
+    "entry_k_price": 0.9,
+    "entry_p_price": 0.079,
+    "entry_kp_cost": 72.91599999999993,
+    "entry_fills": [
+      {
+        "k_price": 0.9,
+        "p_price": 0.079,
+        "contracts": 74
+      }
+    ],
+    "entry_fee": 0.47,
+    "entry_edge_dollar": 0.344,
+    "entry_arr": 0.0047177574194975,
+    "entry_edge_pct": 0.0047177574194975,
+    "entry_timestamp": "2026-03-24T04:02:53.821182+00:00",
+    "entry_trade_number": "T00029",
+    "cooldown_until": "2026-03-24T05:02:53.821182+00:00"
+  },
+  "pair-904": {
+    "pair_id": "pair-904",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXMLB-26-SEA",
+    "p_token_id": "63091623343687297303606592004867326730200634937409195873045953355010416684623",
+    "yes_token_id": "63091623343687297303606592004867326730200634937409195873045953355010416684623",
+    "no_token_id": "102039975525536046545638924824798876480719469785837400983070764668444799295423",
+    "title": "Will the Seattle Mariners win the 2026 World Series?",
+    "contracts": 44,
+    "entry_k_price": 0.91,
+    "entry_p_price": 0.079,
+    "entry_kp_cost": 43.297999999999966,
+    "entry_fills": [
+      {
+        "k_price": 0.9,
+        "p_price": 0.077,
+        "contracts": 34
+      },
+      {
+        "k_price": 0.9,
+        "p_price": 0.079,
+        "contracts": 9
+      },
+      {
+        "k_price": 0.91,
+        "p_price": 0.079,
+        "contracts": 1
+      }
+    ],
+    "entry_fee": 0.28,
+    "entry_edge_dollar": 0.262,
+    "entry_arr": 0.006051087810061345,
+    "entry_edge_pct": 0.006051087810061346,
+    "entry_timestamp": "2026-03-24T04:03:25.831164+00:00",
+    "entry_trade_number": "T00030",
+    "cooldown_until": "2026-03-24T05:03:25.831164+00:00"
   }
 }

@@ -495,7 +495,9 @@ def evaluate_pair(
         )
 
         if walk["contracts"] > 0:
-            edge_dollar = walk["contracts"] * exit_target - walk["kp_cost"]
+            est_exit_k_fee = apply_fee(k_fee_fn, walk["k_price"], walk["contracts"], k_round_up)
+            est_exit_p_fee = apply_fee(p_fee_fn, walk["p_price"], walk["contracts"], False)
+            edge_dollar = walk["contracts"] * exit_target - walk["kp_cost"] - est_exit_k_fee - est_exit_p_fee
             results.append({
                 "pair_id": pair["pair_id"],
                 "title": pair.get("title", pair["pair_id"]),
