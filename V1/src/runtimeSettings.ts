@@ -58,8 +58,8 @@ export interface RuntimeSettings {
   python: {
     pythonExecutable: string;
     modelBridgePath: string;
-    miguelScriptsDir: string;
-    miguel: {
+    traderScriptsDir: string;
+    trader: {
       pollIntervalSec: number;
       minPairs: number;
     };
@@ -113,8 +113,8 @@ const defaults: RuntimeSettings = {
   python: {
     pythonExecutable: "python",
     modelBridgePath: "python/model_v1_bridge.py",
-    miguelScriptsDir: "python",
-    miguel: {
+    traderScriptsDir: "python",
+    trader: {
       pollIntervalSec: 30,
       minPairs: 50,
     },
@@ -196,9 +196,9 @@ function envOverride(settings: RuntimeSettings): RuntimeSettings {
   if (process.env.KALSHI_API_URL) withEnv.externalApis.kalshiApiUrl = process.env.KALSHI_API_URL;
   if (process.env.PYTHON_EXECUTABLE) withEnv.python.pythonExecutable = process.env.PYTHON_EXECUTABLE;
   if (process.env.MODEL_V1_BRIDGE_PATH) withEnv.python.modelBridgePath = process.env.MODEL_V1_BRIDGE_PATH;
-  if (process.env.MIGUEL_SCRIPTS_DIR) withEnv.python.miguelScriptsDir = process.env.MIGUEL_SCRIPTS_DIR;
-  if (process.env.MIGUEL_POLL_INTERVAL_SEC) withEnv.python.miguel.pollIntervalSec = Number(process.env.MIGUEL_POLL_INTERVAL_SEC);
-  if (process.env.MIGUEL_MIN_PAIRS) withEnv.python.miguel.minPairs = Number(process.env.MIGUEL_MIN_PAIRS);
+  if (process.env.TRADER_SCRIPTS_DIR) withEnv.python.traderScriptsDir = process.env.TRADER_SCRIPTS_DIR;
+  if (process.env.TRADER_POLL_INTERVAL_SEC) withEnv.python.trader.pollIntervalSec = Number(process.env.TRADER_POLL_INTERVAL_SEC);
+  if (process.env.TRADER_MIN_PAIRS) withEnv.python.trader.minPairs = Number(process.env.TRADER_MIN_PAIRS);
 
   return withEnv;
 }
@@ -222,11 +222,11 @@ function validateShape(settings: RuntimeSettings): void {
   if (!settings.python.modelBridgePath) {
     throw new Error("python.modelBridgePath must be provided");
   }
-  if (!Number.isFinite(settings.python.miguel.pollIntervalSec) || settings.python.miguel.pollIntervalSec < 1) {
-    throw new Error("python.miguel.pollIntervalSec must be >= 1");
+  if (!Number.isFinite(settings.python.trader.pollIntervalSec) || settings.python.trader.pollIntervalSec < 1) {
+    throw new Error("python.trader.pollIntervalSec must be >= 1");
   }
-  if (!Number.isFinite(settings.python.miguel.minPairs) || settings.python.miguel.minPairs < 1) {
-    throw new Error("python.miguel.minPairs must be >= 1");
+  if (!Number.isFinite(settings.python.trader.minPairs) || settings.python.trader.minPairs < 1) {
+    throw new Error("python.trader.minPairs must be >= 1");
   }
 }
 

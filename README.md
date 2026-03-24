@@ -65,10 +65,10 @@ npm run dashboard:server
 npm run dashboard:dev
 npm run build
 npm run dashboard:smoke
-npm run miguel:pairs
-npm run miguel:quotes:once
-npm run miguel:quotes
-npm run miguel:raw
+npm run trader:pairs
+npm run trader:quotes:once
+npm run trader:quotes
+npm run trader:raw
 ```
 
 Details: see `V1/README.md`.

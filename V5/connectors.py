@@ -100,6 +100,20 @@ class KalshiConnector:
                 by_price[ask] = by_price.get(ask, 0) + qty
         return [{"price": p, "size": by_price[p]} for p in sorted(by_price)]
 
+    @classmethod
+    def _derive_bids(cls, bids: list[Any]) -> list[dict[str, Any]]:
+        """Convert raw Kalshi bid levels (yes/no) to normalized bid levels."""
+        by_price: dict[float, int] = {}
+        for level in bids:
+            cents, qty = cls._parse_level(level)
+            if qty <= 0:
+                continue
+            bid = round(cents / 100.0, 6)
+            if 0.0 <= bid <= 1.0:
+                by_price[bid] = by_price.get(bid, 0) + qty
+        # descending for selling (best bid first)
+        return [{"price": p, "size": by_price[p]} for p in sorted(by_price, reverse=True)]
+
     def get_quotes(self, ticker: str) -> dict[str, Any]:
         """Fetch and normalise orderbook quotes for a Kalshi market ticker.
 
@@ -168,6 +182,8 @@ class KalshiConnector:
             "depth": {
                 "buy_yes": self._derive_asks(no_bids),   # to buy YES, cross NO bids
                 "buy_no":  self._derive_asks(yes_bids),  # to buy NO, cross YES bids
+                "sell_yes": self._derive_bids(yes_bids), # to sell YES, take YES bids
+                "sell_no":  self._derive_bids(no_bids),  # to sell NO, take NO bids
             },
         }
 
@@ -178,14 +194,17 @@ class KalshiConnector:
         contracts: int,
         price: float,
         client_order_id: str,
+        action: str = "buy",
     ) -> dict[str, Any]:
-        """Place a limit buy order on Kalshi (live mode only)."""
+        """Place a limit order on Kalshi (live mode only)."""
+        if action not in {"buy", "sell"}:
+            raise ValueError("action must be 'buy' or 'sell'")
         path = "/portfolio/orders"
         payload: dict[str, Any] = {
             "ticker": ticker,
             "client_order_id": client_order_id,
             "type": "limit",
-            "action": "buy",
+            "action": action,
             "side": side,
             "count": contracts,
         }
@@ -301,6 +320,26 @@ class PolymarketConnector:
         return [{"price": p, "size": by_price[p]} for p in sorted(by_price)]
 
     @staticmethod
+    def _parse_bid_levels(book: dict[str, Any]) -> list[dict[str, Any]]:
+        by_price: dict[float, int] = {}
+        for level in book.get("bids", []):
+            try:
+                if isinstance(level, dict):
+                    p = float(level["price"])
+                    q = int(float(level.get("size", level.get("quantity", 0))))
+                elif isinstance(level, (list, tuple)):
+                    p, q = float(level[0]), int(float(level[1]))
+                else:
+                    continue
+            except (TypeError, ValueError, KeyError):
+                continue
+            if q > 0 and 0.0 <= p <= 1.0:
+                rp = round(p, 6)
+                by_price[rp] = by_price.get(rp, 0) + q
+        # best bids first
+        return [{"price": p, "size": by_price[p]} for p in sorted(by_price, reverse=True)]
+
+    @staticmethod
     def _best_ask(book: dict[str, Any]) -> float:
         prices = []
         for level in book.get("asks", []):
@@ -373,6 +412,8 @@ class PolymarketConnector:
             "depth": {
                 "yes_asks": self._parse_ask_levels(yes_book),
                 "no_asks": self._parse_ask_levels(no_book),
+                "yes_bids": self._parse_bid_levels(yes_book),
+                "no_bids": self._parse_bid_levels(no_book),
             },
             "yes_token_id": yid,
             "no_token_id": nid,
@@ -385,8 +426,12 @@ class PolymarketConnector:
         self._ensure_client()
         from py_clob_client.clob_types import OrderArgs  # type: ignore
 
+        side_uc = side.strip().upper()
+        if side_uc not in {"BUY", "SELL"}:
+            raise ValueError("Polymarket side must be 'buy' or 'sell'")
+
         order = self._client.create_order(
-            OrderArgs(token_id=token_id, price=float(price), size=float(size), side="BUY")
+            OrderArgs(token_id=token_id, price=float(price), size=float(size), side=side_uc)
         )
         return self._client.post_order(order, order_type="GTC")
 

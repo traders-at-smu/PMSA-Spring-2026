@@ -3,9 +3,7 @@
 Trading rules (from Trade Rules.md):
   1. KP(c) < c              — total cost must be less than the number of contracts
   2. c <= max_contracts      — position size must not exceed the contract cap
-  3. ARR >= min_arr          — annualised return must meet the minimum threshold
 
-ARR = (edge_pct * 365) / days_to_resolution
 edge_pct = (c - KP(c)) / KP(c)
 """
 
@@ -15,7 +13,7 @@ import json
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +23,12 @@ from fees import apply_fee
 
 
 # ── Error classification ───────────────────────────────────────────────────────
+
+def _is_404_error(exc: Exception) -> bool:
+    """Return True if the error is a 404 Not Found (market closed/resolved on exchange)."""
+    import requests
+    return isinstance(exc, requests.HTTPError) and getattr(exc.response, "status_code", None) == 404
+
 
 def _is_transient_error(exc: Exception) -> bool:
     """Return True if the error is likely temporary (rate limit, timeout, etc.).
@@ -38,16 +42,17 @@ def _is_transient_error(exc: Exception) -> bool:
     msg = str(exc).lower()
 
     # HTTP status-based: 429 Too Many Requests, 503 Service Unavailable
+    # For HTTPError, only check the status code — never the message string,
+    # since the URL may contain token IDs with substrings like "503" or "504".
     if isinstance(exc, requests.HTTPError):
         code = getattr(exc.response, "status_code", None)
-        if code in (429, 503, 502, 504):
-            return True
+        return code in (429, 503, 502, 504)
 
     # Connection / timeout errors
     if isinstance(exc, (requests.ConnectionError, requests.Timeout)):
         return True
 
-    # Check message text as a fallback (covers wrapped exceptions)
+    # Check message text as a fallback (covers wrapped/non-HTTP exceptions only)
     transient_phrases = ("429", "too many requests", "503", "502", "504",
                          "timeout", "timed out", "connection", "rate limit")
     return any(phrase in msg for phrase in transient_phrases)
@@ -103,6 +108,54 @@ def _normalize_levels(raw: list[Any]) -> list[dict[str, Any]]:
     return [{"price": p, "size": by_price[p]} for p in sorted(by_price)]
 
 
+def _load_open_positions(path: str) -> dict[str, Any]:
+    p = Path(path)
+    if not p.exists():
+        return {}
+    try:
+        with p.open(encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def _save_open_positions(path: str, positions: dict[str, Any]) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with Path(path).open("w", encoding="utf-8") as f:
+        json.dump(positions, f, indent=2)
+
+
+def _load_cooldowns(path: str) -> dict[str, str]:
+    p = Path(path)
+    if not p.exists():
+        return {}
+    try:
+        with p.open(encoding="utf-8") as f:
+            data = json.load(f)
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def _save_cooldowns(path: str, cooldowns: dict[str, str]) -> None:
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with Path(path).open("w", encoding="utf-8") as f:
+        json.dump(cooldowns, f, indent=2)
+
+
+def _position_age_seconds(position: dict[str, Any]) -> float:
+    try:
+        ts = datetime.fromisoformat(position.get("entry_timestamp"))
+        return (datetime.now(timezone.utc) - ts).total_seconds()
+    except Exception:
+        return float("inf")
+
+
 # ── Depth walking ─────────────────────────────────────────────────────────────
 
 def _walk_depth(
@@ -110,10 +163,10 @@ def _walk_depth(
     p_levels: list[dict[str, Any]],
     days: float,
     max_contracts: int,
-    min_arr: float,
     kalshi_fee_fn,
     poly_fee_fn,
     kalshi_round_up: bool,
+    exit_target: float = 1.0,
 ) -> dict[str, Any]:
     """Walk the combined orderbook depth, accumulating contracts while profitable.
 
@@ -124,7 +177,6 @@ def _walk_depth(
     Stop reasons:
         no_positive_edge         — marginal cost of next contract >= $1.00
         max_contracts_hit        — position would exceed the contract cap
-        arr_below_min            — annualised return fell below threshold
         kalshi_depth_exhausted
         polymarket_depth_exhausted
     """
@@ -185,8 +237,8 @@ def _walk_depth(
         next_pf = apply_fee(poly_fee_fn, avg_p, nc, False)
         delta_fee = (next_kf - cur_kf) + (next_pf - cur_pf)
 
-        # Rule 1: marginal cost of one more contract must be < $1 (positive edge)
-        if nk + np_ + delta_fee >= 1.0:
+        # Rule 1: marginal cost of one more contract must be < exit_target (positive edge)
+        if nk + np_ + delta_fee >= exit_target:
             stop_reason = "no_positive_edge"
             break
 
@@ -195,13 +247,6 @@ def _walk_depth(
         # Rule 2: position size must not exceed the contract cap
         if nc > max_contracts:
             stop_reason = "max_contracts_hit"
-            break
-
-        # Rule 3: annualised return must meet minimum threshold
-        edge_pct = (nc - next_kp) / next_kp if next_kp > 0 else 0.0
-        arr = (edge_pct * 365.0) / days if days > 0 else 0.0
-        if arr < min_arr:
-            stop_reason = "arr_below_min"
             break
 
         # Accept this contract
@@ -219,7 +264,7 @@ def _walk_depth(
         # Record slippage: one entry per distinct price-level combination.
         # If prices unchanged from the last entry, update it in-place so each
         # entry reflects the cumulative state at the END of that price level.
-        edge_d = contracts - cur_kp
+        edge_d = contracts * exit_target - cur_kp
         arr_now = (edge_d / cur_kp * 365.0 / days) if cur_kp > 0 and days > 0 else 0.0
         if slippage and slippage[-1]["k_price"] == nk and slippage[-1]["p_price"] == np_:
             slippage[-1]["contracts"] = contracts
@@ -235,7 +280,7 @@ def _walk_depth(
             })
 
     final_kp = cur_kp
-    final_edge_pct = (contracts - final_kp) / final_kp if final_kp > 0 else 0.0
+    final_edge_pct = (contracts * exit_target - final_kp) / final_kp if final_kp > 0 else 0.0
     final_arr = (final_edge_pct * 365.0) / days if days > 0 else 0.0
 
     # After hitting max_contracts, count profitable contracts still available in the book.
@@ -259,7 +304,7 @@ def _walk_depth(
                 continue
             nk = float(k_levels[r_ki]["price"])
             np_ = float(p_levels[r_pi]["price"])
-            if nk + np_ >= 1.0:
+            if nk + np_ >= exit_target:
                 break
             count = min(r_kr, r_pr)
             r_nk = round(nk, 6)
@@ -287,6 +332,97 @@ def _walk_depth(
     }
 
 
+def _walk_depth_bids(
+    k_levels: list[dict[str, Any]],
+    p_levels: list[dict[str, Any]],
+    target_contracts: int,
+    target_sum: float = 0.99,
+) -> dict[str, Any]:
+    """Walk bid depth for exit; stop if cumulative best price falls below target_sum.
+
+    Bid levels must be sorted descending (highest bid first) so we sell at the
+    best available prices first.
+    """
+    # Sort descending — best (highest) bids first
+    k_levels = sorted(k_levels, key=lambda x: float(x["price"]), reverse=True)
+    p_levels = sorted(p_levels, key=lambda x: float(x["price"]), reverse=True)
+
+    if not k_levels or not p_levels or target_contracts <= 0:
+        return {
+            "contracts": 0,
+            "k_price": 0.0,
+            "p_price": 0.0,
+            "slippage": [],
+            "stop_reason": "no_levels",
+        }
+
+    k_idx = p_idx = 0
+    k_rem = int(k_levels[0]["size"])
+    p_rem = int(p_levels[0]["size"])
+    contracts = 0
+    k_spend = 0.0
+    p_spend = 0.0
+    k_price = float(k_levels[0]["price"])
+    p_price = float(p_levels[0]["price"])
+    slippage: list[dict[str, Any]] = []
+    stop_reason = "depth_exhausted"
+
+    while contracts < target_contracts and k_idx < len(k_levels) and p_idx < len(p_levels):
+        if k_rem <= 0:
+            k_idx += 1
+            if k_idx >= len(k_levels):
+                stop_reason = "kalshi_depth_exhausted"
+                break
+            k_rem = int(k_levels[k_idx]["size"])
+            continue
+        if p_rem <= 0:
+            p_idx += 1
+            if p_idx >= len(p_levels):
+                stop_reason = "polymarket_depth_exhausted"
+                break
+            p_rem = int(p_levels[p_idx]["size"])
+            continue
+
+        nk = float(k_levels[k_idx]["price"])
+        np_ = float(p_levels[p_idx]["price"])
+
+        if nk + np_ < target_sum:
+            stop_reason = "target_not_met"
+            break
+
+        contracts += 1
+        k_price = nk
+        p_price = np_
+        k_spend += nk
+        p_spend += np_
+
+        k_rem -= 1
+        p_rem -= 1
+
+        if slippage and slippage[-1]["k_price"] == nk and slippage[-1]["p_price"] == np_:
+            slippage[-1]["contracts"] = contracts
+        else:
+            slippage.append({
+                "k_price": round(nk, 6),
+                "p_price": round(np_, 6),
+                "contracts": contracts,
+            })
+
+        if contracts >= target_contracts:
+            stop_reason = "target_reached"
+            break
+
+    return {
+        "contracts": contracts,
+        "k_price": k_price,
+        "p_price": p_price,
+        "k_spend": k_spend,
+        "p_spend": p_spend,
+        "slippage": slippage,
+        "stop_reason": stop_reason,
+    }
+
+
 # ── Opportunity evaluation ────────────────────────────────────────────────────
 
 def evaluate_pair(
@@ -304,8 +440,8 @@ def evaluate_pair(
     Returns a list of tradeable opportunity dicts (empty if no arb found).
     """
     max_contracts = int(cfg["max_contracts"])
-    min_arr = float(cfg["min_arr"])
     days = _days_to_resolution(pair.get("resolution_date", ""))
+    exit_target = float(cfg.get("exit_target_total_price", 0.98))
 
     fee_cfg = cfg["fees"]
     k_fee_fn = fee_cfg["kalshi"]["_fn"]
@@ -354,12 +490,12 @@ def evaluate_pair(
             p_levels = [{"price": strat["p_price_hint"], "size": 200}]
 
         walk = _walk_depth(
-            k_levels, p_levels, days, max_contracts, min_arr,
-            k_fee_fn, p_fee_fn, k_round_up,
+            k_levels, p_levels, days, max_contracts,
+            k_fee_fn, p_fee_fn, k_round_up, exit_target,
         )
 
         if walk["contracts"] > 0:
-            edge_dollar = walk["contracts"] - walk["kp_cost"]
+            edge_dollar = walk["contracts"] * exit_target - walk["kp_cost"]
             results.append({
                 "pair_id": pair["pair_id"],
                 "title": pair.get("title", pair["pair_id"]),
@@ -369,11 +505,14 @@ def evaluate_pair(
                 "k_side": strat["k_side"],
                 "p_side": strat["p_side"],
                 "p_token_id": strat["p_token_id"],
+                "yes_token_id": yes_token_id,
+                "no_token_id": no_token_id,
                 "contracts": walk["contracts"],
                 "k_price": walk["k_price"],
                 "p_price": walk["p_price"],
                 "kp_cost": walk["kp_cost"],
                 "edge_dollar": round(edge_dollar, 4),
+                "edge_pct": walk["edge_pct"],
                 "arr": walk["arr"],
                 "total_fee": walk["total_fee"],
                 "days": days,
@@ -466,6 +605,7 @@ def _build_log_entry(opp: dict[str, Any], mode: str, **overrides) -> dict[str, A
     entry: dict[str, Any] = {
         "title": opp["title"],
         "pair_id": opp["pair_id"],
+        "trade_phase": "entry",
         "fills": _slippage_to_fills(opp.get("slippage", [])),
         "total_contracts": opp["contracts"],
         "edge_pct": round(opp["edge_pct"] * 100, 2),
@@ -537,7 +677,287 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
     return entry
 
 
+def _record_open_position(
+    positions: dict[str, Any],
+    opp: dict[str, Any],
+    trade: dict[str, Any],
+    position_file: str,
+    cooldown_seconds: int = 3600,
+) -> None:
+    """Add an open position and write state to disk."""
+    now = datetime.now(timezone.utc)
+    pos = {
+        "pair_id": opp["pair_id"],
+        "strategy": opp["strategy"],
+        "k_side": opp["k_side"],
+        "p_side": opp["p_side"],
+        "kalshi_ticker": opp["kalshi_ticker"],
+        "p_token_id": opp.get("p_token_id", ""),
+        "yes_token_id": opp.get("yes_token_id", ""),
+        "no_token_id": opp.get("no_token_id", ""),
+        "title": opp.get("title", opp["pair_id"]),
+        "contracts": opp["contracts"],
+        "entry_k_price": opp["k_price"],
+        "entry_p_price": opp["p_price"],
+        "entry_kp_cost": opp.get("kp_cost", 0.0),
+        "entry_fills": _slippage_to_fills(opp.get("slippage", [])),
+        "entry_fee": opp.get("total_fee", 0.0),
+        "entry_edge_dollar": opp.get("edge_dollar", 0.0),
+        "entry_arr": opp.get("arr", 0.0),
+        "entry_edge_pct": opp.get("edge_pct", 0.0),
+        "entry_timestamp": now.isoformat(),
+        "entry_trade_number": trade.get("trade_number", ""),
+        "cooldown_until": (now + timedelta(seconds=cooldown_seconds)).isoformat(),
+    }
+    positions[opp["pair_id"]] = pos
+    _save_open_positions(position_file, positions)
+
+
+def _build_exit_log_entry(
+    position: dict[str, Any],
+    exit_walk: dict[str, Any],
+    exit_contracts: int,
+    exit_fee: float,
+    timeout: bool,
+    shutdown: bool,
+    mode: str,
+    trade_number: str,
+) -> dict[str, Any]:
+    full_entry_kp_cost = position.get(
+        "entry_kp_cost",
+        (position["entry_k_price"] + position["entry_p_price"]) * position["contracts"]
+        + position.get("entry_fee", 0.0),
+    )
+    cost_per_contract = full_entry_kp_cost / position["contracts"] if position["contracts"] else 0.0
+    entry_total_cost = cost_per_contract * exit_contracts
+    # Use actual blended spend from the bid walk, not a single level price
+    exit_k_spend = exit_walk.get("k_spend", exit_walk.get("k_price", 0.0) * exit_contracts)
+    exit_p_spend = exit_walk.get("p_spend", exit_walk.get("p_price", 0.0) * exit_contracts)
+    exit_total_value = exit_k_spend + exit_p_spend - exit_fee
+    realized_pnl = exit_total_value - entry_total_cost
+    edge_pct = (realized_pnl / entry_total_cost) if entry_total_cost > 0 else 0.0
+    age_seconds = _position_age_seconds(position)
+    age_days = max(age_seconds / 86400.0, 1.0 / 86400.0)
+    arr = edge_pct * 365.0 / age_days
+
+    entry = {
+        "title": position.get("title", position["pair_id"]),
+        "pair_id": position["pair_id"],
+        "trade_phase": "exit",
+        "corresponding_entry_trade_number": position.get("entry_trade_number", ""),
+        "entry_k_price": position["entry_k_price"],
+        "entry_p_price": position["entry_p_price"],
+        "entry_fills": position.get("entry_fills", []),
+        "entry_fee": position.get("entry_fee", 0.0),
+        "entry_kp_cost": round(entry_total_cost, 4),
+        "exit_fills": _slippage_to_fills(exit_walk.get("slippage", [])),
+        "total_contracts": exit_contracts,
+        "edge_pct": round(edge_pct * 100, 2),
+        "total_profit": round(realized_pnl, 4),
+        "arr": round(arr * 100, 2),
+        "fee": round(exit_fee, 4),
+        "hold_duration_seconds": round(age_seconds, 2),
+        "close_reason": "shutdown" if shutdown else ("timeout" if timeout else "target"),
+        "kalshi_token": position.get("kalshi_ticker", ""),
+        "polymarket_token": position.get("p_token_id", ""),
+        "strategy": position.get("strategy", ""),
+        "execution_date": datetime.now(timezone.utc).date().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "mode": mode,
+        "trade_number": trade_number,
+    }
+    return entry
+
+
+def _process_exit_positions(
+    positions: dict[str, Any],
+    kalshi,
+    poly,
+    cfg: dict[str, Any],
+    mode: str,
+    log_path: str,
+    position_file: str,
+    cooldowns: dict[str, str] | None = None,
+    shutdown: bool = False,
+) -> dict[str, Any]:
+    """Evaluate and close open positions using bid rules."""
+    target_sum = float(cfg.get("exit_target_total_price", 0.99))
+    exit_candidates = []
+
+    for pair_id, position in list(positions.items()):
+        age = _position_age_seconds(position)
+        fetch_delay = 2
+        kq = pq = None
+        while True:
+            try:
+                kq = kalshi.get_quotes(position["kalshi_ticker"])
+                pq = poly.get_quotes(position.get("yes_token_id", ""), position.get("no_token_id", ""), "")
+                break
+            except Exception as exc:
+                if "429" in str(exc):
+                    print(f"  {Fore.YELLOW}Rate limited fetching {pair_id} — retrying in {fetch_delay}s...{Style.RESET_ALL}")
+                    time.sleep(fetch_delay)
+                    fetch_delay = min(fetch_delay * 2, 60)
+                elif shutdown:
+                    print(f"  {Fore.YELLOW}Exit fetch failed for {pair_id}: {exc} — retrying in {fetch_delay}s...{Style.RESET_ALL}")
+                    time.sleep(fetch_delay)
+                    fetch_delay = min(fetch_delay * 2, 60)
+                else:
+                    print(f"  {Fore.YELLOW}Exit fetch failed for {pair_id}: {exc}{Style.RESET_ALL}")
+                    break
+        if kq is None or pq is None:
+            continue
+        if shutdown:
+            time.sleep(1.5)
+
+        if position["strategy"] == "BUY_KY_BUY_PN":
+            k_bid = kq["yes_bid"]
+            p_bid = pq["no_bid"]
+            k_levels = kq.get("depth", {}).get("sell_yes", [])
+            p_levels = pq.get("depth", {}).get("no_bids", [])
+            k_side = "yes"
+            p_side = "no"
+        else:
+            k_bid = kq["no_bid"]
+            p_bid = pq["yes_bid"]
+            k_levels = kq.get("depth", {}).get("sell_no", [])
+            p_levels = pq.get("depth", {}).get("yes_bids", [])
+            k_side = "no"
+            p_side = "yes"
+
+        target_hit = (k_bid + p_bid) >= target_sum
+        if not (target_hit or shutdown):
+            continue
+
+        # For shutdown, accept any bid. For convergence exits, require target_sum.
+        forced = shutdown
+        walk = _walk_depth_bids(k_levels, p_levels, position["contracts"], 0.0 if forced else target_sum)
+
+        # For convergence exits: if no contracts meet the target in the book, skip.
+        # For forced exits: sell the full position at best available bids.
+        if not forced and walk["contracts"] == 0:
+            continue
+
+        exit_contracts = walk["contracts"] if walk["contracts"] > 0 else position["contracts"]
+        exit_k_price = walk.get("k_price", k_bid)
+        exit_p_price = walk.get("p_price", p_bid)
+
+        # Execute the exit leg(s)
+        order_failed = False
+        if mode == "live":
+            try:
+                kalshi.place_order(
+                    ticker=position["kalshi_ticker"],
+                    side=k_side,
+                    contracts=exit_contracts,
+                    price=exit_k_price,
+                    client_order_id=f"EXIT:{pair_id}:{position.get('entry_trade_number', '')}:k",
+                    action="sell",
+                )
+            except Exception as exc:
+                order_failed = True
+                print(f"  {Fore.RED}Kalshi exit failed for {pair_id}: {exc}{Style.RESET_ALL}")
+            try:
+                poly.place_order(
+                    token_id=position.get("p_token_id", ""),
+                    side="sell",
+                    size=exit_contracts,
+                    price=exit_p_price,
+                )
+            except Exception as exc:
+                order_failed = True
+                print(f"  {Fore.RED}Polymarket exit failed for {pair_id}: {exc}{Style.RESET_ALL}")
+
+        fee_cfg = cfg["fees"]
+        k_fee_fn = fee_cfg["kalshi"]["_fn"]
+        p_fee_fn = fee_cfg["polymarket"]["_fn"]
+        k_rup = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
+        # Use blended average exit prices for fee calculation, not just the last fill price
+        exit_k_spend_val = walk.get("k_spend", exit_k_price * exit_contracts)
+        exit_p_spend_val = walk.get("p_spend", exit_p_price * exit_contracts)
+        exit_k_avg = exit_k_spend_val / exit_contracts if exit_contracts else exit_k_price
+        exit_p_avg = exit_p_spend_val / exit_contracts if exit_contracts else exit_p_price
+        exit_fee = apply_fee(k_fee_fn, exit_k_avg, exit_contracts, k_rup) + apply_fee(p_fee_fn, exit_p_avg, exit_contracts, False)
+
+        trade_number = _next_trade_number(log_path)
+        exit_log = _build_exit_log_entry(
+            position=position,
+            exit_walk=walk,
+            exit_contracts=exit_contracts,
+            exit_fee=exit_fee,
+            timeout=False,
+            shutdown=shutdown,
+            mode=mode,
+            trade_number=trade_number,
+        )
+        _write_trade_log(exit_log, log_path)
+
+        remaining = position["contracts"] - exit_contracts
+        if order_failed:
+            print(f"  {Fore.YELLOW}PARTIAL exit for {pair_id} ({exit_contracts}/{position['contracts']}c){Style.RESET_ALL}")
+        elif remaining > 0:
+            print(f"  {Fore.GREEN}EXIT {exit_contracts}c of {position['contracts']}c for {pair_id} — {remaining}c remain (bids below target){Style.RESET_ALL}")
+        else:
+            print(f"  {Fore.GREEN}EXIT {exit_contracts}c for {pair_id} — fully closed K{exit_k_price:.4f}/P{exit_p_price:.4f}{Style.RESET_ALL}")
+
+        if remaining > 0 and not forced:
+            # Partial convergence exit — update position contract count and scale
+            # entry_kp_cost proportionally so the next exit log computes correct P&L
+            original_contracts = positions[pair_id]["contracts"]
+            old_kp_cost = positions[pair_id].get("entry_kp_cost", 0.0)
+            positions[pair_id]["contracts"] = remaining
+            positions[pair_id]["entry_kp_cost"] = old_kp_cost * remaining / original_contracts if original_contracts else 0.0
+        else:
+            exit_candidates.append(pair_id)
+
+    for pair_id in exit_candidates:
+        pos = positions.pop(pair_id, None)
+        if cooldowns is not None and pos is not None:
+            cooldowns[pair_id] = pos.get("cooldown_until", "")
+
+    _save_open_positions(position_file, positions)
+    return positions
+
+
 # ── Failed-pairs tracking ─────────────────────────────────────────────────────
+
+def load_expired_ids(log_path: str) -> set[str]:
+    """Read the expired-pairs log and return the set of pair_ids to skip."""
+    p = Path(log_path)
+    ids: set[str] = set()
+    if not p.exists():
+        return ids
+    try:
+        with p.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    pid = entry.get("pair_id", "")
+                    if pid:
+                        ids.add(pid)
+                except json.JSONDecodeError:
+                    pass
+    except OSError:
+        pass
+    return ids
+
+
+def _log_expired_pair(pair: dict[str, Any], log_path: str) -> None:
+    """Append one entry to the expired-pairs log file."""
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "pair_id": pair["pair_id"],
+        "kalshi_ticker": pair.get("kalshi_ticker", ""),
+        "title": pair.get("title", ""),
+        "resolution_date": str(pair.get("resolution_date", "")),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    with Path(log_path).open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
 
 def load_failed_ids(log_path: str) -> set[str]:
     """Read the failed-pairs log and return the set of pair_ids to skip."""
@@ -614,14 +1034,31 @@ def _print_fill_breakdown(opp: dict[str, Any]) -> None:
 # ── Scan cycle ────────────────────────────────────────────────────────────────
 
 def _fetch_pair(pair: dict[str, Any], kalshi, poly) -> tuple[dict, dict, dict]:
-    """Fetch orderbook quotes for one pair (runs in a worker thread)."""
-    kq = kalshi.get_quotes(pair["kalshi_ticker"])
-    pq = poly.get_quotes(
-        pair["polymarket_yes_token_id"],
-        pair["polymarket_no_token_id"],
-        pair.get("polymarket_market_slug", ""),
-    )
-    return pair, kq, pq
+    """Fetch orderbook quotes for one pair (runs in a worker thread).
+
+    Retries up to 3 times with exponential backoff on transient errors (429, 503,
+    timeouts). Permanent errors (404, bad ticker) are raised immediately.
+    """
+    max_retries = 3
+    delay = 1.0  # seconds before first retry; doubles each attempt
+    last_exc: Exception | None = None
+    for attempt in range(max_retries + 1):
+        try:
+            kq = kalshi.get_quotes(pair["kalshi_ticker"])
+            pq = poly.get_quotes(
+                pair["polymarket_yes_token_id"],
+                pair["polymarket_no_token_id"],
+                pair.get("polymarket_market_slug", ""),
+            )
+            return pair, kq, pq
+        except Exception as exc:
+            if _is_transient_error(exc) and attempt < max_retries:
+                last_exc = exc
+                time.sleep(delay)
+                delay *= 2
+            else:
+                raise
+    raise last_exc  # type: ignore[misc]
 
 
 def run_scan(
@@ -631,6 +1068,9 @@ def run_scan(
     cfg: dict[str, Any],
     execute: bool = False,
     failed_ids: set[str] | None = None,
+    expired_ids: set[str] | None = None,
+    skip_pair_ids: set[str] | None = None,
+    on_new_position: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Run one full scan across all pairs using concurrent HTTP requests.
 
@@ -645,11 +1085,14 @@ def run_scan(
     """
     if failed_ids is None:
         failed_ids = set()
+    if expired_ids is None:
+        expired_ids = set()
 
     mode = cfg["mode"]
-    log_path = cfg.get("trade_log", "trades.json")
+    log_path = cfg.get("entry_log", "entry_trades.json")
     opp_log_path = cfg.get("opportunities_log", "opportunities.json")
     failed_log = cfg.get("failed_log", "failed_pairs.json")
+    expired_log = cfg.get("expired_log", "expired_pairs.json")
     max_workers = int(cfg.get("max_workers", 30))
     ts = datetime.now().strftime("%H:%M:%S")
     t0 = time.monotonic()
@@ -672,7 +1115,20 @@ def run_scan(
         except Exception:
             return False
 
-    active_pairs = [p for p in pairs if p["pair_id"] not in failed_ids and not _is_expired(p)]
+    skip_pair_ids = skip_pair_ids or set()
+
+    # Log newly-expired pairs to expired_ids so they are never rechecked
+    for p in pairs:
+        if p["pair_id"] not in expired_ids and _is_expired(p):
+            expired_ids.add(p["pair_id"])
+            _log_expired_pair(p, expired_log)
+
+    active_pairs = [
+        p for p in pairs
+        if p["pair_id"] not in failed_ids
+        and p["pair_id"] not in expired_ids
+        and p["pair_id"] not in skip_pair_ids
+    ]
     skipped = len(pairs) - len(active_pairs)
 
     skip_note = f"  {Style.DIM}({skipped} skipped — failed/expired){Style.RESET_ALL}" if skipped else ""
@@ -730,8 +1186,17 @@ def run_scan(
                     f"  {Fore.YELLOW}~ {label}: {result}  (transient — will retry){Style.RESET_ALL}",
                     file=sys.stderr,
                 )
+            elif _is_404_error(result):
+                # 404 = market closed/resolved on exchange — treat as expired
+                expired_ids.add(pair["pair_id"])
+                _log_expired_pair(pair, expired_log)
+                new_failures += 1
+                print(
+                    f"  {Fore.YELLOW}! {label}: 404 — market gone, logged to expired pairs{Style.RESET_ALL}",
+                    file=sys.stderr,
+                )
             else:
-                # Permanent error (bad ticker, parse failure, 404, etc.)
+                # Permanent error (bad ticker, parse failure, etc.)
                 failed_ids.add(pair["pair_id"])
                 _log_failed_pair(pair, str(result), failed_log)
                 new_failures += 1
@@ -819,13 +1284,14 @@ def run_scan(
                         )
                     else:
                         executed_keys.add(exec_key)
-                        min_profit = float(cfg.get("min_profit_dollars", 1.0))
+                        min_profit = float(cfg.get("min_profit_dollars", 0.25))
                         if opp["edge_dollar"] < min_profit:
                             print(
                                 f"    {Fore.YELLOW}⚠ skipping — profit ${opp['edge_dollar']:.2f} "
                                 f"below min ${min_profit:.2f}{Style.RESET_ALL}"
                             )
                             continue
+                        trade = None
                         if mode == "paper":
                             trade = execute_paper(opp, log_path)
                             print(f"    {Style.DIM}→ logged {trade['trade_number']} (paper){Style.RESET_ALL}")
@@ -835,6 +1301,8 @@ def run_scan(
                             color = Fore.RED if trade.get("partial_fill") else Fore.GREEN
                             print(f"    → {trade['trade_number']} {color}{status}{Style.RESET_ALL}")
                         _print_fill_breakdown(opp)
+                        if on_new_position and trade is not None:
+                            on_new_position(opp, trade)
                 else:
                     print(f"    {Style.DIM}(scan-only — use 'run' to execute){Style.RESET_ALL}")
                     _print_fill_breakdown(opp)
@@ -862,7 +1330,12 @@ def run_loop(
     in memory across cycles — they are never fetched again within this session.
     """
     interval = max(1, int(cfg.get("scan_interval_seconds", 5)))
+    pairs_per_cycle = int(cfg.get("pairs_per_cycle", len(pairs)))
+    pair_offset = 0
     failed_log = cfg.get("failed_log", "failed_pairs.json")
+    expired_log = cfg.get("expired_log", "expired_pairs.json")
+    position_file = cfg.get("position_file", "open_positions.json")
+    cooldown_file = cfg.get("cooldown_file", "cooldowns.json")
 
     # Load any previously failed pairs so they are skipped from the first cycle
     failed_ids = load_failed_ids(failed_log)
@@ -872,16 +1345,113 @@ def run_loop(
             f"{failed_log} — these will be skipped.{Style.RESET_ALL}"
         )
 
+    # Load any previously expired pairs so they are skipped from the first cycle
+    expired_ids = load_expired_ids(expired_log)
+    if expired_ids:
+        print(
+            f"  {Style.DIM}Loaded {len(expired_ids)} previously expired pair(s) from "
+            f"{expired_log} — these will be skipped.{Style.RESET_ALL}"
+        )
+
+    positions = _load_open_positions(position_file)
+    if positions:
+        print(
+            f"  {Style.DIM}Loaded {len(positions)} open position(s) from "
+            f"{position_file}{Style.RESET_ALL}"
+        )
+
+    # Tracks cooldown_until per pair_id — persists to disk so restarts respect cooldowns
+    cooldowns: dict[str, str] = _load_cooldowns(cooldown_file)
+    # Prune expired cooldowns on startup
+    now_startup = datetime.now(timezone.utc)
+    cooldowns = {
+        pid: ts for pid, ts in cooldowns.items()
+        if datetime.fromisoformat(ts) > now_startup
+    }
+
+    def _on_new_position(opp: dict[str, Any], trade: dict[str, Any]) -> None:
+        cooldown_seconds = int(cfg.get("entry_cooldown_seconds", 3600))
+        _record_open_position(positions, opp, trade, position_file, cooldown_seconds=cooldown_seconds)
+
+    EXIT_INTERVAL = 10   # seconds between exit checks
+    SCAN_INTERVAL = 5    # seconds between new-pair scans
+
+    last_exit_check = 0.0  # epoch seconds; 0 forces immediate check on first cycle
+
     print(f"\n{Fore.CYAN}Bot running — press Ctrl+C to stop.{Style.RESET_ALL}")
     while True:
         try:
-            opps = run_scan(pairs, kalshi, poly, cfg, execute=True, failed_ids=failed_ids)
+            # --- Exit check (every EXIT_INTERVAL seconds) ---
+            if cfg.get("exit_enabled", True) and (time.time() - last_exit_check >= EXIT_INTERVAL):
+                positions = _process_exit_positions(
+                    positions=positions,
+                    kalshi=kalshi,
+                    poly=poly,
+                    cfg=cfg,
+                    mode=cfg.get("mode", "paper"),
+                    log_path=cfg.get("exit_log", "exit_trades.json"),
+                    position_file=position_file,
+                    cooldowns=cooldowns,
+                    shutdown=False,
+                )
+                _save_cooldowns(cooldown_file, cooldowns)
+                last_exit_check = time.time()
+
+            now = datetime.now(timezone.utc)
+            skip_pair_ids = set()
+
+            # Skip pairs with an open position
+            for pos in positions.values():
+                skip_pair_ids.add(pos["pair_id"])
+
+            # Skip pairs still in cooldown (even if their position has closed)
+            for pair_id, cooldown_until_str in cooldowns.items():
+                try:
+                    cooldown_until = datetime.fromisoformat(cooldown_until_str)
+                    if cooldown_until > now:
+                        skip_pair_ids.add(pair_id)
+                except Exception:
+                    pass
+
+            # Rotate through non-position pairs, keeping open-position pairs first
+            open_pair_ids = {pos["pair_id"] for pos in positions.values()}
+            priority_pairs = [p for p in pairs if p["pair_id"] in open_pair_ids]
+            remaining_pairs = [p for p in pairs if p["pair_id"] not in open_pair_ids]
+            rotated_remaining = remaining_pairs[pair_offset:] + remaining_pairs[:pair_offset]
+            scan_pairs = (priority_pairs + rotated_remaining)[:pairs_per_cycle]
+            pair_offset = (pair_offset + max(pairs_per_cycle - len(priority_pairs), 0)) % max(len(remaining_pairs), 1)
+
+            opps = run_scan(
+                scan_pairs,
+                kalshi,
+                poly,
+                cfg,
+                execute=True,
+                failed_ids=failed_ids,
+                expired_ids=expired_ids,
+                skip_pair_ids=skip_pair_ids,
+                on_new_position=_on_new_position,
+            )
             traded = len(opps)
             print(
-                f"  {Style.DIM}{traded} trade(s) this cycle  "
-                f"| next scan in {interval}s...{Style.RESET_ALL}"
+                f"  {Style.DIM}{traded} new entry trade(s) this cycle  "
+                f"| next scan in {SCAN_INTERVAL}s...{Style.RESET_ALL}"
             )
-            time.sleep(interval)
+            time.sleep(SCAN_INTERVAL)
         except KeyboardInterrupt:
-            print(f"\n{Fore.YELLOW}Stopped.{Style.RESET_ALL}")
+            print(f"\n{Fore.YELLOW}Shutdown requested — closing positions on bids...{Style.RESET_ALL}")
+            if cfg.get("exit_enabled", True):
+                positions = _process_exit_positions(
+                    positions=positions,
+                    kalshi=kalshi,
+                    poly=poly,
+                    cfg=cfg,
+                    mode=cfg.get("mode", "paper"),
+                    log_path=cfg.get("exit_log", "exit_trades.json"),
+                    position_file=position_file,
+                    cooldowns=cooldowns,
+                    shutdown=True,
+                )
+                _save_cooldowns(cooldown_file, cooldowns)
+            print(f"{Fore.YELLOW}Stopped.{Style.RESET_ALL}")
             break

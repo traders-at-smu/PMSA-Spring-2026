@@ -22,8 +22,8 @@
   "python": {
     "pythonExecutable": "python",
     "modelBridgePath": "python/model_v1_bridge.py",
-    "miguelScriptsDir": "python",
-    "miguel": {
+    "traderScriptsDir": "python",
+    "trader": {
       "pollIntervalSec": 30,
       "minPairs": 50
     }

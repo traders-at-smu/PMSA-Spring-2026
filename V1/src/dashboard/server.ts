@@ -8,7 +8,7 @@ import { ArbitrageScreener } from "../screener";
 import { KalshiScreener } from "../kalshiScreener";
 import { ArbitrageExecutionService } from "../services/arbitrageExecutionService";
 import { PythonModelClient } from "../services/pythonModelClient";
-import { MiguelService } from "../services/miguelService";
+import { TraderService } from "../services/traderService";
 import { CrossPlatformScreener } from "../crossPlatformScreener";
 import { SignalTrackerService } from "../services/signalTrackerService";
 import { PaperAccountService } from "../services/paperAccountService";
@@ -66,7 +66,7 @@ let kalshiScreenerCache: { data: any; expires: number } | null = null;
 const KALSHI_SCREENER_TTL = 60 * 1000; // 60s
 const executionService = new ArbitrageExecutionService();
 const modelClient = new PythonModelClient();
-const miguelService = new MiguelService(modelClient);
+const traderService = new TraderService(modelClient);
 const crossPlatformScreener = new CrossPlatformScreener(screener, kalshiScreener);
 executionService.setCrossPlatformScreener(crossPlatformScreener);
 // Wire stateStore after it's created (deferred below)
@@ -693,61 +693,61 @@ app.post("/api/model-v1/evaluate", async (req, res) => {
   }
 });
 
-app.get("/api/miguel/status", (_req, res) => {
+app.get("/api/trader/status", (_req, res) => {
   try {
-    res.json({ ok: true, ...miguelService.getStatus() });
+    res.json({ ok: true, ...traderService.getStatus() });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-app.post("/api/miguel/pairs/rebuild", async (_req, res) => {
+app.post("/api/trader/pairs/rebuild", async (_req, res) => {
   try {
-    const result = await miguelService.rebuildPairs();
-    res.json({ ok: true, ...result, status: miguelService.getStatus() });
+    const result = await traderService.rebuildPairs();
+    res.json({ ok: true, ...result, status: traderService.getStatus() });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-app.post("/api/miguel/live-quotes/start", (_req, res) => {
+app.post("/api/trader/live-quotes/start", (_req, res) => {
   try {
-    res.json({ ok: true, ...miguelService.startLiveQuotes(), status: miguelService.getStatus() });
+    res.json({ ok: true, ...traderService.startLiveQuotes(), status: traderService.getStatus() });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-app.post("/api/miguel/live-quotes/stop", (_req, res) => {
+app.post("/api/trader/live-quotes/stop", (_req, res) => {
   try {
-    res.json({ ok: true, ...miguelService.stopLiveQuotes(), status: miguelService.getStatus() });
+    res.json({ ok: true, ...traderService.stopLiveQuotes(), status: traderService.getStatus() });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-app.post("/api/miguel/opportunities/rebuild", async (_req, res) => {
+app.post("/api/trader/opportunities/rebuild", async (_req, res) => {
   try {
-    const result = await miguelService.rebuildOpportunities();
-    res.json({ ok: true, ...result, status: miguelService.getStatus() });
+    const result = await traderService.rebuildOpportunities();
+    res.json({ ok: true, ...result, status: traderService.getStatus() });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-app.get("/api/miguel/opportunities/latest", (req, res) => {
+app.get("/api/trader/opportunities/latest", (req, res) => {
   try {
     const limit = Math.min(Math.max(parseInt(String(req.query.limit || "25"), 10) || 25, 1), 200);
-    res.json({ ok: true, rows: miguelService.getLatestOpportunities(limit), status: miguelService.getStatus() });
+    res.json({ ok: true, rows: traderService.getLatestOpportunities(limit), status: traderService.getStatus() });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err.message });
   }
 });
 
-app.get("/api/miguel/model-v1/top", async (req, res) => {
+app.get("/api/trader/model-v1/top", async (req, res) => {
   try {
     const limit = Math.min(Math.max(parseInt(String(req.query.limit || "3"), 10) || 3, 1), 10);
-    const rows = await miguelService.evaluateModelTop(limit);
+    const rows = await traderService.evaluateModelTop(limit);
     res.json({ ok: true, rows, model: modelClient.getStatus() });
   } catch (err: any) {
     res.status(500).json({ ok: false, error: err.message });
