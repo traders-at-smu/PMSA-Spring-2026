@@ -35,9 +35,10 @@ If $Fee_{KN}(C=1) + Ask_{PY} + Ask_{KN} + Fee_{PY}(0) = KNPY(C=1)$
 
 If there is an arbitrage opportunity:
 $KP(c) = Ask_{K*}(c)+ Ask_{P*}(c)+Fee_{K*}(c)+Fee_(P*)(c)$$ - cost of n contracts
-$E\$(c) = c-KP(c)$ - $ edge on multiple contracts
-$E\$(c=1) = \frac{E\$c}{c} = 1- \frac{KP(c)}{c}$ - $ edge on one contract
-$E\%(c) = \frac{E\$(c)}{KP(c)} = \frac{c-KP(c)}{KP(c)}$ - % of an edge on a given contract
+$ExitFees(c) = Fee_{K*,exit}(c) + Fee_{P*,exit}(c)$ - estimated fees when selling both sides at exit
+$E\$(c) = c * 0.99 - KP(c) - ExitFees(c)$ - $ edge on multiple contracts (sold at 0.99, net of entry + exit fees)
+$E\$(c=1) = \frac{E\$c}{c} = 0.99 - \frac{KP(c) + ExitFees(c)}{c}$ - $ edge on one contract
+$E\%(c) = \frac{E\$(c)}{KP(c)} = \frac{c * 0.99 - KP(c) - ExitFees(c)}{KP(c)}$ - % of an edge on a given contract
 $A_e(c) = \frac{E\%(c)*365}{d}$  - Annualized return of a specific # of contract's edges based on their outstanding days remaining
 
 Trading Rules:

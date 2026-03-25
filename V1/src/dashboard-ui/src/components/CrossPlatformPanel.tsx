@@ -477,6 +477,37 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
       return sortDir === "asc" ? va - vb : vb - va;
     });
   }
+  // Pairs tab sorting
+  type PairsSortCol = "event" | "polyYes" | "kalshiYes" | "spread" | "arb" | "match";
+  const [pairsSortCol, setPairsSortCol] = useState<PairsSortCol>("spread");
+  const [pairsSortDir, setPairsSortDir] = useState<"asc" | "desc">("asc");
+
+  function handlePairsSort(col: PairsSortCol) {
+    if (pairsSortCol === col) setPairsSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setPairsSortCol(col); setPairsSortDir("desc"); }
+  }
+
+  function pairSpread(p: PriceDiff): number {
+    const cost1 = p.polyYesAsk + (1 - p.kalshiYesBid);
+    const cost2 = p.kalshiYesAsk + (1 - p.polyYesBid);
+    return Math.min(cost1, cost2) - 1;
+  }
+
+  function sortPairs(list: PriceDiff[]): PriceDiff[] {
+    return [...list].sort((a, b) => {
+      let va = 0, vb = 0;
+      if (pairsSortCol === "event") return pairsSortDir === "asc"
+        ? (a.polymarketTitle || a.kalshiTitle).localeCompare(b.polymarketTitle || b.kalshiTitle)
+        : (b.polymarketTitle || b.kalshiTitle).localeCompare(a.polymarketTitle || a.kalshiTitle);
+      if (pairsSortCol === "polyYes") { va = a.polyYesAsk; vb = b.polyYesAsk; }
+      if (pairsSortCol === "kalshiYes") { va = a.kalshiYesAsk; vb = b.kalshiYesAsk; }
+      if (pairsSortCol === "spread") { va = pairSpread(a); vb = pairSpread(b); }
+      if (pairsSortCol === "arb") { va = a.hasArb ? 1 : 0; vb = b.hasArb ? 1 : 0; }
+      if (pairsSortCol === "match") { va = a.similarityScore; vb = b.similarityScore; }
+      return pairsSortDir === "asc" ? va - vb : vb - va;
+    });
+  }
+
   const [verifiedPairKeys, setVerifiedPairKeys] = useState<Set<string>>(new Set());
 
   const arbData = usePolling<ArbResponse>("/api/cross-platform/arbs", 30_000, paused);
@@ -1143,17 +1174,31 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-white/[0.06]">
-                        <th className="px-4 py-3 text-left text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Event</th>
-                        <th className="px-4 py-3 text-center text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Poly YES</th>
-                        <th className="px-4 py-3 text-center text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Poly NO</th>
-                        <th className="px-4 py-3 text-center text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Kalshi YES</th>
-                        <th className="px-4 py-3 text-center text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Kalshi NO</th>
-                        <th className="px-4 py-3 text-center text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Arb</th>
-                        <th className="px-4 py-3 text-right text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold">Match</th>
+                        {([
+                          ["event", "Event", "left"],
+                          ["polyYes", "Poly YES", "center"],
+                          ["", "Poly NO", "center"],
+                          ["kalshiYes", "Kalshi YES", "center"],
+                          ["", "Kalshi NO", "center"],
+                          ["spread", "Spread", "center"],
+                          ["arb", "Arb", "center"],
+                          ["match", "Match", "right"],
+                        ] as const).map(([col, label, align]) => (
+                          <th
+                            key={label}
+                            className={`px-4 py-3 text-${align} text-[10px] text-zinc-500 uppercase tracking-[0.1em] font-semibold ${col ? "cursor-pointer hover:text-zinc-300 select-none" : ""}`}
+                            onClick={col ? () => handlePairsSort(col as PairsSortCol) : undefined}
+                          >
+                            {label}
+                            {col && pairsSortCol === col && (
+                              <span className="ml-1 text-[#CC0035]">{pairsSortDir === "asc" ? "▲" : "▼"}</span>
+                            )}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody>
-                      {pairs.map((p, i) => (
+                      {sortPairs(pairs).map((p, i) => (
                         <tr key={`${p.polymarketSlug}-${p.kalshiTicker}-${i}`} className="data-row border-b border-white/[0.03] last:border-0">
                           <td className="px-4 py-3 max-w-xs">
                             <div className="text-[13px] text-zinc-200 font-medium leading-snug line-clamp-2">
@@ -1201,6 +1246,17 @@ export function CrossPlatformPanel({ paused }: { paused: boolean }) {
                                 {p.kalshiYesBid > 0 ? `${((1 - p.kalshiYesBid) * 100).toFixed(1)}` : "—"}¢
                               </span>
                             </div>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {(() => {
+                              const s = pairSpread(p);
+                              const pct = (s * 100).toFixed(1);
+                              return (
+                                <span className={`font-mono text-[12px] tabular-nums ${s < 0 ? "text-emerald-400" : s === 0 ? "text-zinc-400" : "text-zinc-600"}`}>
+                                  {s < 0 ? "" : "+"}{pct}¢
+                                </span>
+                              );
+                            })()}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {p.hasArb ? (

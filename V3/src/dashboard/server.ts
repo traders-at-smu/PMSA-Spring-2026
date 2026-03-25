@@ -84,11 +84,10 @@ export function startServer(deps: ServerDeps): void {
     }
   });
 
-  // Re-run scan — Kimi file cache persists so only NEW pairs hit the AI API
+  // Incremental scan — reuse existing matched pairs, only process NEW markets
   app.post("/api/cross-platform/rescan", async (_req, res) => {
     try {
-      crossPlatformScreener.invalidateCache();
-      const results = await crossPlatformScreener.getResults();
+      const results = await crossPlatformScreener.getResultsIncremental();
       res.json({
         arbs: results.arbs.length,
         matchedPairs: results.matchedPairs,

@@ -26,6 +26,56 @@ OUTPUT_FIELDS = [
 ]
 
 COUNTER_PATH = Path(__file__).resolve().parent / "counter.txt"
+REPO_ROOT = Path(__file__).resolve().parent.parent
+XLSX_PATHS = [
+    REPO_ROOT / "V2" / "Pairs_for_Kalshi_and_Polymarket.xlsx",
+    REPO_ROOT / "V4" / "Pairs_for_Kalshi_and_Polymarket.xlsx",
+    REPO_ROOT / "V5" / "Pairs_for_Kalshi_and_Polymarket.xlsx",
+]
+
+
+def _normalize_header(value):
+    return "".join(ch for ch in str(value or "").strip().lower() if ch.isalnum())
+
+
+def load_existing_pair_keys() -> set[tuple[str, str]]:
+    """Load all (poly_market_id, kalshi_market_id) tuples from existing Excel files."""
+    keys: set[tuple[str, str]] = set()
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        print("Warning: openpyxl not installed, skipping duplicate check", file=sys.stderr)
+        return keys
+
+    for xlsx_path in XLSX_PATHS:
+        if not xlsx_path.exists():
+            continue
+        try:
+            wb = load_workbook(xlsx_path, read_only=True, data_only=True)
+            ws = wb.active
+            headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
+            header_map = {_normalize_header(h): i for i, h in enumerate(headers)}
+            poly_idx = header_map.get("polymarketid") or header_map.get("poly_market_id")
+            kalshi_idx = header_map.get("kalshimarketid") or header_map.get("kalshi_market_id")
+            if poly_idx is None or kalshi_idx is None:
+                # Try normalized versions
+                for k, v in header_map.items():
+                    if "poly" in k and "id" in k:
+                        poly_idx = v
+                    if "kalshi" in k and ("id" in k or "ticker" in k):
+                        kalshi_idx = v
+            if poly_idx is None or kalshi_idx is None:
+                wb.close()
+                continue
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                poly_id = str(row[poly_idx] or "").strip() if poly_idx < len(row) else ""
+                kalshi_id = str(row[kalshi_idx] or "").strip() if kalshi_idx < len(row) else ""
+                if poly_id and kalshi_id:
+                    keys.add((poly_id, kalshi_id))
+            wb.close()
+        except Exception as exc:
+            print(f"Warning: could not read {xlsx_path.name}: {exc}", file=sys.stderr)
+    return keys
 
 
 def get_next_pair_id():
@@ -426,9 +476,26 @@ def parse_args():
     return parser.parse_args()
 
 
+def _is_duplicate(row, existing_keys):
+    """Check if a row's (poly_market_id, kalshi_market_id) already exists."""
+    pair_key = (
+        str(row.get("poly_market_id", "")).strip(),
+        str(row.get("kalshi_market_id", "")).strip(),
+    )
+    if pair_key[0] and pair_key[1] and pair_key in existing_keys:
+        return True
+    return False
+
+
 def main():
     args = parse_args()
     writer = csv.DictWriter(sys.stdout, fieldnames=OUTPUT_FIELDS)
+
+    existing_keys = load_existing_pair_keys()
+    if existing_keys:
+        print(f"Loaded {len(existing_keys)} existing pairs for duplicate checking", file=sys.stderr)
+
+    duplicates_skipped = 0
 
     if args.input_file:
         pairs = load_link_pairs(args.input_file)
@@ -441,10 +508,16 @@ def main():
                 print(f"{context_label} Failed: {exc}", file=sys.stderr)
                 continue
             for row in rows:
+                if _is_duplicate(row, existing_keys):
+                    print(f"{context_label} Skipped duplicate: {row.get('kalshi_market_id', '?')}", file=sys.stderr)
+                    duplicates_skipped += 1
+                    continue
                 writer.writerow(row)
                 successes += 1
 
-        if successes == 0:
+        if duplicates_skipped:
+            print(f"Skipped {duplicates_skipped} duplicate pair(s)", file=sys.stderr)
+        if successes == 0 and duplicates_skipped == 0:
             raise RuntimeError("No rows were processed successfully")
         return
 
@@ -452,7 +525,14 @@ def main():
     kalshi_url = input("Paste Kalshi link: ").strip()
     rows = build_output_rows(raw_poly_url, kalshi_url)
     for row in rows:
+        if _is_duplicate(row, existing_keys):
+            print(f"Skipped duplicate: {row.get('kalshi_market_id', '?')}", file=sys.stderr)
+            duplicates_skipped += 1
+            continue
         writer.writerow(row)
+
+    if duplicates_skipped:
+        print(f"Skipped {duplicates_skipped} duplicate pair(s)", file=sys.stderr)
 
 if __name__ == "__main__":
     main()

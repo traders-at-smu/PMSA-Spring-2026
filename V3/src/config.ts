@@ -165,9 +165,9 @@ const defaults: RuntimeSettings = {
   },
   aiMatching: {
     confidenceThreshold: 0.90,
-    textScoreAutoAcceptMin: 0.90,
-    textScoreAiZone: [0.50, 0.90],
-    maxAiCandidates: 250,
+    textScoreAutoAcceptMin: 0.99,
+    textScoreAiZone: [0.50, 0.99],
+    maxAiCandidates: 1000,
     fewShotExampleCount: 15,
     fewShotSelectionStrategy: "diverse",
   },

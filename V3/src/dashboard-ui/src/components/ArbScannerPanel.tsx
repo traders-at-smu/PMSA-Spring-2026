@@ -1074,6 +1074,19 @@ export function ArbScannerPanel() {
   // ---- Raw books toggle ----
   const [showRawBooks, setShowRawBooks] = useState(false);
 
+  // ---- Import queue (verified matches from AI panel) ----
+  interface ImportedPair {
+    kalshi_ticker: string;
+    kalshi_title: string;
+    poly_slug: string;
+    poly_title: string;
+    ai_confidence: number;
+    text_score: number;
+  }
+  const [importQueue, setImportQueue] = useState<ImportedPair[]>([]);
+  const [importIdx, setImportIdx] = useState(0);
+  const [importing, setImporting] = useState(false);
+
   // ---- Derived sized results ----
   const sizedArbA = useMemo(() => {
     if (!arbA || !arbA.hasArb) return arbA;
@@ -1093,6 +1106,117 @@ export function ArbScannerPanel() {
 
   const hasAnyArb = arbA?.hasArb || arbB?.hasArb;
   const hasResults = arbA !== null || arbB !== null;
+
+  // ---- Import verified matches ----
+
+  const handleImportVerified = useCallback(async () => {
+    setImporting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/ai-matching/results?verdict=verified&limit=500");
+      if (!res.ok) throw new Error("Failed to fetch verified matches");
+      const data = await res.json();
+      const pairs: ImportedPair[] = (data.results || []).map((r: any) => ({
+        kalshi_ticker: r.kalshi_ticker,
+        kalshi_title: r.kalshi_title,
+        poly_slug: r.poly_slug,
+        poly_title: r.poly_title,
+        ai_confidence: r.ai_confidence,
+        text_score: r.text_score,
+      }));
+      if (pairs.length === 0) {
+        setError("No verified matches found. Run a scan first.");
+        return;
+      }
+      setImportQueue(pairs);
+      setImportIdx(0);
+      // Auto-load the first pair
+      loadImportedPair(pairs[0]);
+    } catch (e: any) {
+      setError(e.message || "Import failed");
+    } finally {
+      setImporting(false);
+    }
+  }, []);
+
+  const loadImportedPair = useCallback((pair: ImportedPair) => {
+    // Reset current state
+    setArbA(null);
+    setArbB(null);
+    setKalshiMarkets([]);
+    setKalshiSearchResults([]);
+    setPolyMarkets([]);
+    setPolySearchResults([]);
+
+    // Load Kalshi side — set the ticker input and trigger lookup
+    setKalshiInput(pair.kalshi_ticker);
+    setKalshiTicker("");
+    setKalshiTitle("");
+    setTimeout(async () => {
+      setKalshiLooking(true);
+      try {
+        const res = await fetch(`/api/arb-scanner/kalshi/lookup?ticker=${encodeURIComponent(pair.kalshi_ticker)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.type === "event" && data.markets?.length > 1) {
+            setKalshiMarkets(data.markets);
+          } else if (data.markets?.length >= 1) {
+            const m = data.markets[0];
+            setKalshiTicker(m.ticker);
+            setKalshiTitle(m.title || m.subtitle || m.ticker);
+          }
+        }
+      } catch { /* silent */ }
+      setKalshiLooking(false);
+    }, 50);
+
+    // Load Poly side — set the slug and trigger lookup
+    setPolyInput(pair.poly_slug);
+    setPolyYesTokenId("");
+    setPolyNoTokenId("");
+    setPolyQuestion("");
+    setTimeout(async () => {
+      setPolyLooking(true);
+      try {
+        const res = await fetch(`/api/arb-scanner/poly/lookup?slug=${encodeURIComponent(pair.poly_slug)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.type === "event" && data.markets?.length > 1) {
+            setPolyMarkets(data.markets);
+          } else if (data.markets?.length >= 1) {
+            const m = data.markets[0];
+            setPolyQuestion(m.question || data.title || pair.poly_slug);
+            // Extract tokens
+            if (m.tokens) {
+              for (const t of m.tokens) {
+                if (t.outcome?.toLowerCase() === "yes") setPolyYesTokenId(t.token_id);
+                if (t.outcome?.toLowerCase() === "no") setPolyNoTokenId(t.token_id);
+              }
+            } else if (m.clobTokenIds) {
+              const ids = typeof m.clobTokenIds === "string" ? JSON.parse(m.clobTokenIds) : m.clobTokenIds;
+              if (ids[0]) setPolyYesTokenId(ids[0]);
+              if (ids[1]) setPolyNoTokenId(ids[1]);
+            }
+          }
+        }
+      } catch { /* silent */ }
+      setPolyLooking(false);
+    }, 50);
+  }, []);
+
+  const handleImportPrev = useCallback(() => {
+    if (importQueue.length === 0) return;
+    const newIdx = Math.max(0, importIdx - 1);
+    setImportIdx(newIdx);
+    loadImportedPair(importQueue[newIdx]);
+  }, [importQueue, importIdx, loadImportedPair]);
+
+  const handleImportNext = useCallback(() => {
+    if (importQueue.length === 0) return;
+    const newIdx = Math.min(importQueue.length - 1, importIdx + 1);
+    setImportIdx(newIdx);
+    loadImportedPair(importQueue[newIdx]);
+  }, [importQueue, importIdx, loadImportedPair]);
 
   // ---- Handlers ----
 
@@ -1487,17 +1611,75 @@ export function ArbScannerPanel() {
   return (
     <div className="space-y-5">
       {/* 1. Header */}
-      <div>
-        <h2 className="text-lg font-semibold text-zinc-100 tracking-tight">
-          Arb Scanner
-        </h2>
-        <p className="text-xs text-zinc-500 mt-0.5">
-          Manual depth-walking arbitrage calculator{" "}
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-zinc-100 tracking-tight">
+            Arb Scanner
+          </h2>
+          <p className="text-xs text-zinc-500 mt-0.5">
+            Manual depth-walking arbitrage calculator{" "}
           <span className="text-zinc-600">
             &middot; Kalshi 7% taker fee &middot; Polymarket 2bps
           </span>
         </p>
+        </div>
+
+        {/* Import Verified Matches */}
+        <div className="flex items-center gap-2">
+          {importQueue.length > 0 && (
+            <div className="flex items-center gap-1.5 mr-2">
+              <button
+                onClick={handleImportPrev}
+                disabled={importIdx === 0}
+                className="px-2 py-1 rounded text-[11px] font-semibold bg-white/[0.04] text-zinc-400 hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                ‹ Prev
+              </button>
+              <span className="text-[11px] text-zinc-500 font-mono tabular-nums min-w-[48px] text-center">
+                {importIdx + 1}/{importQueue.length}
+              </span>
+              <button
+                onClick={handleImportNext}
+                disabled={importIdx >= importQueue.length - 1}
+                className="px-2 py-1 rounded text-[11px] font-semibold bg-white/[0.04] text-zinc-400 hover:bg-white/[0.08] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                Next ›
+              </button>
+            </div>
+          )}
+          <button
+            onClick={handleImportVerified}
+            disabled={importing}
+            className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wider transition-all border ${
+              importing
+                ? "bg-zinc-800/50 text-zinc-600 border-zinc-700 cursor-not-allowed"
+                : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
+            }`}
+          >
+            {importing ? "Loading..." : importQueue.length > 0 ? "Refresh" : "Import Verified"}
+          </button>
+        </div>
       </div>
+
+      {/* Import queue info bar */}
+      {importQueue.length > 0 && (
+        <div className="glass-card rounded-xl px-4 py-2.5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Imported Pair</span>
+            <span className="text-[12px] text-zinc-300 truncate max-w-[300px]">{importQueue[importIdx]?.poly_title}</span>
+            <span className="text-[10px] text-zinc-600">×</span>
+            <span className="text-[12px] text-zinc-300 truncate max-w-[300px]">{importQueue[importIdx]?.kalshi_title}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-[10px] text-zinc-500">
+              Text: <span className="text-zinc-400 font-mono">{((importQueue[importIdx]?.text_score ?? 0) * 100).toFixed(0)}%</span>
+            </span>
+            <span className="text-[10px] text-zinc-500">
+              AI: <span className="text-emerald-400 font-mono">{((importQueue[importIdx]?.ai_confidence ?? 0) * 100).toFixed(0)}%</span>
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* 2. Market Inputs */}
       <div className="glass-card rounded-xl p-5">

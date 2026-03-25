@@ -223,5 +223,23 @@
     "label": "incorrect",
     "category": "entertainment",
     "notes": "FALSE POSITIVE — Different shows (Vladimir vs some title encoded as LOV)"
+  },
+  {
+    "polymarketTitle": "Will Mamdani raise the minimum wage to $30 before 2027?",
+    "kalshiTitle": "Will Mamdani raise the minimum wage to $30 before 2027?",
+    "polymarketSlug": "will-mamdani-raise-the-minimum-wage-to-30-before-2027",
+    "kalshiTicker": "KXNYCMINWAGE-27JAN01",
+    "label": "correct",
+    "category": "other",
+    "notes": "Manually verified via dashboard"
+  },
+  {
+    "polymarketTitle": "Will Mamdani raise the minimum wage to $30 before 2027?",
+    "kalshiTitle": "Will Mamdani raise the minimum wage to $30 before 2027?",
+    "polymarketSlug": "will-mamdani-raise-the-minimum-wage-to-30-before-2027",
+    "kalshiTicker": "KXNYCMINWAGE-27JAN01",
+    "label": "correct",
+    "category": "other",
+    "notes": "Manually verified via dashboard"
   }
 ]
