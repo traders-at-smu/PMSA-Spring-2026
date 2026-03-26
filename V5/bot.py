@@ -264,7 +264,12 @@ def _walk_depth(
         # Record slippage: one entry per distinct price-level combination.
         # If prices unchanged from the last entry, update it in-place so each
         # entry reflects the cumulative state at the END of that price level.
-        edge_d = contracts * exit_target - cur_kp
+        # Estimate exit fees at current position for slippage tracking
+        _avg_k = k_spend / contracts if contracts > 0 else 0.0
+        _avg_p = p_spend / contracts if contracts > 0 else 0.0
+        _exit_kf = apply_fee(kalshi_fee_fn, _avg_k, contracts, kalshi_round_up)
+        _exit_pf = apply_fee(poly_fee_fn, _avg_p, contracts, False)
+        edge_d = contracts * exit_target - cur_kp - _exit_kf - _exit_pf
         arr_now = (edge_d / cur_kp * 365.0 / days) if cur_kp > 0 and days > 0 else 0.0
         if slippage and slippage[-1]["k_price"] == nk and slippage[-1]["p_price"] == np_:
             slippage[-1]["contracts"] = contracts
@@ -280,7 +285,19 @@ def _walk_depth(
             })
 
     final_kp = cur_kp
-    final_edge_pct = (contracts * exit_target - final_kp) / final_kp if final_kp > 0 else 0.0
+
+    # Estimate exit fees: when selling back, fees are charged on the sell price.
+    # Use the average entry prices as a conservative proxy for exit sell prices.
+    est_exit_kf = 0.0
+    est_exit_pf = 0.0
+    if contracts > 0:
+        avg_k_sell = k_spend / contracts
+        avg_p_sell = p_spend / contracts
+        est_exit_kf = apply_fee(kalshi_fee_fn, avg_k_sell, contracts, kalshi_round_up)
+        est_exit_pf = apply_fee(poly_fee_fn, avg_p_sell, contracts, False)
+    total_exit_fees = est_exit_kf + est_exit_pf
+
+    final_edge_pct = (contracts * exit_target - final_kp - total_exit_fees) / final_kp if final_kp > 0 else 0.0
     final_arr = (final_edge_pct * 365.0) / days if days > 0 else 0.0
 
     # After hitting max_contracts, count profitable contracts still available in the book.
@@ -326,6 +343,7 @@ def _walk_depth(
         "arr": final_arr,
         "edge_pct": final_edge_pct,
         "total_fee": cur_kf + cur_pf,
+        "exit_fee_estimate": total_exit_fees,
         "stop_reason": stop_reason,
         "slippage": slippage,
         "remaining": remaining,
@@ -441,7 +459,7 @@ def evaluate_pair(
     """
     max_contracts = int(cfg["max_contracts"])
     days = _days_to_resolution(pair.get("resolution_date", ""))
-    exit_target = float(cfg.get("exit_target_total_price", 0.98))
+    exit_target = float(cfg.get("exit_target_total_price", 0.99))
 
     fee_cfg = cfg["fees"]
     k_fee_fn = fee_cfg["kalshi"]["_fn"]
@@ -495,9 +513,12 @@ def evaluate_pair(
         )
 
         if walk["contracts"] > 0:
-            est_exit_k_fee = apply_fee(k_fee_fn, walk["k_price"], walk["contracts"], k_round_up)
-            est_exit_p_fee = apply_fee(p_fee_fn, walk["p_price"], walk["contracts"], False)
-            edge_dollar = walk["contracts"] * exit_target - walk["kp_cost"] - est_exit_k_fee - est_exit_p_fee
+            # Estimate exit fees for edge calculation (using avg entry prices as proxy)
+            c = walk["contracts"]
+            avg_k_exit = walk["k_spend"] / c if c > 0 else 0.0
+            avg_p_exit = walk["p_spend"] / c if c > 0 else 0.0
+            est_exit_fee = apply_fee(k_fee_fn, avg_k_exit, c, k_round_up) + apply_fee(p_fee_fn, avg_p_exit, c, False)
+            edge_dollar = c * exit_target - walk["kp_cost"] - est_exit_fee
             results.append({
                 "pair_id": pair["pair_id"],
                 "title": pair.get("title", pair["pair_id"]),

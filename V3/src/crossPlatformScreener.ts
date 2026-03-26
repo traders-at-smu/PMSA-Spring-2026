@@ -680,7 +680,7 @@ const FALLBACK_THRESHOLD = 0.25;
 // AI re-ranker thresholds — read from config at call time
 // RERANK_LOW/HIGH are fallback defaults; runtime uses settings.aiMatching.textScoreAiZone
 const RERANK_LOW = 0.50;
-const RERANK_HIGH = 0.90;
+const RERANK_HIGH = 0.99;
 const KIMI_TEXT_WEIGHT = 0.40;      // Weight for text score in Kimi combined scoring
 const KIMI_AI_WEIGHT = 0.60;        // Weight for Kimi confidence in combined scoring
 // Embedding fallback weights (used when Kimi unavailable)
@@ -713,6 +713,11 @@ export class CrossPlatformScreener {
   private _lastScanAt: string | null = null;
   private _scanning = false;
   private _lastScanDurationMs = 0;
+
+  // Incremental scan state — persists between scans
+  private _prevPolyIds = new Set<string>();
+  private _prevKalshiIds = new Set<string>();
+  private _prevPairs: MatchedPair[] = [];
 
   // Live scan log
   private _scanLog: ScanLogEntry[] = [];
@@ -792,9 +797,13 @@ export class CrossPlatformScreener {
   invalidateAll(): void {
     this.cachedResults = null;
     this.cacheExpiry = 0;
+    // Clear incremental state so next scan is truly full
+    this._prevPolyIds.clear();
+    this._prevKalshiIds.clear();
+    this._prevPairs = [];
     if (this.kimiService) {
       this.kimiService.clearCache();
-      console.log("[Screener] Kimi file cache cleared — all pairs will be re-evaluated by AI");
+      console.log("[Screener] Kimi file cache + incremental state cleared — full re-scan on next run");
     }
   }
 
@@ -906,7 +915,7 @@ export class CrossPlatformScreener {
     }
     if (this.fetchInFlight) return this.fetchInFlight;
 
-    this.fetchInFlight = this.computeResults().catch((err) => {
+    this.fetchInFlight = this.computeResults(false).catch((err) => {
       this._scanning = false;
       throw err;
     });
@@ -917,7 +926,28 @@ export class CrossPlatformScreener {
     }
   }
 
-  private async computeResults(): Promise<CrossPlatformResults> {
+  /** Incremental scan: only match NEW markets, reuse existing pairs with fresh prices */
+  async getResultsIncremental(): Promise<CrossPlatformResults> {
+    if (this._prevPairs.length === 0) {
+      // No previous scan — fall back to full scan
+      return this.getResults();
+    }
+    if (this.fetchInFlight) return this.fetchInFlight;
+
+    this.cachedResults = null;
+    this.cacheExpiry = 0;
+    this.fetchInFlight = this.computeResults(true).catch((err) => {
+      this._scanning = false;
+      throw err;
+    });
+    try {
+      return await this.fetchInFlight;
+    } finally {
+      this.fetchInFlight = null;
+    }
+  }
+
+  private async computeResults(incremental: boolean): Promise<CrossPlatformResults> {
     this._scanning = true;
     const scanStart = Date.now();
     this._log("step", "Scan started — fetching markets from both venues...");
@@ -946,10 +976,60 @@ export class CrossPlatformScreener {
     const normalizedKalshi = this.normalizeKalshiMarkets(kalshiWithPrices);
     this._log("info", `Normalized: ${normalizedPoly.length} Polymarket, ${normalizedKalshi.length} Kalshi`);
 
-    // Match events across platforms (async to yield event loop)
-    this._log("step", "Running text similarity matching...");
-    const pairs = await this.matchEvents(normalizedPoly, normalizedKalshi);
-    this._log("info", `Text matching complete: ${pairs.length} pairs found`);
+    // Determine new market IDs for incremental mode
+    let pairs: MatchedPair[];
+    if (incremental && this._prevPairs.length > 0) {
+      const newPolyIds = new Set(normalizedPoly.filter(m => !this._prevPolyIds.has(m.id)).map(m => m.id));
+      const newKalshiIds = new Set(normalizedKalshi.filter(m => !this._prevKalshiIds.has(m.id)).map(m => m.id));
+      this._log("step", `Incremental scan: ${newPolyIds.size} new Poly, ${newKalshiIds.size} new Kalshi markets`);
+
+      // Build lookup maps for refreshing prices on existing pairs
+      const polyMap = new Map(normalizedPoly.map(m => [m.id, m]));
+      const kalshiMap = new Map(normalizedKalshi.map(m => [m.id, m]));
+
+      // Refresh existing pairs — update prices, drop delisted markets
+      const refreshedPairs: MatchedPair[] = [];
+      const usedKalshi = new Set<string>();
+      const usedPoly = new Set<string>();
+      let dropped = 0;
+      for (const prev of this._prevPairs) {
+        const freshPoly = polyMap.get(prev.polymarket.id);
+        const freshKalshi = kalshiMap.get(prev.kalshi.id);
+        if (freshPoly && freshKalshi) {
+          refreshedPairs.push({ polymarket: freshPoly, kalshi: freshKalshi, similarityScore: prev.similarityScore });
+          usedKalshi.add(freshKalshi.id);
+          usedPoly.add(freshPoly.id);
+        } else { dropped++; }
+      }
+      this._log("info", `Existing pairs: ${refreshedPairs.length} refreshed, ${dropped} dropped (delisted)`);
+
+      if (newPolyIds.size === 0 && newKalshiIds.size === 0) {
+        pairs = refreshedPairs;
+        this._log("info", "No new markets — prices refreshed, skipping text+AI matching");
+      } else {
+        // Determine which Poly markets need matching:
+        // 1. Genuinely new Poly markets
+        // 2. If new Kalshi markets appeared, also include unmatched Poly (may now have a match)
+        const polyToMatch = newKalshiIds.size > 0
+          ? normalizedPoly.filter(m => !usedPoly.has(m.id))   // new poly + old unmatched poly
+          : normalizedPoly.filter(m => newPolyIds.has(m.id));  // only new poly
+
+        this._log("step", `Matching ${polyToMatch.length} Poly markets against ${normalizedKalshi.length} Kalshi...`);
+        const newPairs = await this.matchEvents(normalizedPoly, normalizedKalshi, { usedKalshi, usedPoly, onlyPoly: polyToMatch });
+        pairs = [...refreshedPairs, ...newPairs];
+        this._log("info", `Incremental matching found ${newPairs.length} new pairs (total: ${pairs.length})`);
+      }
+    } else {
+      // Full scan
+      this._log("step", "Running full text similarity matching...");
+      pairs = await this.matchEvents(normalizedPoly, normalizedKalshi);
+      this._log("info", `Text matching complete: ${pairs.length} pairs found`);
+    }
+
+    // Save state for next incremental scan
+    this._prevPolyIds = new Set(normalizedPoly.map(m => m.id));
+    this._prevKalshiIds = new Set(normalizedKalshi.map(m => m.id));
+    this._prevPairs = pairs;
 
     // Find arbitrage opportunities (async: fetches depth for top candidates)
     this._log("step", "Evaluating arbitrage opportunities...");
@@ -1112,7 +1192,12 @@ export class CrossPlatformScreener {
 
   private async matchEvents(
     polyMarkets: NormalizedMarket[],
-    kalshiMarkets: NormalizedMarket[]
+    kalshiMarkets: NormalizedMarket[],
+    incrementalOpts?: {
+      usedKalshi: Set<string>;   // Kalshi IDs already matched (skip)
+      usedPoly: Set<string>;     // Poly IDs already matched (skip)
+      onlyPoly: NormalizedMarket[]; // Only process these Poly markets
+    }
   ): Promise<MatchedPair[]> {
     // Read AI zone thresholds from config
     const aiZone = getSettings().aiMatching.textScoreAiZone;
@@ -1136,8 +1221,8 @@ export class CrossPlatformScreener {
     }
 
     const pairs: MatchedPair[] = [];
-    const usedKalshi = new Set<string>();
-    const matchedPoly = new Set<string>();
+    const usedKalshi = new Set<string>(incrementalOpts?.usedKalshi);
+    const matchedPoly = new Set<string>(incrementalOpts?.usedPoly);
     const ambiguousCandidates: Array<{
       polymarket: NormalizedMarket;
       kalshi: NormalizedMarket;
@@ -1145,8 +1230,11 @@ export class CrossPlatformScreener {
     }> = [];
     let processed = 0;
 
+    // In incremental mode, only iterate over the specified Poly subset
+    const polyToProcess = incrementalOpts?.onlyPoly ?? polyMarkets;
+
     // Primary pass: enhanced similarity with threshold 0.15
-    for (const pm of polyMarkets) {
+    for (const pm of polyToProcess) {
       if (pm.tokens.size === 0) continue;
 
       // Yield to event loop every 500 markets so Express can serve requests

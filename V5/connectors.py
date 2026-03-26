@@ -298,7 +298,13 @@ class PolymarketConnector:
             raise RuntimeError(
                 f"Polymarket market '{market_slug}' has fewer than 2 token IDs"
             )
-        return str(raw_ids[yes_idx]), str(raw_ids[no_idx])
+        yes_id = str(raw_ids[yes_idx]).strip()
+        no_id = str(raw_ids[no_idx]).strip()
+        if not yes_id or not no_id:
+            raise RuntimeError(
+                f"Polymarket market '{market_slug}' returned empty token ID(s): yes='{yes_id}', no='{no_id}'"
+            )
+        return yes_id, no_id
 
     @staticmethod
     def _parse_ask_levels(book: dict[str, Any]) -> list[dict[str, Any]]:
@@ -529,4 +535,37 @@ def load_pairs(path: str) -> list[dict[str, Any]]:
             "category": _pick(row, "category_tag", "category", default="default"),
         })
 
-    return pairs
+    # ── Data validation ──
+    seen_ids: set[str] = set()
+    validated: list[dict[str, Any]] = []
+    for p in pairs:
+        pid = p["pair_id"]
+        # Duplicate pair_id check
+        if pid in seen_ids:
+            print(f"  [WARN] Duplicate pair_id '{pid}' — skipping duplicate row")
+            continue
+        seen_ids.add(pid)
+
+        # Kalshi ticker format: should be non-empty, alphanumeric + hyphens
+        kt = p["kalshi_ticker"]
+        if not all(ch.isalnum() or ch in "-_" for ch in kt):
+            print(f"  [WARN] pair {pid}: unusual kalshi_ticker format '{kt}'")
+
+        # Polymarket slug check
+        if not p.get("polymarket_market_slug"):
+            print(f"  [WARN] pair {pid}: empty polymarket_market_slug — tokens will need resolution")
+
+        # Resolution date format check
+        rd = p.get("resolution_date")
+        if rd and isinstance(rd, str):
+            rd_str = rd.strip()[:10]
+            try:
+                from datetime import date as _date
+                _date.fromisoformat(rd_str)
+            except (ValueError, TypeError):
+                print(f"  [WARN] pair {pid}: invalid resolution_date format '{rd}' — will default to 365 days")
+                p["resolution_date"] = ""
+
+        validated.append(p)
+
+    return validated

@@ -84,7 +84,15 @@ Be precise about resolution criteria:
 - Different geographic locations (e.g., "Wyoming" vs "Iran", "Alaska" vs "Canada") = NOT a match
 - Compare EXACT resolution dates — "before Jan 1, 2027" vs "in 2026" = different conditions, NOT a match
 - One market specifying a condition (date, location, threshold) that the other omits → lean NOT a match
-- Generic structural similarity (e.g., "Will X visit Y?" templates) is NOT enough — the specifics must match`;
+- Generic structural similarity (e.g., "Will X visit Y?" templates) is NOT enough — the specifics must match
+
+Sports-specific rules (CRITICAL — many prediction markets are sports bets):
+- Club prefixes are abbreviations of the same team: "VfB Stuttgart" = "Stuttgart", "RB Leipzig" = "Leipzig", "FC Barcelona" = "Barcelona", "Manchester United FC" = "Manchester United", etc.
+- "Team A vs Team B" and "Team B at Team A" refer to the SAME match (home/away order differs between platforms)
+- "Team A vs. Team B" and "Team A v Team B" are the same format
+- Common bet types that are equivalent: "Both Teams to Score" = "BTTS", "Over 2.5 Goals" = "Over 2.5", "Moneyline" = "To Win"
+- If both markets reference the same two teams, same date, and same bet type → MATCH even if team name formatting differs
+- Kalshi tickers often encode the match info: e.g., KXBUNDESLIGABTTS-26MAR15VFBRBL = Bundesliga BTTS, March 15, VFB vs RBL`;
 
 // ---- Service ----
 
@@ -130,9 +138,9 @@ export class KimiMatchingService {
     );
     this.aiMatchingConfig = options?.aiMatchingConfig || {
       confidenceThreshold: 0.90,
-      textScoreAutoAcceptMin: 0.90,
-      textScoreAiZone: [0.50, 0.90],
-      maxAiCandidates: 250,
+      textScoreAutoAcceptMin: 0.99,
+      textScoreAiZone: [0.50, 0.99],
+      maxAiCandidates: 1000,
       fewShotExampleCount: 15,
       fewShotSelectionStrategy: "diverse",
     };
@@ -173,14 +181,14 @@ export class KimiMatchingService {
             { role: "user", content: `Polymarket: "${polyTitle}"\nKalshi: "${kalshiTitle}"` },
           ],
           temperature: 1,
-          max_tokens: 200,
+          max_tokens: 4096,
         },
         {
           headers: {
             Authorization: `Bearer ${this.apiKey}`,
             "Content-Type": "application/json",
           },
-          timeout: 15_000,
+          timeout: 30_000,
         }
       );
 
@@ -193,6 +201,12 @@ export class KimiMatchingService {
       }
 
       const content = resp.data?.choices?.[0]?.message?.content || "";
+
+      // Debug: log first few raw responses to diagnose format issues
+      if (this._totalCalls <= 3) {
+        console.log(`[KimiMatch DEBUG] Raw response #${this._totalCalls} (${content.length} chars):\n${content.substring(0, 500)}`);
+      }
+
       const parsed = this.parseResponse(content);
 
       const result: KimiMatchResult = {
@@ -464,7 +478,21 @@ ${exampleBlock}`;
     return title.toLowerCase().replace(/[^a-z0-9\s]/g, "").replace(/\s+/g, " ").trim();
   }
 
-  private parseResponse(content: string): { match: boolean; confidence: number; reasoning: string } {
+  private parseResponse(rawContent: string): { match: boolean; confidence: number; reasoning: string } {
+    // Strip thinking/reasoning blocks from reasoning models (kimi-k2.5, etc.)
+    // These wrap chain-of-thought in <think>...</think> or similar tags
+    let content = rawContent
+      .replace(/<think>[\s\S]*?<\/think>/g, "")
+      .replace(/<reasoning>[\s\S]*?<\/reasoning>/g, "")
+      .trim();
+
+    // If content doesn't start with '{', try to extract JSON object from mixed text
+    if (!content.startsWith("{")) {
+      const jsonExtract = content.match(/\{[^{}]*"match"\s*:[^{}]*"confidence"\s*:[^{}]*\}/);
+      if (jsonExtract) content = jsonExtract[0];
+    }
+
+    // Attempt 1: direct JSON.parse
     try {
       const parsed = JSON.parse(content);
       if (typeof parsed.match === "boolean" && typeof parsed.confidence === "number") {
@@ -476,6 +504,7 @@ ${exampleBlock}`;
       }
     } catch { /* fall through */ }
 
+    // Attempt 2: extract from code blocks
     const codeBlockMatch = content.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
     if (codeBlockMatch) {
       try {
@@ -490,6 +519,7 @@ ${exampleBlock}`;
       } catch { /* fall through */ }
     }
 
+    // Attempt 3: regex extraction from the CLEANED content (thinking tags already stripped)
     const matchVal = /"match"\s*:\s*(true|false)/.exec(content);
     const confVal = /"confidence"\s*:\s*([\d.]+)/.exec(content);
     const reasonVal = /"reasoning"\s*:\s*"([^"]*)"/.exec(content);
@@ -502,6 +532,20 @@ ${exampleBlock}`;
       };
     }
 
+    // Attempt 4: search the ORIGINAL content (in case stripping was too aggressive)
+    const origMatchVal = /"match"\s*:\s*(true|false)/.exec(rawContent);
+    const origConfVal = /"confidence"\s*:\s*([\d.]+)/.exec(rawContent);
+    const origReasonVal = /"reasoning"\s*:\s*"([^"]*)"/.exec(rawContent);
+
+    if (origMatchVal && origConfVal) {
+      return {
+        match: origMatchVal[1] === "true",
+        confidence: Math.max(0, Math.min(1, parseFloat(origConfVal[1]))),
+        reasoning: origReasonVal?.[1] || "Parsed via regex fallback (raw)",
+      };
+    }
+
+    console.warn(`[KimiMatch] Failed to parse response (${rawContent.length} chars): ${rawContent.substring(0, 200)}`);
     return { match: false, confidence: 0, reasoning: "Failed to parse model response" };
   }
 
