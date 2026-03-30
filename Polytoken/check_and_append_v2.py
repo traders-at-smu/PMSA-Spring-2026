@@ -109,13 +109,24 @@ def _validate_poly_market(slug: str) -> dict[str, Any]:
     if len(token_ids) < 2:
         raise RuntimeError(f"Polymarket market '{slug}' does not expose at least two CLOB token IDs")
 
-    yes_idx, no_idx = 0, 1
-    if len(outcomes) >= 2 and "yes" in outcomes and "no" in outcomes:
-        yes_idx = outcomes.index("yes")
-        no_idx = outcomes.index("no")
+    # Reject non-binary markets (e.g. soccer with Draw, multi-outcome markets)
+    if "yes" not in outcomes or "no" not in outcomes:
+        raise RuntimeError(
+            f"Polymarket market '{slug}' has outcomes {outcomes!r} — "
+            f"only binary yes/no markets are supported; "
+            f"3-way (draw/tie) and other non-binary markets cannot be added to the pairs file"
+        )
 
+    yes_idx = outcomes.index("yes")
+    no_idx = outcomes.index("no")
     yes_id = token_ids[yes_idx]
     no_id = token_ids[no_idx]
+
+    if yes_id == no_id:
+        raise RuntimeError(
+            f"Polymarket market '{slug}' YES and NO token IDs are identical ({yes_id!r}) — "
+            f"outcomes ordering mismatch or data error"
+        )
 
     # Verify CLOB tokens are accessible (confirm the market is live on-chain)
     for token_id in [yes_id, no_id]:
