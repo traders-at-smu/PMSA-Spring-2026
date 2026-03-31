@@ -37,7 +37,7 @@
   "_doc_max_workers": "Number of parallel threads used to fetch orderbook data. Higher = faster scans, but too high will trigger 429 rate-limit errors from Kalshi. 10 is a safe default; raise to 20-30 if scans are too slow and you are not seeing rate-limit warnings.",
   "max_workers": 6,
 
-  "_doc_pairs_file": "Path to the Excel (.xlsx) or CSV pairs file. Can be relative to where you run the bot, or absolute. Required columns: pair_id, kalshi_ticker, polymarket_yes_token_id, polymarket_no_token_id, resolution_date, category, active.",
+  "_doc_pairs_file": "Path to the Excel (.xlsx) or CSV pairs file. Required columns: pair_id, kalshi_ticker, polymarket_market_slug, resolution_date, category. Optional: polymarket_yes_token_id, polymarket_no_token_id, poly_outcomes_json, poly_token_ids_json, poly_primary_outcome, poly_event_url, active.",
   "pairs_file": "Pairs_for_Kalshi_and_Polymarket.xlsx",
 
   "_doc_entry_log": "File where entry trades are logged (one JSON object per line, appended). Created automatically if it does not exist.",
@@ -62,6 +62,30 @@
     "polymarket": {
       "_doc": "Polymarket taker fee.",
       "formula": "0"
+    }
+  },
+
+  "_doc_holdings": "Optional holdings checks for live trading. When enabled, the bot fetches available cash per exchange and skips trades if insufficient. If mode=auto and endpoints are missing, the bot falls back to paper mode.",
+  "holdings": {
+    "mode": "auto",
+    "fallback_to_paper": true,
+    "kalshi": {
+      "url": "",
+      "method": "GET",
+      "headers": {},
+      "params": {},
+      "body": {},
+      "json_path": "available_cash",
+      "timeout_seconds": 10
+    },
+    "polymarket": {
+      "url": "",
+      "method": "GET",
+      "headers": {},
+      "params": {},
+      "body": {},
+      "json_path": "available_cash",
+      "timeout_seconds": 10
     }
   },
 

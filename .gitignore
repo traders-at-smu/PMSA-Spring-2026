@@ -12,3 +12,10 @@ config/settings.local.json
 .next/
 *.csv
 logs/
+
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/

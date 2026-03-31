@@ -1,191 +1,143 @@
-# Polymarket Copy Trading Bot
+# Polymarket × Kalshi Arbitrage Bot
 
-Monorepo for cross-venue trading/arbitrage tooling across Polymarket and Kalshi.
+Cross-venue prediction market arbitrage tooling for [Polymarket](https://polymarket.com) and [Kalshi](https://kalshi.com).
 
-This repository currently contains the following components:
-
-- `V1`: TypeScript + React dashboard + Python model bridge.
-- `V2`: Python-first bot + Streamlit dashboard with live safety controls.
-- `Polytoken`: Link-to-pair mapping utility for Polymarket/Kalshi.
-
-## Repository layout
-
-```text
-.
-|-- Polytoken/  # Polymarket/Kalshi mapping row generator
-|-- V1/   # TypeScript backend + React dashboard + Python model bridge
-|-- V2/   # Python bot + Streamlit dashboard
-`-- README.md
-```
-
-## Which version should you use?
-
-- Use `V1` if you want the Node/TypeScript service stack with a React UI and Python scoring bridge.
-- Use `V2` if you want a pure Python workflow with CLI commands and Streamlit dashboard.
-- Use `Polytoken` if you want to generate mapping rows from Polymarket + Kalshi links.
-
-## Shared prerequisites
-
-- Git
-- Internet access for Kalshi/Polymarket APIs
-- API credentials if running live trading (paper mode works with limited/no private keys depending on command)
+**Active codebase: `V5/`** — Python CLI arbitrage engine.
+Legacy versions (V1–V4) and the arb-scanner web app are preserved under `Archived_Models/` for reference.
 
 ---
 
-## V1 Quick Start (TypeScript + React + Python bridge)
+## Repository Layout
+
+```
+.
+├── V5/              # Active bot (Python CLI, paper + live trading)
+├── Polytoken/       # Pair generation pipeline
+├── Archived_Models/ # Legacy: V1 (TS), V2 (Python+Streamlit), V3 (TS), V4 (Python), arb-scanner (Next.js)
+├── Information/     # Fee docs, trade rules, design notes
+└── api/             # Vercel serverless endpoints (legacy)
+```
+
+---
+
+## V5 Quick Start
 
 ### 1) Install dependencies
 
-```powershell
-cd V1
-npm install
-cd src/dashboard-ui
-npm install
-cd ../..
-```
-
-### 2) Configure runtime settings
-
-```powershell
-Copy-Item config/settings.local.example.json config/settings.local.json
-```
-
-Fill `V1/config/settings.local.json` with local credentials/secrets.
-
-### 3) Run
-
-```powershell
-npm run dashboard
-```
-
-Useful commands:
-
-```powershell
-npm run dashboard:server
-npm run dashboard:dev
-npm run build
-npm run dashboard:smoke
-npm run trader:pairs
-npm run trader:quotes:once
-npm run trader:quotes
-npm run trader:raw
-```
-
-Details: see `V1/README.md`.
-
----
-
-## V2 Quick Start (Python + Streamlit)
-
-### 1) Create venv and install dependencies
-
-```powershell
-cd V2
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
+```bash
+cd V5
 pip install -r requirements.txt
 ```
 
 ### 2) Configure
 
-```powershell
-Copy-Item config/config.example.json config/config.json
-Copy-Item credentials.example.json credentials.json
+```bash
+cp config.example.json config.json
 ```
 
-Update `V2/config/config.json` and `V2/credentials.json`.
+Edit `config.json` — at minimum set `pairs_file`, `mode`, `min_arr`, `max_contracts`, and the `fees` block.
+For live trading, also add `kalshi.api_key`, `kalshi.private_key_base64`, and Polymarket credentials.
 
-### 3) Run commands
+### 3) Validate config
 
-Validate config:
-
-```powershell
-python -m src.main --config config/config.json validate-config
+```bash
+python main.py --config config.json validate
 ```
 
-Scan once:
+### 4) Scan (no trades)
 
-```powershell
-python -m src.main --config config/config.json scan
+```bash
+python main.py --config config.json scan
 ```
 
-Trade cycle (paper):
+### 5) Run continuously (paper mode)
 
-```powershell
-python -m src.main --config config/config.json trade-once --mode paper
+```bash
+python main.py --config config.json run
 ```
 
-Continuous loop:
-
-```powershell
-python -m src.main --config config/config.json run --execute --mode paper
-```
-
-Dashboard:
-
-```powershell
-python -m src.main --config config/config.json dashboard
-```
-
-Details: see `V2/README.md`.
+Add `--execute` to actually place orders (requires `"mode": "live"` in config).
 
 ---
 
-## Polytoken Utility (Link -> Mapping Rows)
+## Polytoken — Pair Generation Pipeline
 
-`Polytoken/polytoken.py` converts Polymarket + Kalshi links into mapping CSV rows.
+Converts Polymarket + Kalshi market URLs into rows in `V5/Pairs_for_Kalshi_and_Polymarket.xlsx`.
 
-### 1) Install Python deps
+### Install dependencies
 
-```powershell
+```bash
 pip install requests openpyxl
 ```
 
-`openpyxl` is only required for `.xlsx` input.
+### Add new pairs (interactive)
 
-### 2) Run (interactive mode)
-
-```powershell
+```bash
 cd Polytoken
 python polytoken.py
 ```
 
-The script prompts for:
-- Polymarket link
-- Kalshi link
-- subcontract selection
+Prompts for a Polymarket URL, a Kalshi URL, and submarket selection.
 
-Then writes one CSV row to stdout.
+### Add new pairs (batch from CSV/XLSX)
 
-### 3) Run (batch mode from `.csv` or `.xlsx`)
-
-```powershell
-cd Polytoken
+```bash
 python polytoken.py links.csv
-python polytoken.py links.xlsx
 ```
 
-Input format:
-- Column 1: Polymarket link
-- Column 2: Kalshi link
-- Optional header row is supported (e.g. `polymarket,kalshi`)
+Input columns: `polymarket` (URL), `kalshi` (URL). Optional header row is supported.
 
-Batch mode processes each row through the same CLI flow and prompts for selections when needed. Failed rows are reported to stderr and processing continues.
+### Fix URLs / outcome mapping in existing rows
+
+```bash
+python backfill_pairs_links.py             # dry-run: preview changes
+python backfill_pairs_links.py --apply     # write updates to Excel
+```
+
+### Validate and append rows
+
+```bash
+python check_and_append_v2.py
+```
+
+### Remove expired pairs
+
+```bash
+python clean_pairs.py                      # dry-run
+python clean_pairs.py --apply
+```
 
 ---
 
-## Safety and secrets
+## Pairs File
 
-- Start in paper mode before attempting live mode.
-- Never commit secrets (`settings.local.json`, `credentials.json`, private keys, `.env` files).
-- Both `V1` and `V2` include version-specific `.gitignore` files to keep runtime artifacts out of git.
+The shared pairs file is `V5/Pairs_for_Kalshi_and_Polymarket.xlsx`.
 
-## Testing and validation
+Required columns: `pair_id`, `kalshi_market_id` (ticker), `poly_slug`, `resolution_date`.
 
-- `V1`: use npm build/smoke scripts and Python unit tests described in `V1/README.md`.
-- `V2`: run `pytest -q`.
+Optional outcome-mapping columns (needed for non-binary markets):
+- `poly_outcomes_json` — JSON array of Polymarket outcome labels
+- `poly_token_ids_json` — JSON array of corresponding CLOB token IDs
+- `poly_primary_outcome` — which outcome maps to Kalshi YES
+- `poly_event_url` — Polymarket event page URL
+- `kalshi_url` — Kalshi market URL (3-segment: `/{event}/{slug}/{ticker}`)
 
-## Notes
+---
 
-- `V1` and `V2` are intentionally separate codepaths with different runtime models.
-- Keep dependencies and configs isolated per version for predictable behavior.
+## Safety
+
+- Always start in paper mode (`"mode": "paper"`) before enabling live trading.
+- Never commit `config.json`, `credentials.json`, `.env`, or private keys.
+- The bot writes state to JSON files in `V5/` — these are gitignored and crash-resilient.
+
+---
+
+## Archived Versions
+
+| Version | Stack | Notes |
+|---------|-------|-------|
+| V1 | TypeScript + React + Python bridge | Copy-trading origin, dashboard UI |
+| V2 | Python + Streamlit | SQLite state, full copy-trading stack |
+| V3 | TypeScript | Intermediate iteration |
+| V4 | Python | Direct predecessor to V5 |
+| arb-scanner | Next.js | Web UI for live arb scanning |

@@ -17,6 +17,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
+import requests
 from colorama import Fore, Style
 
 from fees import apply_fee
@@ -92,8 +93,8 @@ def _days_to_resolution(resolution_date: Any) -> float:
         return 365.0
 
 
-def _normalize_levels(raw: list[Any]) -> list[dict[str, Any]]:
-    """Merge duplicate price levels and sort ascending by price."""
+def _normalize_levels(raw: list[Any], descending: bool = False) -> list[dict[str, Any]]:
+    """Merge duplicate price levels and sort by price."""
     by_price: dict[float, int] = {}
     for level in raw:
         if not isinstance(level, dict):
@@ -105,7 +106,70 @@ def _normalize_levels(raw: list[Any]) -> list[dict[str, Any]]:
             continue
         if s > 0 and 0.0 <= p <= 1.0:
             by_price[p] = by_price.get(p, 0) + s
-    return [{"price": p, "size": by_price[p]} for p in sorted(by_price)]
+    return [{"price": p, "size": by_price[p]} for p in sorted(by_price, reverse=descending)]
+
+
+def _combine_leg_levels(leg_levels: list[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    """Combine multiple per-leg price levels into a synthetic composite level list.
+
+    Each composite level price is the sum of the current leg prices, and the size
+    is the minimum remaining size across legs. Assumes each leg list is already
+    sorted (asks: ascending; bids: descending).
+    """
+    if not leg_levels or any(not leg for leg in leg_levels):
+        return []
+
+    indices = [0 for _ in leg_levels]
+    remaining = []
+    for leg in leg_levels:
+        remaining.append(int(leg[0].get("size", 0)))
+
+    combined: list[dict[str, Any]] = []
+    while True:
+        if any(idx >= len(leg) for idx, leg in zip(indices, leg_levels)):
+            break
+        prices = [float(leg_levels[i][indices[i]]["price"]) for i in range(len(leg_levels))]
+        size = min(remaining)
+        if size <= 0:
+            # Advance any exhausted leg(s)
+            for i in range(len(leg_levels)):
+                while indices[i] < len(leg_levels) and remaining[i] <= 0:
+                    indices[i] += 1
+                    if indices[i] < len(leg_levels):
+                        remaining[i] = int(leg_levels[i][indices[i]].get("size", 0))
+            continue
+        combined.append({
+            "price": round(sum(prices), 6),
+            "size": size,
+            "leg_prices": [round(p, 6) for p in prices],
+        })
+        for i in range(len(leg_levels)):
+            remaining[i] -= size
+            while indices[i] < len(leg_levels) and remaining[i] <= 0:
+                indices[i] += 1
+                if indices[i] < len(leg_levels):
+                    remaining[i] = int(leg_levels[i][indices[i]].get("size", 0))
+
+    return combined
+
+
+def _normalize_outcome_label(value: Any) -> str:
+    """Normalize outcome labels for matching (case + alnum-only)."""
+    text = str(value or "").strip().lower()
+    cleaned = []
+    for ch in text:
+        cleaned.append(ch if ch.isalnum() else " ")
+    return " ".join("".join(cleaned).split())
+
+
+def _find_outcome_index(outcomes: list[str], target: str) -> int | None:
+    norm_target = _normalize_outcome_label(target)
+    if not norm_target:
+        return None
+    for idx, outcome in enumerate(outcomes):
+        if _normalize_outcome_label(outcome) == norm_target:
+            return idx
+    return None
 
 
 def _load_open_positions(path: str) -> dict[str, Any]:
@@ -158,6 +222,141 @@ def _position_age_seconds(position: dict[str, Any]) -> float:
 
 # ── Depth walking ─────────────────────────────────────────────────────────────
 
+def _get_json_path(data: Any, path: str) -> Any:
+    """Resolve a dotted JSON path like 'balances.available' or 'items[0].cash'."""
+    cur: Any = data
+    for part in str(path or "").split("."):
+        if part == "":
+            continue
+        key = part
+        idx = None
+        if "[" in part and part.endswith("]"):
+            key, idx_raw = part[:-1].split("[", 1)
+            idx = int(idx_raw) if idx_raw.isdigit() else None
+        if key:
+            if not isinstance(cur, dict) or key not in cur:
+                return None
+            cur = cur[key]
+        if idx is not None:
+            if not isinstance(cur, list) or idx >= len(cur):
+                return None
+            cur = cur[idx]
+    return cur
+
+
+def _fetch_holdings_balance(source_cfg: dict[str, Any]) -> float | None:
+    url = str(source_cfg.get("url", "")).strip()
+    if not url:
+        return None
+    method = str(source_cfg.get("method", "GET")).upper()
+    headers = source_cfg.get("headers", {}) or {}
+    params = source_cfg.get("params", {}) or {}
+    body = source_cfg.get("body", {}) or {}
+    timeout = float(source_cfg.get("timeout_seconds", 10))
+    try:
+        res = requests.request(
+            method,
+            url,
+            headers=headers,
+            params=params if method == "GET" else None,
+            json=body if method != "GET" else None,
+            timeout=timeout,
+        )
+        res.raise_for_status()
+        payload = res.json()
+        value = _get_json_path(payload, source_cfg.get("json_path", "available_cash"))
+        if value is None:
+            raise RuntimeError(f"holdings json_path not found: {source_cfg.get('json_path')}")
+        return float(value)
+    except Exception as exc:
+        raise RuntimeError(f"holdings fetch failed: {exc}") from exc
+
+
+def _live_creds_present(cfg: dict[str, Any]) -> bool:
+    kalshi = cfg.get("kalshi", {}) or {}
+    poly = cfg.get("polymarket", {}) or {}
+    return bool(kalshi.get("api_key") and kalshi.get("private_key_base64") and poly.get("private_key"))
+
+
+def _holdings_configured(cfg: dict[str, Any]) -> bool:
+    holdings = cfg.get("holdings", {}) or {}
+    kalshi = holdings.get("kalshi", {}) or {}
+    poly = holdings.get("polymarket", {}) or {}
+    return bool(kalshi.get("url") and poly.get("url"))
+
+
+def _resolve_execution_mode(cfg: dict[str, Any]) -> str:
+    mode = str(cfg.get("mode", "paper")).lower()
+    if mode != "live":
+        return mode
+
+    holdings = cfg.get("holdings", {}) or {}
+    fallback = bool(holdings.get("fallback_to_paper", True))
+    holdings_mode = str(holdings.get("mode", "auto")).lower()
+
+    if not _live_creds_present(cfg):
+        if fallback:
+            print(f"  {Fore.YELLOW}! Live credentials missing - falling back to paper mode{Style.RESET_ALL}")
+        return "paper"
+
+    if holdings_mode != "off" and not _holdings_configured(cfg):
+        if fallback:
+            print(f"  {Fore.YELLOW}! Holdings endpoints missing - falling back to paper mode{Style.RESET_ALL}")
+            return "paper"
+    return "live"
+
+
+def _estimate_required_cash(opp: dict[str, Any], cfg: dict[str, Any]) -> tuple[float, float]:
+    """Return (kalshi_cash_needed, polymarket_cash_needed)."""
+    contracts = opp["contracts"]
+    k_spend = float(opp.get("k_spend", opp["k_price"] * contracts))
+    p_spend = float(opp.get("p_spend", opp["p_price"] * contracts))
+
+    fee_cfg = cfg["fees"]
+    k_fee_fn = fee_cfg["kalshi"]["_fn"]
+    p_fee_fn = fee_cfg["polymarket"]["_fn"]
+    k_rup = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
+
+    k_avg = k_spend / contracts if contracts else 0.0
+    p_avg = p_spend / contracts if contracts else 0.0
+    k_fee = apply_fee(k_fee_fn, k_avg, contracts, k_rup)
+    p_fee = apply_fee(p_fee_fn, p_avg, contracts, False)
+    return k_spend + k_fee, p_spend + p_fee
+
+
+def _check_holdings(opp: dict[str, Any], cfg: dict[str, Any]) -> bool:
+    holdings = cfg.get("holdings", {}) or {}
+    if str(holdings.get("mode", "auto")).lower() == "off":
+        return True
+
+    kalshi_cfg = holdings.get("kalshi", {}) or {}
+    poly_cfg = holdings.get("polymarket", {}) or {}
+    k_needed, p_needed = _estimate_required_cash(opp, cfg)
+
+    try:
+        k_balance = _fetch_holdings_balance(kalshi_cfg)
+        p_balance = _fetch_holdings_balance(poly_cfg)
+    except Exception as exc:
+        print(f"  {Fore.YELLOW}! Holdings check failed - {exc}{Style.RESET_ALL}")
+        return False
+
+    if k_balance is None or p_balance is None:
+        print(f"  {Fore.YELLOW}! Holdings unavailable - skipping live trade{Style.RESET_ALL}")
+        return False
+
+    if k_balance < k_needed:
+        print(
+            f"  {Fore.YELLOW}! Insufficient Kalshi cash: need ${k_needed:.2f}, have ${k_balance:.2f}{Style.RESET_ALL}"
+        )
+        return False
+    if p_balance < p_needed:
+        print(
+            f"  {Fore.YELLOW}! Insufficient Polymarket cash: need ${p_needed:.2f}, have ${p_balance:.2f}{Style.RESET_ALL}"
+        )
+        return False
+    return True
+
+
 def _walk_depth(
     k_levels: list[dict[str, Any]],
     p_levels: list[dict[str, Any]],
@@ -202,6 +401,8 @@ def _walk_depth(
     cur_pf = 0.0
     cur_kp = 0.0
     stop_reason = "depth_exhausted"
+    p_leg_spend: list[float] | None = None
+    p_leg_last: list[float] | None = None
 
     # Slippage tracking: one entry per distinct (k_price, p_price) level pair,
     # updated in-place as contracts accumulate at the same prices.
@@ -227,7 +428,9 @@ def _walk_depth(
             continue
 
         nk = float(k_levels[k_idx]["price"])
-        np_ = float(p_levels[p_idx]["price"])
+        p_level = p_levels[p_idx]
+        np_ = float(p_level["price"])
+        leg_prices = p_level.get("leg_prices")
         nc = contracts + 1
         avg_k = (k_spend + nk) / nc
         avg_p = (p_spend + np_) / nc
@@ -261,6 +464,13 @@ def _walk_depth(
         k_rem -= 1
         p_rem -= 1
 
+        if isinstance(leg_prices, list) and leg_prices:
+            if p_leg_spend is None:
+                p_leg_spend = [0.0 for _ in leg_prices]
+            for i, lp in enumerate(leg_prices):
+                p_leg_spend[i] += float(lp)
+            p_leg_last = [float(lp) for lp in leg_prices]
+
         # Record slippage: one entry per distinct price-level combination.
         # If prices unchanged from the last entry, update it in-place so each
         # entry reflects the cumulative state at the END of that price level.
@@ -275,14 +485,19 @@ def _walk_depth(
             slippage[-1]["contracts"] = contracts
             slippage[-1]["total_profit"] = round(edge_d, 4)
             slippage[-1]["arr"] = round(arr_now, 4)
+            if p_leg_last is not None:
+                slippage[-1]["p_leg_prices"] = [round(v, 6) for v in p_leg_last]
         else:
-            slippage.append({
+            entry = {
                 "k_price": round(nk, 6),
                 "p_price": round(np_, 6),
                 "contracts": contracts,
                 "total_profit": round(edge_d, 4),
                 "arr": round(arr_now, 4),
-            })
+            }
+            if p_leg_last is not None:
+                entry["p_leg_prices"] = [round(v, 6) for v in p_leg_last]
+            slippage.append(entry)
 
     final_kp = cur_kp
 
@@ -333,12 +548,18 @@ def _walk_depth(
             r_kr -= count
             r_pr -= count
 
+    p_leg_prices = []
+    if p_leg_spend is not None and contracts > 0:
+        p_leg_prices = [round(v / contracts, 6) for v in p_leg_spend]
+
     return {
         "contracts": contracts,
         "k_spend": k_spend,
         "p_spend": p_spend,
         "k_price": k_price,
         "p_price": p_price,
+        "p_leg_spend": p_leg_spend or [],
+        "p_leg_prices": p_leg_prices,
         "kp_cost": final_kp,
         "arr": final_arr,
         "edge_pct": final_edge_pct,
@@ -384,6 +605,8 @@ def _walk_depth_bids(
     p_price = float(p_levels[0]["price"])
     slippage: list[dict[str, Any]] = []
     stop_reason = "depth_exhausted"
+    p_leg_spend: list[float] | None = None
+    p_leg_last: list[float] | None = None
 
     while contracts < target_contracts and k_idx < len(k_levels) and p_idx < len(p_levels):
         if k_rem <= 0:
@@ -402,7 +625,9 @@ def _walk_depth_bids(
             continue
 
         nk = float(k_levels[k_idx]["price"])
-        np_ = float(p_levels[p_idx]["price"])
+        p_level = p_levels[p_idx]
+        np_ = float(p_level["price"])
+        leg_prices = p_level.get("leg_prices")
 
         if nk + np_ < target_sum:
             stop_reason = "target_not_met"
@@ -417,18 +642,32 @@ def _walk_depth_bids(
         k_rem -= 1
         p_rem -= 1
 
+        if isinstance(leg_prices, list) and leg_prices:
+            if p_leg_spend is None:
+                p_leg_spend = [0.0 for _ in leg_prices]
+            for i, lp in enumerate(leg_prices):
+                p_leg_spend[i] += float(lp)
+            p_leg_last = [float(lp) for lp in leg_prices]
+
         if slippage and slippage[-1]["k_price"] == nk and slippage[-1]["p_price"] == np_:
             slippage[-1]["contracts"] = contracts
         else:
-            slippage.append({
+            entry = {
                 "k_price": round(nk, 6),
                 "p_price": round(np_, 6),
                 "contracts": contracts,
-            })
+            }
+            if p_leg_last is not None:
+                entry["p_leg_prices"] = [round(v, 6) for v in p_leg_last]
+            slippage.append(entry)
 
         if contracts >= target_contracts:
             stop_reason = "target_reached"
             break
+
+    p_leg_prices = []
+    if p_leg_spend is not None and contracts > 0:
+        p_leg_prices = [round(v / contracts, 6) for v in p_leg_spend]
 
     return {
         "contracts": contracts,
@@ -436,6 +675,8 @@ def _walk_depth_bids(
         "p_price": p_price,
         "k_spend": k_spend,
         "p_spend": p_spend,
+        "p_leg_spend": p_leg_spend or [],
+        "p_leg_prices": p_leg_prices,
         "slippage": slippage,
         "stop_reason": stop_reason,
     }
@@ -452,8 +693,8 @@ def evaluate_pair(
     """Evaluate both arbitrage strategies for one pair.
 
     Two strategies:
-        BUY_KY_BUY_PN  — Buy Kalshi YES + Buy Polymarket NO
-        BUY_KN_BUY_PY  — Buy Kalshi NO  + Buy Polymarket YES
+        BUY_KY_BUY_PN  - Buy Kalshi YES + Buy Polymarket NO
+        BUY_KN_BUY_PY  - Buy Kalshi NO  + Buy Polymarket YES
 
     Returns a list of tradeable opportunity dicts (empty if no arb found).
     """
@@ -467,34 +708,91 @@ def evaluate_pair(
     k_round_up = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
 
     k_depth = kalshi_quotes["depth"]
-    p_depth = poly_quotes["depth"]
+    poly_type = poly_quotes.get("type", "binary")
+    kalshi_url = pair.get("kalshi_url") or ""
+    kalshi_event_url = kalshi_quotes.get("event_url") or ""
 
-    # Resolved token IDs from the connector (may differ from Excel if auto-resolved)
-    yes_token_id = poly_quotes["yes_token_id"]
-    no_token_id = poly_quotes["no_token_id"]
+    strategies: list[dict[str, Any]] = []
+    yes_token_id = ""
+    no_token_id = ""
 
-    strategies = [
-        {
-            "strategy": "BUY_KY_BUY_PN",
-            "k_side": "yes",
-            "p_side": "no",
-            "p_token_id": no_token_id,      # buying NO on Polymarket
-            "k_levels": _normalize_levels(k_depth.get("buy_yes", [])),
-            "p_levels": _normalize_levels(p_depth.get("no_asks", [])),
-            "k_price_hint": float(kalshi_quotes["yes_ask"]),
-            "p_price_hint": float(poly_quotes["no_ask"]),
-        },
-        {
-            "strategy": "BUY_KN_BUY_PY",
-            "k_side": "no",
-            "p_side": "yes",
-            "p_token_id": yes_token_id,     # buying YES on Polymarket
-            "k_levels": _normalize_levels(k_depth.get("buy_no", [])),
-            "p_levels": _normalize_levels(p_depth.get("yes_asks", [])),
-            "k_price_hint": float(kalshi_quotes["no_ask"]),
-            "p_price_hint": float(poly_quotes["yes_ask"]),
-        },
-    ]
+    if poly_type == "multi":
+        outcomes = [str(o) for o in poly_quotes.get("outcomes", [])]
+        primary_outcome = poly_quotes.get("primary_outcome", "")
+        primary_token_id = poly_quotes.get("primary_token_id", "")
+        tokens = poly_quotes.get("tokens", {})
+        complement_token_ids = poly_quotes.get("complement_token_ids", [])
+        if not primary_token_id or primary_token_id not in tokens:
+            raise RuntimeError("Polymarket primary token not resolved for multi-outcome market")
+        if not complement_token_ids:
+            raise RuntimeError("Polymarket complement token list is empty for multi-outcome market")
+
+        yes_token_id = primary_token_id
+        no_token_id = ""
+
+        primary_levels = _normalize_levels(tokens[primary_token_id].get("asks", []))
+        complement_levels = [
+            _normalize_levels(tokens[token_id].get("asks", []))
+            for token_id in complement_token_ids
+            if token_id in tokens
+        ]
+        combined_complement_levels = _combine_leg_levels(complement_levels)
+        complement_leg_price_hints = [tokens[token_id]["best_ask"] for token_id in complement_token_ids]
+
+        strategies = [
+            {
+                "strategy": "BUY_KY_BUY_PN",
+                "k_side": "yes",
+                "p_side": "no",
+                "p_token_ids": complement_token_ids,
+                "p_token_id": complement_token_ids[0],
+                "k_levels": _normalize_levels(k_depth.get("buy_yes", [])),
+                "p_levels": combined_complement_levels,
+                "k_price_hint": float(kalshi_quotes["yes_ask"]),
+                "p_price_hint": float(poly_quotes.get("complement_best_ask", 1.0)),
+                "p_leg_prices_hint": complement_leg_price_hints,
+            },
+            {
+                "strategy": "BUY_KN_BUY_PY",
+                "k_side": "no",
+                "p_side": "yes",
+                "p_token_ids": [primary_token_id],
+                "p_token_id": primary_token_id,
+                "k_levels": _normalize_levels(k_depth.get("buy_no", [])),
+                "p_levels": primary_levels,
+                "k_price_hint": float(kalshi_quotes["no_ask"]),
+                "p_price_hint": float(poly_quotes.get("primary_best_ask", 1.0)),
+                "p_leg_prices_hint": [float(poly_quotes.get("primary_best_ask", 1.0))],
+            },
+        ]
+    else:
+        p_depth = poly_quotes["depth"]
+        yes_token_id = poly_quotes["yes_token_id"]
+        no_token_id = poly_quotes["no_token_id"]
+        strategies = [
+            {
+                "strategy": "BUY_KY_BUY_PN",
+                "k_side": "yes",
+                "p_side": "no",
+                "p_token_ids": [no_token_id],
+                "p_token_id": no_token_id,      # buying NO on Polymarket
+                "k_levels": _normalize_levels(k_depth.get("buy_yes", [])),
+                "p_levels": _normalize_levels(p_depth.get("no_asks", [])),
+                "k_price_hint": float(kalshi_quotes["yes_ask"]),
+                "p_price_hint": float(poly_quotes["no_ask"]),
+            },
+            {
+                "strategy": "BUY_KN_BUY_PY",
+                "k_side": "no",
+                "p_side": "yes",
+                "p_token_ids": [yes_token_id],
+                "p_token_id": yes_token_id,     # buying YES on Polymarket
+                "k_levels": _normalize_levels(k_depth.get("buy_no", [])),
+                "p_levels": _normalize_levels(p_depth.get("yes_asks", [])),
+                "k_price_hint": float(kalshi_quotes["no_ask"]),
+                "p_price_hint": float(poly_quotes["yes_ask"]),
+            },
+        ]
 
     results: list[dict[str, Any]] = []
     for strat in strategies:
@@ -505,7 +803,11 @@ def evaluate_pair(
         if not k_levels:
             k_levels = [{"price": strat["k_price_hint"], "size": 200}]
         if not p_levels:
-            p_levels = [{"price": strat["p_price_hint"], "size": 200}]
+            leg_prices_hint = strat.get("p_leg_prices_hint")
+            if leg_prices_hint:
+                p_levels = [{"price": sum(leg_prices_hint), "size": 200, "leg_prices": leg_prices_hint}]
+            else:
+                p_levels = [{"price": strat["p_price_hint"], "size": 200}]
 
         walk = _walk_depth(
             k_levels, p_levels, days, max_contracts,
@@ -519,20 +821,45 @@ def evaluate_pair(
             avg_p_exit = walk["p_spend"] / c if c > 0 else 0.0
             est_exit_fee = apply_fee(k_fee_fn, avg_k_exit, c, k_round_up) + apply_fee(p_fee_fn, avg_p_exit, c, False)
             edge_dollar = c * exit_target - walk["kp_cost"] - est_exit_fee
+
+            # Sanity check: a genuine two-sided hedge always costs close to $1 per
+            # contract (arb edge is typically 2-15%).  If cost-per-contract is far
+            # below that (< $0.60), both legs are almost certainly betting the SAME
+            # underlying outcome (inverted / same-side pair).  Such an opportunity
+            # is not a hedge — it's a leveraged directional bet.  Skip it and warn.
+            cost_per_contract = walk["kp_cost"] / c
+            if cost_per_contract < 0.60:
+                print(
+                    f"  [WARN] {pair['pair_id']} {strat['strategy']}: "
+                    f"cost/contract={cost_per_contract:.3f} < 0.60 — "
+                    f"likely inverted (same-side) pair, skipping",
+                    file=sys.stderr,
+                )
+                continue
+
             results.append({
                 "pair_id": pair["pair_id"],
                 "title": pair.get("title", pair["pair_id"]),
                 "kalshi_ticker": pair["kalshi_ticker"],
                 "polymarket_slug": pair.get("polymarket_market_slug", ""),
+                "kalshi_url": kalshi_url,
+                "kalshi_event_url": kalshi_event_url,
+                "polymarket_url": pair.get("polymarket_url", ""),
+                "poly_event_url": pair.get("poly_event_url", ""),
                 "strategy": strat["strategy"],
                 "k_side": strat["k_side"],
                 "p_side": strat["p_side"],
-                "p_token_id": strat["p_token_id"],
+                "p_token_ids": strat.get("p_token_ids", []),
+                "p_token_id": strat.get("p_token_id", ""),
                 "yes_token_id": yes_token_id,
                 "no_token_id": no_token_id,
                 "contracts": walk["contracts"],
                 "k_price": walk["k_price"],
                 "p_price": walk["p_price"],
+                "k_spend": walk.get("k_spend", 0.0),
+                "p_spend": walk.get("p_spend", 0.0),
+                "p_leg_prices": walk.get("p_leg_prices", []),
+                "p_leg_spend": walk.get("p_leg_spend", []),
                 "kp_cost": walk["kp_cost"],
                 "edge_dollar": round(edge_dollar, 4),
                 "edge_pct": walk["edge_pct"],
@@ -545,8 +872,6 @@ def evaluate_pair(
 
     return results
 
-
-# ── Trade log ─────────────────────────────────────────────────────────────────
 
 def _next_trade_number(log_path: str) -> str:
     """Return the next T-prefixed trade number by scanning the log file."""
@@ -580,10 +905,35 @@ _KALSHI_BASE_URL = "https://kalshi.com/markets"
 _POLY_BASE_URL   = "https://polymarket.com/event"
 
 
+def _resolve_kalshi_url(opp: dict[str, Any]) -> str:
+    ticker = str(opp.get("kalshi_ticker") or "").strip()
+    url = str(opp.get("kalshi_url") or "").strip()
+    event_url = str(opp.get("kalshi_event_url") or "").strip()
+    base_url = f"{_KALSHI_BASE_URL}/{ticker}" if ticker else ""
+    # Prefer the live event_url from the API — it is the most specific (3-segment)
+    # and always more accurate than the Excel-stored kalshi_url.
+    if event_url:
+        return event_url
+    if url and base_url and url.lower() == base_url.lower():
+        url = ""
+    if url:
+        return url
+    return base_url
+
+
+def _resolve_polymarket_url(opp: dict[str, Any]) -> str:
+    for key in ("poly_event_url", "polymarket_url", "poly_url"):
+        url = str(opp.get(key) or "").strip()
+        if url:
+            return url
+    slug = str(opp.get("polymarket_slug") or "").strip()
+    return f"{_POLY_BASE_URL}/{slug}" if slug else ""
+
+
 def _write_opportunity_log(opp: dict[str, Any], log_path: str) -> None:
     """Append one opportunity (with market links) to the opportunity log."""
-    ticker = opp.get("kalshi_ticker", "")
-    slug   = opp.get("polymarket_slug", "")
+    k_url = _resolve_kalshi_url(opp)
+    p_url = _resolve_polymarket_url(opp)
     entry = {
         "timestamp":       datetime.now(timezone.utc).isoformat(),
         "pair_id":         opp["pair_id"],
@@ -597,8 +947,11 @@ def _write_opportunity_log(opp: dict[str, Any], log_path: str) -> None:
         "arr_pct":         round(opp["arr"] * 100, 2),
         "total_fee":       round(opp["total_fee"], 4),
         "days":            round(opp["days"], 2),
-        "kalshi_url":      f"{_KALSHI_BASE_URL}/{ticker}" if ticker else "",
-        "polymarket_url":  f"{_POLY_BASE_URL}/{slug}"     if slug   else "",
+        "kalshi_url":      k_url,
+        "polymarket_url":  p_url,
+        "p_token_ids":     opp.get("p_token_ids", []),
+        "p_leg_prices":    opp.get("p_leg_prices", []),
+        "p_leg_spend":     opp.get("p_leg_spend", []),
         "slippage":        opp.get("slippage", []),
     }
     Path(log_path).parent.mkdir(parents=True, exist_ok=True)
@@ -620,6 +973,8 @@ def _slippage_to_fills(slippage: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "p_price": s["p_price"],
             "contracts": level_contracts,
         })
+        if "p_leg_prices" in s:
+            fills[-1]["p_leg_prices"] = s.get("p_leg_prices", [])
     return fills
 
 
@@ -642,6 +997,9 @@ def _build_log_entry(opp: dict[str, Any], mode: str, **overrides) -> dict[str, A
         "mode": mode,
         "kalshi_token": opp["kalshi_ticker"],
         "polymarket_token": opp["p_token_id"],
+        "p_token_ids": opp.get("p_token_ids", []),
+        "p_leg_prices": opp.get("p_leg_prices", []),
+        "p_leg_spend": opp.get("p_leg_spend", []),
     }
     entry.update(overrides)
     return entry
@@ -673,19 +1031,28 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
         client_order_id=f"{client_id}:k",
     )
 
-    # Polymarket leg
+    # Polymarket leg(s)
     partial = False
+    p_token_ids = opp.get("p_token_ids") or [opp.get("p_token_id", "")]
+    p_leg_prices = opp.get("p_leg_prices") or []
+    if not p_leg_prices:
+        p_leg_prices = [opp["p_price"] for _ in p_token_ids]
+    if len(p_leg_prices) < len(p_token_ids):
+        p_leg_prices += [opp["p_price"] for _ in range(len(p_token_ids) - len(p_leg_prices))]
     try:
-        poly.place_order(
-            token_id=opp["p_token_id"],
-            side="buy",
-            size=opp["contracts"],
-            price=opp["p_price"],
-        )
+        for token_id, price in zip(p_token_ids, p_leg_prices):
+            if not token_id:
+                raise RuntimeError("Missing Polymarket token_id for multi-leg order")
+            poly.place_order(
+                token_id=token_id,
+                side="buy",
+                size=opp["contracts"],
+                price=price,
+            )
     except Exception as exc:
         partial = True
         print(
-            f"  {Fore.RED}! PARTIAL FILL{Style.RESET_ALL} — Polymarket leg failed "
+            f"  {Fore.RED}! PARTIAL FILL{Style.RESET_ALL} - Polymarket leg failed "
             f"after Kalshi filled: {exc}",
             file=sys.stderr,
         )
@@ -716,6 +1083,9 @@ def _record_open_position(
         "p_side": opp["p_side"],
         "kalshi_ticker": opp["kalshi_ticker"],
         "p_token_id": opp.get("p_token_id", ""),
+        "p_token_ids": opp.get("p_token_ids", []),
+        "p_leg_prices": opp.get("p_leg_prices", []),
+        "p_leg_spend": opp.get("p_leg_spend", []),
         "yes_token_id": opp.get("yes_token_id", ""),
         "no_token_id": opp.get("no_token_id", ""),
         "title": opp.get("title", opp["pair_id"]),
@@ -783,6 +1153,9 @@ def _build_exit_log_entry(
         "close_reason": "shutdown" if shutdown else ("timeout" if timeout else "target"),
         "kalshi_token": position.get("kalshi_ticker", ""),
         "polymarket_token": position.get("p_token_id", ""),
+        "p_token_ids": position.get("p_token_ids", []),
+        "p_leg_prices": exit_walk.get("p_leg_prices", []),
+        "p_leg_spend": exit_walk.get("p_leg_spend", []),
         "strategy": position.get("strategy", ""),
         "execution_date": datetime.now(timezone.utc).date().isoformat(),
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -814,7 +1187,6 @@ def _process_exit_positions(
         while True:
             try:
                 kq = kalshi.get_quotes(position["kalshi_ticker"])
-                pq = poly.get_quotes(position.get("yes_token_id", ""), position.get("no_token_id", ""), "")
                 break
             except Exception as exc:
                 if "429" in str(exc):
@@ -828,25 +1200,45 @@ def _process_exit_positions(
                 else:
                     print(f"  {Fore.YELLOW}Exit fetch failed for {pair_id}: {exc}{Style.RESET_ALL}")
                     break
-        if kq is None or pq is None:
+        if kq is None:
             continue
         if shutdown:
             time.sleep(1.5)
 
+        p_token_ids = [t for t in (position.get("p_token_ids") or []) if str(t).strip()]
+        p_levels = []
+        p_bid = 0.0
+        if p_token_ids:
+            books = poly.get_books(p_token_ids)
+            leg_bid_levels = []
+            leg_best_bids = []
+            for tid in p_token_ids:
+                book = books.get(tid)
+                if not book:
+                    raise RuntimeError(f"Missing orderbook for Polymarket token {tid}")
+                leg_bid_levels.append(_normalize_levels(poly._parse_bid_levels(book), descending=True))
+                leg_best_bids.append(poly._best_bid(book))
+            p_bid = sum(leg_best_bids)
+            p_levels = leg_bid_levels[0] if len(leg_bid_levels) == 1 else _combine_leg_levels(leg_bid_levels)
+        else:
+            pq = poly.get_quotes(position.get("yes_token_id", ""), position.get("no_token_id", ""), "")
+
         if position["strategy"] == "BUY_KY_BUY_PN":
             k_bid = kq["yes_bid"]
-            p_bid = pq["no_bid"]
             k_levels = kq.get("depth", {}).get("sell_yes", [])
-            p_levels = pq.get("depth", {}).get("no_bids", [])
             k_side = "yes"
             p_side = "no"
+            if not p_token_ids:
+                p_bid = pq["no_bid"]
+                p_levels = pq.get("depth", {}).get("no_bids", [])
         else:
             k_bid = kq["no_bid"]
-            p_bid = pq["yes_bid"]
             k_levels = kq.get("depth", {}).get("sell_no", [])
-            p_levels = pq.get("depth", {}).get("yes_bids", [])
             k_side = "no"
             p_side = "yes"
+            if not p_token_ids:
+                p_bid = pq["yes_bid"]
+                p_levels = pq.get("depth", {}).get("yes_bids", [])
 
         target_hit = (k_bid + p_bid) >= target_sum
         if not (target_hit or shutdown):
@@ -881,12 +1273,26 @@ def _process_exit_positions(
                 order_failed = True
                 print(f"  {Fore.RED}Kalshi exit failed for {pair_id}: {exc}{Style.RESET_ALL}")
             try:
-                poly.place_order(
-                    token_id=position.get("p_token_id", ""),
-                    side="sell",
-                    size=exit_contracts,
-                    price=exit_p_price,
-                )
+                if p_token_ids:
+                    leg_prices = walk.get("p_leg_prices", [])
+                    if not leg_prices:
+                        leg_prices = [exit_p_price for _ in p_token_ids]
+                    if len(leg_prices) < len(p_token_ids):
+                        leg_prices += [exit_p_price for _ in range(len(p_token_ids) - len(leg_prices))]
+                    for token_id, price in zip(p_token_ids, leg_prices):
+                        poly.place_order(
+                            token_id=token_id,
+                            side="sell",
+                            size=exit_contracts,
+                            price=price,
+                        )
+                else:
+                    poly.place_order(
+                        token_id=position.get("p_token_id", ""),
+                        side="sell",
+                        size=exit_contracts,
+                        price=exit_p_price,
+                    )
             except Exception as exc:
                 order_failed = True
                 print(f"  {Fore.RED}Polymarket exit failed for {pair_id}: {exc}{Style.RESET_ALL}")
@@ -1056,6 +1462,88 @@ def _print_fill_breakdown(opp: dict[str, Any]) -> None:
 
 # ── Scan cycle ────────────────────────────────────────────────────────────────
 
+def _build_polymarket_quotes(pair: dict[str, Any], poly) -> dict[str, Any]:
+    slug = pair.get("polymarket_market_slug", "")
+    outcomes = [str(o) for o in pair.get("poly_outcomes", [])]
+    token_ids = [str(t) for t in pair.get("poly_token_ids", [])]
+    primary = str(pair.get("poly_primary_outcome", "")).strip()
+
+    if (not outcomes or not token_ids) and slug:
+        info = poly.resolve_market_outcomes(slug)
+        outcomes = [str(o) for o in info.get("outcomes", [])]
+        token_ids = [str(t) for t in info.get("token_ids", [])]
+        pair["poly_outcomes"] = outcomes
+        pair["poly_token_ids"] = token_ids
+        market = info.get("market", {})
+        event_slug = str(market.get("eventSlug") or market.get("event_slug") or "").strip()
+        if event_slug and not pair.get("poly_event_url"):
+            pair["poly_event_url"] = f"https://polymarket.com/event/{event_slug}"
+        if not primary:
+            outcomes_lc = [o.strip().lower() for o in outcomes]
+            if len(outcomes_lc) == 2 and "yes" in outcomes_lc and "no" in outcomes_lc:
+                primary = "yes"
+                pair["poly_primary_outcome"] = primary
+
+    outcomes_lc = [o.strip().lower() for o in outcomes]
+    binary_yes_no = len(outcomes_lc) == 2 and "yes" in outcomes_lc and "no" in outcomes_lc
+
+    # Non-binary (or non-yes/no) outcomes require explicit primary mapping
+    if outcomes and not binary_yes_no:
+        if not primary:
+            raise RuntimeError("Missing poly_primary_outcome for non-binary Polymarket market")
+        primary_idx = _find_outcome_index(outcomes, primary)
+        if primary_idx is None:
+            raise RuntimeError(
+                f"poly_primary_outcome '{primary}' not found in outcomes {outcomes}"
+            )
+        if len(token_ids) < len(outcomes):
+            raise RuntimeError(
+                f"Polymarket outcomes/token_ids length mismatch (outcomes={len(outcomes)}, tokens={len(token_ids)})"
+            )
+        token_ids = token_ids[:len(outcomes)]
+        books = poly.get_books(token_ids)
+        tokens: dict[str, Any] = {}
+        for outcome, tid in zip(outcomes, token_ids):
+            book = books.get(tid)
+            if not book:
+                raise RuntimeError(f"Missing orderbook for Polymarket token {tid}")
+            tokens[tid] = {
+                "outcome": outcome,
+                "best_bid": poly._best_bid(book),
+                "best_ask": poly._best_ask(book),
+                "asks": poly._parse_ask_levels(book),
+                "bids": poly._parse_bid_levels(book),
+            }
+        primary_token_id = token_ids[primary_idx]
+        complement_token_ids = [tid for i, tid in enumerate(token_ids) if i != primary_idx]
+        primary_best_ask = tokens[primary_token_id]["best_ask"]
+        primary_best_bid = tokens[primary_token_id]["best_bid"]
+        complement_best_ask = sum(tokens[tid]["best_ask"] for tid in complement_token_ids)
+        complement_best_bid = sum(tokens[tid]["best_bid"] for tid in complement_token_ids)
+        return {
+            "type": "multi",
+            "outcomes": outcomes,
+            "token_ids": token_ids,
+            "primary_outcome": primary,
+            "primary_token_id": primary_token_id,
+            "complement_token_ids": complement_token_ids,
+            "primary_best_ask": primary_best_ask,
+            "primary_best_bid": primary_best_bid,
+            "complement_best_ask": complement_best_ask,
+            "complement_best_bid": complement_best_bid,
+            "tokens": tokens,
+        }
+
+    # Binary yes/no path
+    pq = poly.get_quotes(
+        pair.get("polymarket_yes_token_id", ""),
+        pair.get("polymarket_no_token_id", ""),
+        slug,
+    )
+    pq["type"] = "binary"
+    return pq
+
+
 def _fetch_pair(pair: dict[str, Any], kalshi, poly) -> tuple[dict, dict, dict]:
     """Fetch orderbook quotes for one pair (runs in a worker thread).
 
@@ -1068,11 +1556,7 @@ def _fetch_pair(pair: dict[str, Any], kalshi, poly) -> tuple[dict, dict, dict]:
     for attempt in range(max_retries + 1):
         try:
             kq = kalshi.get_quotes(pair["kalshi_ticker"])
-            pq = poly.get_quotes(
-                pair["polymarket_yes_token_id"],
-                pair["polymarket_no_token_id"],
-                pair.get("polymarket_market_slug", ""),
-            )
+            pq = _build_polymarket_quotes(pair, poly)
             return pair, kq, pq
         except Exception as exc:
             if _is_transient_error(exc) and attempt < max_retries:
@@ -1111,7 +1595,7 @@ def run_scan(
     if expired_ids is None:
         expired_ids = set()
 
-    mode = cfg["mode"]
+    mode = _resolve_execution_mode(cfg)
     log_path = cfg.get("entry_log", "entry_trades.json")
     opp_log_path = cfg.get("opportunities_log", "opportunities.json")
     failed_log = cfg.get("failed_log", "failed_pairs.json")
@@ -1246,8 +1730,18 @@ def run_scan(
         if cfg.get("print_market_status", False):
             k_yes_mp = (kq["yes_bid"] + kq["yes_ask"]) / 2
             k_no_mp  = (kq["no_bid"]  + kq["no_ask"])  / 2
-            p_yes_mp = (pq["yes_bid"] + pq["yes_ask"]) / 2
-            p_no_mp  = (pq["no_bid"]  + pq["no_ask"])  / 2
+            if pq.get("type") == "multi":
+                p_yes_bid = float(pq.get("primary_best_bid", 0.0))
+                p_yes_ask = float(pq.get("primary_best_ask", 0.0))
+                p_no_bid = float(pq.get("complement_best_bid", 0.0))
+                p_no_ask = float(pq.get("complement_best_ask", 0.0))
+            else:
+                p_yes_bid = float(pq["yes_bid"])
+                p_yes_ask = float(pq["yes_ask"])
+                p_no_bid = float(pq["no_bid"])
+                p_no_ask = float(pq["no_ask"])
+            p_yes_mp = (p_yes_bid + p_yes_ask) / 2
+            p_no_mp  = (p_no_bid  + p_no_ask)  / 2
             days_left = _days_to_resolution(pair.get("resolution_date", ""))
             # Net-of-fees marginal edge for 1 contract in each direction
             fee_cfg   = cfg["fees"]
@@ -1259,8 +1753,8 @@ def run_scan(
                                + apply_fee(k_fee_fn, ka, 1, k_rup)
                                + apply_fee(p_fee_fn, pa, 1, False))
             net_edge_dollar = max(
-                _net_edge(kq["yes_ask"], pq["no_ask"]),
-                _net_edge(kq["no_ask"],  pq["yes_ask"]),
+                _net_edge(kq["yes_ask"], p_no_ask),
+                _net_edge(kq["no_ask"],  p_yes_ask),
             )
             # kp_cost = what it costs to buy both legs for 1 contract
             kp_cost_1c = 1.0 - net_edge_dollar
@@ -1282,10 +1776,8 @@ def run_scan(
         if opps:
             for opp in opps:
                 exec_key = (opp.get("kalshi_ticker", ""), opp["strategy"])
-                ticker = opp.get("kalshi_ticker", "")
-                slug   = opp.get("polymarket_slug", "")
-                k_url  = f"{_KALSHI_BASE_URL}/{ticker}" if ticker else ""
-                p_url  = f"{_POLY_BASE_URL}/{slug}"     if slug   else ""
+                k_url = _resolve_kalshi_url(opp)
+                p_url = _resolve_polymarket_url(opp)
                 print(
                     f"  {Fore.GREEN}✓{Style.RESET_ALL} {label:<38} "
                     f"{opp['strategy']:<16} "
@@ -1319,6 +1811,9 @@ def run_scan(
                             trade = execute_paper(opp, log_path)
                             print(f"    {Style.DIM}→ logged {trade['trade_number']} (paper){Style.RESET_ALL}")
                         elif mode == "live":
+                            if not _check_holdings(opp, cfg):
+                                print(f"    {Fore.YELLOW}! skipped - insufficient holdings{Style.RESET_ALL}")
+                                continue
                             trade = execute_live(opp, kalshi, poly, log_path)
                             status = "PARTIAL FILL" if trade.get("partial_fill") else "filled"
                             color = Fore.RED if trade.get("partial_fill") else Fore.GREEN
@@ -1411,7 +1906,7 @@ def run_loop(
                     kalshi=kalshi,
                     poly=poly,
                     cfg=cfg,
-                    mode=cfg.get("mode", "paper"),
+                    mode=_resolve_execution_mode(cfg),
                     log_path=cfg.get("exit_log", "exit_trades.json"),
                     position_file=position_file,
                     cooldowns=cooldowns,
@@ -1469,7 +1964,7 @@ def run_loop(
                     kalshi=kalshi,
                     poly=poly,
                     cfg=cfg,
-                    mode=cfg.get("mode", "paper"),
+                    mode=_resolve_execution_mode(cfg),
                     log_path=cfg.get("exit_log", "exit_trades.json"),
                     position_file=position_file,
                     cooldowns=cooldowns,

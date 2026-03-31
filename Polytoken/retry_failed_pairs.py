@@ -60,6 +60,23 @@ def _normalize_header(value: Any) -> str:
     return "".join(ch for ch in str(value or "").strip().lower() if ch.isalnum())
 
 
+def _parse_json_list(value: Any) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if str(v).strip()]
+    raw = str(value).strip()
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return [str(v).strip() for v in parsed if str(v).strip()]
+    except json.JSONDecodeError:
+        pass
+    return [v.strip() for v in raw.split(",") if v.strip()]
+
+
 def _load_failed_entries(path: Path) -> list[dict[str, Any]]:
     """Load all entries from failed_pairs.json (JSONL format)."""
     entries: list[dict[str, Any]] = []
@@ -100,8 +117,17 @@ def _load_pairs_lookup(pairs_path: Path) -> dict[str, dict[str, str]]:
             pair_id = str(row_dict.get("pair_id") or "").strip()
             kalshi = str(row_dict.get("kalshi_market_id") or row_dict.get("kalshi_ticker") or "").strip()
             slug = str(row_dict.get("poly_slug") or row_dict.get("polymarket_market_slug") or "").strip()
+            outcomes = _parse_json_list(row_dict.get("poly_outcomes_json") or row_dict.get("poly_outcomes") or "")
+            token_ids = _parse_json_list(row_dict.get("poly_token_ids_json") or row_dict.get("poly_token_ids") or "")
+            primary = str(row_dict.get("poly_primary_outcome") or "").strip()
             if pair_id:
-                lookup[pair_id] = {"kalshi_ticker": kalshi, "poly_slug": slug}
+                lookup[pair_id] = {
+                    "kalshi_ticker": kalshi,
+                    "poly_slug": slug,
+                    "poly_outcomes": outcomes,
+                    "poly_token_ids": token_ids,
+                    "poly_primary_outcome": primary,
+                }
         wb.close()
     else:
         import csv
@@ -111,8 +137,17 @@ def _load_pairs_lookup(pairs_path: Path) -> dict[str, dict[str, str]]:
                 pair_id = str(row.get("pair_id") or "").strip()
                 kalshi = str(row.get("kalshi_market_id") or row.get("kalshi_ticker") or "").strip()
                 slug = str(row.get("poly_slug") or row.get("polymarket_market_slug") or "").strip()
+                outcomes = _parse_json_list(row.get("poly_outcomes_json") or row.get("poly_outcomes") or "")
+                token_ids = _parse_json_list(row.get("poly_token_ids_json") or row.get("poly_token_ids") or "")
+                primary = str(row.get("poly_primary_outcome") or "").strip()
                 if pair_id:
-                    lookup[pair_id] = {"kalshi_ticker": kalshi, "poly_slug": slug}
+                    lookup[pair_id] = {
+                        "kalshi_ticker": kalshi,
+                        "poly_slug": slug,
+                        "poly_outcomes": outcomes,
+                        "poly_token_ids": token_ids,
+                        "poly_primary_outcome": primary,
+                    }
     return lookup
 
 
@@ -130,7 +165,12 @@ def _check_kalshi(ticker: str) -> str | None:
         return str(exc)
 
 
-def _check_polymarket(slug: str) -> str | None:
+def _check_polymarket(
+    slug: str,
+    outcomes: list[str] | None = None,
+    token_ids: list[str] | None = None,
+    primary_outcome: str = "",
+) -> str | None:
     """Return None if OK, or an error message string if the market is not tradeable."""
     try:
         res = requests.get(f"{POLY_GAMMA_BASE}/markets", params={"slug": slug}, timeout=HTTP_TIMEOUT)
@@ -144,27 +184,38 @@ def _check_polymarket(slug: str) -> str | None:
         raw_ids = market.get("clobTokenIds", [])
         if isinstance(raw_ids, str):
             raw_ids = _json.loads(raw_ids)
-        if len(raw_ids) < 2:
-            return f"fewer than 2 CLOB token IDs"
+        gamma_token_ids = [str(t).strip() for t in raw_ids if str(t).strip()]
+        if len(gamma_token_ids) < 2:
+            return "fewer than 2 CLOB token IDs"
 
-        outcomes = [o.strip().lower() for o in (market.get("outcomes") or [])]
-        if "yes" not in outcomes or "no" not in outcomes:
-            return f"non-binary outcomes {outcomes!r}"
+        gamma_outcomes = [str(o).strip() for o in (market.get("outcomes") or [])]
+        outcomes_list = outcomes or gamma_outcomes
+        outcomes_lc = [o.strip().lower() for o in outcomes_list]
 
-        yes_id = str(raw_ids[outcomes.index("yes")]).strip()
-        no_id = str(raw_ids[outcomes.index("no")]).strip()
-        if yes_id == no_id:
-            return f"YES and NO token IDs are identical"
+        if outcomes_list:
+            if primary_outcome and primary_outcome not in outcomes_list:
+                return f"primary outcome '{primary_outcome}' not found in outcomes"
+            if not primary_outcome and not (len(outcomes_lc) == 2 and "yes" in outcomes_lc and "no" in outcomes_lc):
+                return "missing primary outcome for non-binary market"
 
-        # Spot-check CLOB orderbook accessibility for YES token
-        book_res = requests.get(f"{POLY_CLOB_BASE}/book", params={"token_id": yes_id}, timeout=HTTP_TIMEOUT)
-        book_res.raise_for_status()
+        if "yes" in outcomes_lc and "no" in outcomes_lc:
+            yes_id = gamma_token_ids[outcomes_lc.index("yes")]
+            no_id = gamma_token_ids[outcomes_lc.index("no")]
+            if yes_id == no_id:
+                return "YES and NO token IDs are identical"
+
+        token_ids_to_check = token_ids or gamma_token_ids
+        missing = [t for t in token_ids_to_check if t not in gamma_token_ids]
+        if missing:
+            return f"token IDs not found in market: {missing}"
+
+        for token_id in token_ids_to_check:
+            book_res = requests.get(f"{POLY_CLOB_BASE}/book", params={"token_id": token_id}, timeout=HTTP_TIMEOUT)
+            book_res.raise_for_status()
         return None
     except Exception as exc:
         return str(exc)
 
-
-# ── Core logic ────────────────────────────────────────────────────────────────
 
 def retry_failed_pairs(
     failed_path: Path,
@@ -248,7 +299,12 @@ def retry_failed_pairs(
 
         # Re-run the checks
         kalshi_err = _check_kalshi(kalshi_ticker)
-        poly_err = _check_polymarket(poly_slug)
+        poly_err = _check_polymarket(
+            poly_slug,
+            outcomes=pair_info.get("poly_outcomes"),
+            token_ids=pair_info.get("poly_token_ids"),
+            primary_outcome=pair_info.get("poly_primary_outcome", ""),
+        )
 
         if kalshi_err is None and poly_err is None:
             print(f"  [PASS]  {pid:<35} — {kalshi_ticker} / {poly_slug}")

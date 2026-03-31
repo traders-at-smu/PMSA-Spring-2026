@@ -64,6 +64,30 @@ def _parse_list_field(value: Any) -> list[str]:
     return []
 
 
+def _normalize_outcome_label(value: Any) -> str:
+    text = str(value or "").strip().lower()
+    cleaned = []
+    for ch in text:
+        cleaned.append(ch if ch.isalnum() else " ")
+    return " ".join("".join(cleaned).split())
+
+
+def _match_primary_outcome(outcomes: list[str], kalshi_label: str) -> str:
+    norm_k = _normalize_outcome_label(kalshi_label)
+    if not outcomes:
+        return ""
+    matches = [o for o in outcomes if _normalize_outcome_label(o) == norm_k]
+    if len(matches) == 1:
+        return matches[0]
+    fuzzy = [
+        o for o in outcomes
+        if norm_k and (norm_k in _normalize_outcome_label(o) or _normalize_outcome_label(o) in norm_k)
+    ]
+    if len(fuzzy) == 1:
+        return fuzzy[0]
+    return ""
+
+
 def _validate_kalshi_market(ticker: str) -> dict[str, Any]:
     res = requests.get(f"{KALSHI_BASE}/markets/{ticker}", timeout=HTTP_TIMEOUT_SEC)
     res.raise_for_status()
@@ -88,7 +112,10 @@ def _validate_kalshi_market(ticker: str) -> dict[str, Any]:
     orderbook_res = requests.get(f"{KALSHI_BASE}/markets/{ticker}/orderbook", timeout=HTTP_TIMEOUT_SEC)
     orderbook_res.raise_for_status()
 
-    return {"close_time": close_time}
+    yes_sub = str(market.get("yes_sub_title", "")).strip()
+    display_name = yes_sub or str(market.get("title", "")).strip() or str(market.get("subtitle", "")).strip()
+
+    return {"close_time": close_time, "display_name": display_name}
 
 
 def _resolve_poly_market(slug: str) -> dict[str, Any]:
@@ -105,46 +132,37 @@ def _resolve_poly_market(slug: str) -> dict[str, Any]:
 def _validate_poly_market(slug: str) -> dict[str, Any]:
     market = _resolve_poly_market(slug)
     token_ids = _parse_list_field(market.get("clobTokenIds"))
-    outcomes = [o.strip().lower() for o in _parse_list_field(market.get("outcomes"))]
+    outcomes_raw = _parse_list_field(market.get("outcomes"))
+    outcomes = [str(o).strip() for o in outcomes_raw if str(o).strip()]
+    outcomes_lc = [o.strip().lower() for o in outcomes]
     if len(token_ids) < 2:
         raise RuntimeError(f"Polymarket market '{slug}' does not expose at least two CLOB token IDs")
 
-    # Reject non-binary markets (e.g. soccer with Draw, multi-outcome markets)
-    if "yes" not in outcomes or "no" not in outcomes:
-        raise RuntimeError(
-            f"Polymarket market '{slug}' has outcomes {outcomes!r} — "
-            f"only binary yes/no markets are supported; "
-            f"3-way (draw/tie) and other non-binary markets cannot be added to the pairs file"
-        )
+    if "yes" in outcomes_lc and "no" in outcomes_lc:
+        yes_idx = outcomes_lc.index("yes")
+        no_idx = outcomes_lc.index("no")
+        yes_id = token_ids[yes_idx]
+        no_id = token_ids[no_idx]
+        if yes_id == no_id:
+            raise RuntimeError(
+                f"Polymarket market '{slug}' YES and NO token IDs are identical ({yes_id!r})"
+            )
 
-    yes_idx = outcomes.index("yes")
-    no_idx = outcomes.index("no")
-    yes_id = token_ids[yes_idx]
-    no_id = token_ids[no_idx]
-
-    if yes_id == no_id:
-        raise RuntimeError(
-            f"Polymarket market '{slug}' YES and NO token IDs are identical ({yes_id!r}) — "
-            f"outcomes ordering mismatch or data error"
-        )
-
-    # Verify CLOB tokens are accessible (confirm the market is live on-chain)
-    for token_id in [yes_id, no_id]:
+    # Verify CLOB tokens are accessible
+    for token_id in token_ids:
         book_res = requests.get(f"{POLY_CLOB_HOST}/book", params={"token_id": token_id}, timeout=HTTP_TIMEOUT_SEC)
         book_res.raise_for_status()
 
-    # Sanity check using Gamma API prices — these match what the Polymarket UI shows
-    # and are more reliable than CLOB orderbook asks (which may have high stub orders).
+    # Sanity check using Gamma API prices (only for yes/no)
     yes_ask = float(market.get("bestAsk") or 0)
     yes_bid = float(market.get("bestBid") or 0)
-    if yes_ask > 0 and yes_bid > 0:
-        # In a binary market: NO ask ≈ 1 − YES bid
+    if yes_ask > 0 and yes_bid > 0 and "yes" in outcomes_lc and "no" in outcomes_lc:
         no_ask = 1.0 - yes_bid
         ask_sum = yes_ask + no_ask
         if ask_sum > 1.10:
             raise RuntimeError(
                 f"Polymarket '{slug}' ask prices sum to {ask_sum:.3f} "
-                f"(YES ask={yes_ask:.3f}, NO ask≈{no_ask:.3f}) — market may be stale or mispriced"
+                f"(YES ask={yes_ask:.3f}, NO ask?{no_ask:.3f})"
             )
 
     end_date = str(
@@ -155,6 +173,9 @@ def _validate_poly_market(slug: str) -> dict[str, Any]:
         "conditionId": str(market.get("conditionId", "")).strip(),
         "slug": str(market.get("slug", "")).strip() or slug,
         "end_date": end_date,
+        "outcomes": outcomes,
+        "token_ids": token_ids,
+        "event_slug": str(market.get("eventSlug") or market.get("event_slug") or "").strip(),
     }
 
 
@@ -173,6 +194,25 @@ def validate_row(row: dict[str, str]) -> dict[str, str]:
     if poly.get("slug"):
         validated["poly_slug"] = poly["slug"]
         validated["poly_url"] = f"https://polymarket.com/market/{poly['slug']}"
+
+    outcomes = poly.get("outcomes", []) or []
+    token_ids = poly.get("token_ids", []) or []
+    outcomes_lc = [str(o).strip().lower() for o in outcomes]
+    primary_outcome = ""
+    if len(outcomes_lc) == 2 and "yes" in outcomes_lc and "no" in outcomes_lc:
+        primary_outcome = "yes"
+    else:
+        kalshi_label = kalshi_info.get("display_name", "")
+        primary_outcome = _match_primary_outcome(outcomes, kalshi_label)
+        if not primary_outcome:
+            raise RuntimeError(
+                f"Unable to map Kalshi submarket '{kalshi_label}' to Polymarket outcomes {outcomes}"
+            )
+    validated["poly_outcomes_json"] = json.dumps(outcomes)
+    validated["poly_token_ids_json"] = json.dumps(token_ids)
+    validated["poly_primary_outcome"] = primary_outcome
+    if poly.get("event_slug"):
+        validated["poly_event_url"] = f"https://polymarket.com/event/{poly['event_slug']}"
 
     # Populate resolution_time_utc: prefer Kalshi close_time, fall back to Poly end_date
     if not validated.get("resolution_time_utc"):
@@ -217,6 +257,14 @@ def append_rows_to_contract_list(rows: list[dict[str, str]], target_path: Path) 
     if not header_map:
         wb.close()
         raise RuntimeError("Target sheet header row is empty")
+
+    # Ensure new output fields exist in the header row
+    for field in OUTPUT_FIELDS:
+        key = _normalize_header_name(field)
+        if key and key not in header_map:
+            new_col = ws.max_column + 1
+            ws.cell(row=1, column=new_col, value=field)
+            header_map[key] = new_col
 
     existing_keys = _existing_pair_keys(ws, header_map)
     inserted = 0

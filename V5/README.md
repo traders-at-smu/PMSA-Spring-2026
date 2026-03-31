@@ -1,85 +1,104 @@
-# Kalshi × Polymarket Arb Bot v5 (Updated Overview)
+# V5 — Kalshi × Polymarket Arbitrage Bot
 
-## Project Overview
-Single-node Python arbitrage bot for Kalshi ↔ Polymarket markets.
+Lightweight Python CLI arbitrage engine. No dashboard, no SQLite — state is file-backed JSON.
 
-- `V5` is a lightweight CLI-first implementation (no Streamlit web UI).
-- Supports paper and live trading.
-- Depth-walking arbitrage in both directions (K YES + P NO, K NO + P YES).
-- Tracks open positions, cooldowns, exit rules, and permanent failures as JSON.
-- Configurable fees with safe formula DSL.
-
-## Repository Structure
+## Structure
 
 ```
 V5/
-├── main.py              # CLI entrypoint (validate, scan, run)
-├── bot.py               # core engine: scan, evaluate, trade, exit, state
-├── connectors.py        # Kalshi/Polymarket adapters + pair loader
-├── fees.py              # fee formula DSL (parse + apply)
-├── config.example.json  # documented config keys and defaults
-├── config.json          # user config (should be private)
-├── entry_trades.json    # historical entry trades log (append-only)
-├── exit_trades.json     # historical exit trades log (append-only)
-├── opportunities.json   # scan opportunity logging
-├── failed_pairs.json    # permanently failed pairs to skip
-├── expired_pairs.json   # expired/resolved pairs log
-├── open_positions.json  # active positions state
-├── cooldowns.json       # per-pair cooldown state
-├── fees.py              # fee math and rounding implementations
-├── connectors.py        # market data + order placement clients
-├── bot.py               # arbitrage and risk flow
-└── requirements.txt     # dependencies
+├── main.py                  # CLI entrypoint: validate | scan | run
+├── bot.py                   # Core engine: evaluate_pair, _walk_depth, trade, exit
+├── connectors.py            # KalshiConnector, PolymarketConnector, load_pairs
+├── fees.py                  # Fee formula DSL (parse_formula, apply_fee)
+├── config.example.json      # All config keys with inline documentation
+├── requirements.txt         # Python dependencies
+├── weird_behavior_check.py  # Diagnostic: flags token/strategy mismatches in logs
+├── Pairs_for_Kalshi_and_Polymarket.xlsx  # Active pairs database
+├── entry_trades.json        # Append-only entry trade log
+├── exit_trades.json         # Append-only exit trade log
+├── opportunities.json       # Scan opportunity log
+├── open_positions.json      # Active position state
+├── cooldowns.json           # Per-pair cooldown state
+├── failed_pairs.json        # Pairs that errored permanently (skipped)
+└── expired_pairs.json       # Pairs removed due to expiry/resolution
 ```
 
-## Key commands
+## Commands
 
 ```bash
 cd V5
-python main.py --config config.json validate   # config sanity + pairs existence
+python main.py --config config.json validate   # config + pairs file sanity check
 python main.py --config config.json scan       # one-shot scan, no execution
-python main.py --config config.json run        # continuous scan+execute loop
+python main.py --config config.json run        # continuous scan + execute loop
 ```
 
-## Main behavior
+Add `--execute` to `run` to place real orders (requires `"mode": "live"` in config).
 
-- `main.py` loads config and pairs, validates required keys (`mode`, `min_arr`, `max_contracts`, `fees`, `pairs_file`).
-- `run_scan`:
-  - fetches Kalshi + Polymarket orderbook data in parallel threads (default 6 workers)
-  - evaluates arbitrage for each pair with `evaluate_pair` and `_walk_depth`
-  - logs opportunities (`opportunities.json`)
-  - executes trades in `paper` or `live` mode (with entry minimum profit filtering)
-  - handles transient/perm errors, updates failed/expired logs
-- `run_loop`:
-  - continuous scanning with intervals (`scan_interval_seconds`)
-  - open-position and cooldown pair counting / skipping
-  - periodic exit checks (`exit_enabled`, `exit_target_total_price`, `exit_max_hold_seconds`)
+## Configuration
 
-## Fee model
+Copy `config.example.json` to `config.json` and fill in your values.
 
-- `fees.py` provides formula DSL via `parse_formula`.
-- Allowed variables: `p` (price probability), `q` (1-p), `c` (contract count).
-- No function calls, only math operators.
-- Kalshi supports `round_up_to_cent` to match actual billing.
+Key fields:
+
+| Field | Description |
+|-------|-------------|
+| `mode` | `"paper"` or `"live"` |
+| `pairs_file` | Path to the pairs Excel/CSV |
+| `min_arr` | Minimum annualised return (e.g. `0.20` = 20%) |
+| `min_profit_dollars` | Minimum absolute edge per trade |
+| `max_contracts` | Contract count cap per trade |
+| `scan_interval_seconds` | Seconds between scan cycles |
+| `fees.kalshi` | Kalshi fee formula + rounding |
+| `fees.polymarket` | Polymarket fee formula |
+| `exit_enabled` | Whether to check exit conditions |
+| `exit_target_total_price` | Total price threshold to exit (e.g. `0.99`) |
+
+## Pairs File
+
+`Pairs_for_Kalshi_and_Polymarket.xlsx` — managed by the `Polytoken/` pipeline.
+
+Required columns: `pair_id`, `kalshi_market_id`, `poly_slug`, `resolution_date`.
+
+Optional outcome-mapping columns (needed for multi-outcome / non-binary markets):
+
+| Column | Purpose |
+|--------|---------|
+| `poly_outcomes_json` | JSON array of Polymarket outcome labels |
+| `poly_token_ids_json` | JSON array of corresponding CLOB token IDs |
+| `poly_primary_outcome` | Outcome label that maps to Kalshi YES |
+| `poly_event_url` | Polymarket event page URL |
+| `kalshi_url` | Kalshi market URL (fallback if live API call fails) |
+
+## Arbitrage Logic
+
+- Two strategies evaluated per pair: `BUY_KY_BUY_PN` and `BUY_KN_BUY_PY`
+- `_walk_depth` walks the order book to simulate realistic fill costs and slippage
+- Fee-aware edge calculation: `edge = contracts × exit_target − kp_cost − est_exit_fee`
+- **Same-side guard:** strategies where `kp_cost / contracts < 0.60` are rejected as likely inverted pairs (directional bets, not hedges)
+- URLs resolved at scan time: Kalshi uses 3-segment live API URL (`/{event_ticker}/{event_slug}/{market_ticker}`); Polymarket uses `poly_event_url` when available
+
+## Fee Model
+
+`fees.py` provides a formula DSL. Variables: `p` (price), `q` (1−p), `c` (contract count).
+Example: `"0.07 * p * c"` — 7% taker fee on notional.
+Kalshi supports `round_up_to_cent` to match actual billing behavior.
+
+## State Files
+
+All JSON state files are append-only or full-replace and crash-resilient:
+- `open_positions.json` — read on startup to resume tracking live positions
+- `cooldowns.json` — prevents re-entering the same pair too soon after a trade
+- `failed_pairs.json` — pairs are added here on repeated API/validation errors and skipped forever
+- `expired_pairs.json` — pairs removed from the active set at runtime due to expiry
 
 ## Connectors
 
-- `KalshiConnector` (read quotes, place limit orders via signed RSA headers)
-- `PolymarketConnector` (read CLOB/Gamma endpoints, resolve yes/no token IDs, place CLOB orders)
-- Both connectors support no auth for book-only (paper).
+**`KalshiConnector`**
+- Public read (orderbook, market data) requires no credentials
+- Order placement uses RSA-signed headers (`api_key` + `private_key_base64`)
+- `_event_url` builds the navigable public market URL from the events API
 
-## Open / exit state and safety
-
-- `open_positions.json` holds active trades with entry metadata.
-- `cooldowns.json` stops pair reopening until cooldown expires.
-- `failed_pairs.json` / `expired_pairs.json` persist skip lists across restarts.
-- Opportunity filters:
-  - `min_arr`
-  - `min_profit_dollars`
-  - `max_contracts`
-
-## Notes
-
-- This is the V5 version of the bot from prior V2 architecture.
-- No SQLite, no dashboard, no copy-trading orchestration.
-- State is file-backed and crash-resilient for long runs.
+**`PolymarketConnector`**
+- Gamma API for market metadata and token IDs
+- CLOB API for orderbook depth and order placement
+- `_resolve_tokens` maps YES/NO to correct CLOB token IDs (supports multi-outcome via `poly_primary_outcome`)

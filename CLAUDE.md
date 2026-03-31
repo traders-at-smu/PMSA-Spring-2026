@@ -1,78 +1,85 @@
 # CLAUDE.md
 
 ## Project Overview
-Monorepo for cross-venue prediction market trading (Polymarket ↔ Kalshi). Contains two independent bot versions, an arb scanner web app, and utilities.
+Monorepo for cross-venue prediction market arbitrage (Polymarket ↔ Kalshi). **V5 is the active codebase.** V1–V4 and arb-scanner are archived under `Archived_Models/`.
 
 ## Repository Structure
-- **V1/** — TypeScript + React dashboard + Python model bridge (legacy, copy trading origin)
-- **V2/** — Python-first bot + Streamlit dashboard (primary active codebase)
-- **arb-scanner/** — Next.js web app for live arbitrage scanning
-- **Polytoken/** — CLI utility to generate pair mapping CSV rows from URLs
-- **api/** — Vercel serverless endpoints for public data
-- **pitch.html** — Technical pitch document
+```
+.
+├── V5/                  # Active bot — Python CLI arb engine
+├── Polytoken/           # Pair generation pipeline (polytoken + helper scripts)
+├── Archived_Models/     # Legacy versions (V1–V4, arb-scanner) — read-only reference
+├── Information/         # Trade rules, fee docs, design notes
+├── api/                 # Vercel serverless endpoints (legacy)
+├── pitch.html           # Technical pitch document
+├── CLAUDE.md            # This file
+├── README.md            # Human-facing project overview
+└── TODO.MD              # Team task list
+```
 
-## V2 Architecture (Primary Codebase)
+## V5 Architecture (Active Codebase)
 ```
-V2/src/
-├── main.py              # CLI entrypoint (scan, trade-once, run, copy-scan, copy-run, dashboard)
-├── service.py           # BotService orchestrates cycles, wires all modules together
-├── strategy_model.py    # Depth-walking arbitrage evaluation (imports from fees.py)
-├── fees.py              # Shared fee calculations (Kalshi + Polymarket with maker rebate)
-├── execution.py         # Paper/live order placement with risk checks + notifications
-├── portfolio.py         # Position tracking, mark-to-market P&L
-├── risk.py              # Pre-trade risk checks, drawdown circuit breaker
-├── notifications.py     # Telegram + Discord webhook alerts
-├── copy_trading.py      # Leaderboard monitoring, suspicion scoring, trade signals
-├── pair_discovery.py    # Automated Kalshi↔Polymarket fuzzy title matching
-├── models.py            # Data classes (MarketQuote, PairSnapshot, OpportunityDecision)
-├── state_store.py       # SQLite persistence (orders, positions, alerts, copy signals)
-├── mapping_loader.py    # CSV/XLSX pair mapping loader
-├── config.py            # Config validation + credential loading
-├── dashboard.py         # Streamlit UI (Trading, Portfolio, Copy Trading, Ops, Raw tabs)
-└── connectors/
-    ├── kalshi.py         # KalshiClient (RSA-signed requests, market discovery, title similarity)
-    └── polymarket.py     # PolymarketClient (Gamma API + CLOB)
+V5/
+├── main.py              # CLI entrypoint: validate | scan | run
+├── bot.py               # Core engine: scan, evaluate_pair, _walk_depth, trade, exit, state
+├── connectors.py        # KalshiConnector, PolymarketConnector, load_pairs
+├── fees.py              # Fee formula DSL (parse_formula, apply_fee)
+├── config.example.json  # All config keys with inline documentation
+├── requirements.txt     # Python dependencies
+├── weird_behavior_check.py  # Diagnostic script for token/strategy mismatches
+└── [runtime JSON]       # entry_trades, exit_trades, opportunities, open_positions,
+                         # cooldowns, failed_pairs, expired_pairs
 ```
+
+## Polytoken Pipeline
+```
+Polytoken/
+├── polytoken.py          # Interactive/batch pair row generator from market URLs
+├── check_and_append_v2.py  # Validate and append rows to Excel; deduplicates by token
+├── clean_pairs.py        # Remove expired/resolved pairs from Excel
+├── backfill_pairs_links.py  # Backfill/fix URLs and outcome columns in existing Excel rows
+├── retry_failed_pairs.py   # Re-validate pairs in failed_pairs.json
+└── counter.txt           # Auto-incrementing pair_id counter
+```
+
+The pipeline writes to `V5/Pairs_for_Kalshi_and_Polymarket.xlsx`. Run order for new pairs:
+1. `polytoken.py` — generate row(s)
+2. `check_and_append_v2.py` — validate and append to Excel
+3. `backfill_pairs_links.py --apply` — fix/update URLs and outcome mapping
 
 ## Key Commands
 ```bash
-# V2 (from V2/ directory)
-python -m src.main --config config/config.json validate-config
-python -m src.main --config config/config.json scan
-python -m src.main --config config/config.json trade-once --mode paper
-python -m src.main --config config/config.json run --execute --mode paper
-python -m src.main --config config/config.json copy-scan
-python -m src.main --config config/config.json copy-run
-python -m src.main --config config/config.json dashboard
-pytest -q  # Run tests
+# V5 — from V5/ directory
+python main.py --config config.json validate   # config + pairs file sanity check
+python main.py --config config.json scan       # one-shot opportunity scan, no trades
+python main.py --config config.json run        # continuous scan + execute loop
 
-# V1 (from V1/ directory)
-npm run dashboard
-npm run build
+# Polytoken — from Polytoken/ directory
+python polytoken.py                            # interactive mode (prompts for URLs)
+python polytoken.py links.csv                 # batch mode from CSV/XLSX
+python backfill_pairs_links.py                # dry-run: show URL/outcome updates
+python backfill_pairs_links.py --apply        # write updates to Excel
+python clean_pairs.py                         # remove expired pairs (dry-run by default)
+python check_and_append_v2.py                 # validate + append new rows
 ```
 
 ## Configuration
-- **V2 config:** `V2/config/config.example.json` → copy to `config.json`
-- **V2 credentials:** `V2/config/credentials.example.json` → copy to `credentials.json`
-- **V1 config:** `V1/config/settings.local.example.json` → copy to `settings.local.json`
-- New features (risk, notifications, copy_trading, pair_discovery) are **off by default** in config
+- **V5 config:** `V5/config.example.json` → copy to `V5/config.json`
+- `config.json` and `credentials.json` are gitignored — never commit them
 
 ## Coding Conventions
 - Python 3.10+ with `from __future__ import annotations`
 - Type hints everywhere, `dict[str, Any]` style (not `Dict`)
-- Dataclasses for models, no Pydantic
-- SQLite for state persistence (no ORM)
-- `requests` for HTTP (no aiohttp)
-- Tests in `V2/tests/` using pytest
+- `requests` for HTTP (synchronous only — no aiohttp)
 - Fee calculations live in `fees.py` — don't duplicate in other modules
-- Title similarity logic is in both `kalshi.py` (KalshiClient methods) and `pair_discovery.py` (standalone functions)
+- Kalshi public URLs: `https://kalshi.com/markets/{event_ticker}/{event_slug}/{market_ticker}`
+- Polymarket public URLs: `https://polymarket.com/event/{event_slug}`
 
 ## Important Patterns
-- **Execution safety:** Live mode requires ARM LIVE + typed confirmation token with TTL
-- **Risk checks** run before every trade via `ExecutionEngine.risk_manager`
-- **Notifications** are non-blocking and swallow errors (never crash the bot)
-- **Copy trading** runs on independent cycle from arbitrage (separate poll interval)
-- **Pair discovery** caches results and requires manual activation by default
+- **Execution safety:** Live mode requires explicit `--execute` flag + `"mode": "live"` in config
+- **Same-side guard:** `evaluate_pair` rejects strategies where `kp_cost / contracts < 0.60` (inverted/same-side pairs)
+- **Multi-outcome markets:** Supported via `poly_outcomes_json`, `poly_token_ids_json`, `poly_primary_outcome` columns in the pairs Excel
+- **URL resolution:** `_resolve_kalshi_url` prefers live API `event_url` (3-segment) over Excel-stored `kalshi_url`; `_resolve_polymarket_url` checks `poly_event_url` first
 
 ## Secrets / .gitignore
-Never commit: `credentials.json`, `settings.local.json`, `.env`, `*.csv` (data files), private keys, `state.db`
+Never commit: `config.json`, `credentials.json`, `.env`, `*.pem`, `*.key`, private keys

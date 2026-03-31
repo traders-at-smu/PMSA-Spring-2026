@@ -1,1 +1,56 @@
-{}
+{
+  "pair-1456": {
+    "pair_id": "pair-1456",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXNEXTUKPM-30-NF",
+    "p_token_id": "50960260636990249013018697727132070044900034089108950792866072435222205165583",
+    "p_token_ids": [
+      "50960260636990249013018697727132070044900034089108950792866072435222205165583"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "50960260636990249013018697727132070044900034089108950792866072435222205165583",
+    "no_token_id": "69165855929823223276623079497824884292884455984217711529407160439315932604807",
+    "title": "Will Nigel Farage be the next Prime Minister of the United Kingdom in 2026?",
+    "contracts": 1000,
+    "entry_k_price": 0.88,
+    "entry_p_price": 0.096,
+    "entry_kp_cost": 982.0659999999958,
+    "entry_fills": [
+      {
+        "k_price": 0.88,
+        "p_price": 0.091,
+        "contracts": 36
+      },
+      {
+        "k_price": 0.88,
+        "p_price": 0.092,
+        "contracts": 235
+      },
+      {
+        "k_price": 0.88,
+        "p_price": 0.093,
+        "contracts": 68
+      },
+      {
+        "k_price": 0.88,
+        "p_price": 0.095,
+        "contracts": 10
+      },
+      {
+        "k_price": 0.88,
+        "p_price": 0.096,
+        "contracts": 651
+      }
+    ],
+    "entry_fee": 7.4,
+    "entry_edge_dollar": 0.534,
+    "entry_arr": 0.00014461163929130747,
+    "entry_edge_pct": 0.0005437516419509253,
+    "entry_timestamp": "2026-03-31T04:40:49.691134+00:00",
+    "entry_trade_number": "T00097",
+    "cooldown_until": "2026-03-31T05:40:49.691134+00:00"
+  }
+}

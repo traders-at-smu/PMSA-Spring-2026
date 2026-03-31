@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -100,22 +101,27 @@ def clean_pairs(target_path: Path, apply: bool) -> None:
     resolution_col = (
         header_map.get(_normalize_header("resolution_time_utc"))
         or header_map.get(_normalize_header("resolution_date"))
+        or header_map.get(_normalize_header("time to expiration (2 months out)"))
     )
     poly_id_col = header_map.get(_normalize_header("poly_market_id"))
     kalshi_id_col = header_map.get(_normalize_header("kalshi_market_id"))
     active_col = header_map.get(_normalize_header("active"))
     pair_id_col = header_map.get(_normalize_header("pair_id"))
+    outcomes_col = header_map.get(_normalize_header("poly_outcomes_json")) or header_map.get(_normalize_header("poly_outcomes"))
+    primary_col = header_map.get(_normalize_header("poly_primary_outcome"))
 
     print(f"File: {target_path}")
     print(f"Today: {today}")
     print(f"Columns found: resolution={resolution_col}, poly_id={poly_id_col}, "
-          f"kalshi_id={kalshi_id_col}, active={active_col}, pair_id={pair_id_col}")
+          f"kalshi_id={kalshi_id_col}, active={active_col}, pair_id={pair_id_col}, "
+          f"outcomes={outcomes_col}, primary={primary_col}")
     print()
 
     # Scan rows (data starts at row 2)
     max_row = ws.max_row
     rows_to_delete: list[int] = []
     seen_pair_keys: set[tuple[str, str]] = set()
+    seen_poly_ids: set[str] = set()
     expired_count = 0
     duplicate_count = 0
 
@@ -148,6 +154,25 @@ def clean_pairs(target_path: Path, apply: bool) -> None:
                     duplicate_count += 1
                 else:
                     seen_pair_keys.add(key)
+
+            # Ambiguous mapping: multiple Kalshi tickers for same Polymarket market
+            primary = _cell_str(ws.cell(row=r, column=primary_col).value) if primary_col else ""
+            outcomes_raw = _cell_str(ws.cell(row=r, column=outcomes_col).value) if outcomes_col else ""
+            outcomes = []
+            if outcomes_raw:
+                try:
+                    parsed = json.loads(outcomes_raw)
+                    if isinstance(parsed, list):
+                        outcomes = [str(o).strip() for o in parsed if str(o).strip()]
+                except json.JSONDecodeError:
+                    pass
+            missing_primary = bool(poly_id) and (not primary or (outcomes and primary not in outcomes))
+            if missing_primary:
+                if poly_id in seen_poly_ids:
+                    reason = f"ambiguous mapping for poly_market_id {poly_id[:12]}..."
+                    duplicate_count += 1
+                else:
+                    seen_poly_ids.add(poly_id)
 
         if reason:
             rows_to_delete.append(r)

@@ -1,5 +1,6 @@
 import argparse
 import csv
+import json
 import sys
 from pathlib import Path
 from urllib.parse import urlparse
@@ -18,6 +19,10 @@ OUTPUT_FIELDS = [
     "poly_market_id",
     "poly_slug",
     "poly_url",
+    "poly_event_url",
+    "poly_outcomes_json",
+    "poly_token_ids_json",
+    "poly_primary_outcome",
     "kalshi_market_id",
     "kalshi_url",
     "expiry_poly_utc",
@@ -196,6 +201,45 @@ def extract_kalshi_market_like(url_or_ticker):
     return value
 
 
+def _slugify(text: str) -> str:
+    text = text.lower().strip()
+    slug: list[str] = []
+    prev_dash = False
+    for ch in text:
+        is_alnum = "a" <= ch <= "z" or "0" <= ch <= "9"
+        if is_alnum:
+            slug.append(ch)
+            prev_dash = False
+        elif not prev_dash:
+            slug.append("-")
+            prev_dash = True
+    return "".join(slug).strip("-")
+
+
+def _build_kalshi_url(event_ticker: str, market_ticker: str) -> str:
+    """Return the full 3-segment Kalshi public URL for a market.
+
+    Format: https://kalshi.com/markets/{event_ticker}/{event_slug}/{market_ticker}
+    Falls back to the 2-segment event page if the events API can't supply a slug.
+    """
+    et = (event_ticker or market_ticker).strip().lower()
+    base = f"https://kalshi.com/markets/{et}"
+    try:
+        r = requests.get(f"{KALSHI_BASE}/events/{et.upper()}", timeout=HTTP_TIMEOUT_SEC)
+        r.raise_for_status()
+        event = r.json().get("event", {})
+        title = str(event.get("title") or "").strip()
+        if title:
+            slug = _slugify(title)
+            if slug and market_ticker:
+                return f"https://kalshi.com/markets/{et}/{slug}/{market_ticker.lower()}"
+            if slug:
+                return f"https://kalshi.com/markets/{et}/{slug}"
+    except Exception:
+        pass
+    return base
+
+
 def event_ticker_from_market_like(value):
     """Best-effort conversion of market-like value to Kalshi event ticker."""
     ticker = str(value or "").strip()
@@ -260,6 +304,50 @@ def _normalize_match_text(value):
     return " ".join("".join(chars).split())
 
 
+def _normalize_outcome_label(value):
+    return _normalize_match_text(value)
+
+
+def _extract_outcomes_tokens(poly_market):
+    """Return (outcomes, token_ids) aligned from Gamma market payload."""
+    if not isinstance(poly_market, dict):
+        return [], []
+    raw_ids = poly_market.get("clobTokenIds", [])
+    if isinstance(raw_ids, str):
+        try:
+            raw_ids = json.loads(raw_ids)
+        except json.JSONDecodeError:
+            raw_ids = [raw_ids]
+    outcomes = poly_market.get("outcomes") or []
+    if isinstance(outcomes, str):
+        try:
+            outcomes = json.loads(outcomes)
+        except json.JSONDecodeError:
+            outcomes = [outcomes]
+    outcomes = [str(o).strip() for o in outcomes if str(o).strip()]
+    token_ids = [str(t).strip() for t in raw_ids if str(t).strip()]
+    return outcomes, token_ids
+
+
+def _match_primary_outcome(outcomes, kalshi_label):
+    """Return the outcome label that matches the Kalshi submarket name."""
+    norm_k = _normalize_outcome_label(kalshi_label)
+    if not outcomes:
+        return ""
+    # Exact normalized match
+    matches = [o for o in outcomes if _normalize_outcome_label(o) == norm_k]
+    if len(matches) == 1:
+        return matches[0]
+    # Fuzzy containment match
+    fuzzy = [
+        o for o in outcomes
+        if norm_k and (norm_k in _normalize_outcome_label(o) or _normalize_outcome_label(o) in norm_k)
+    ]
+    if len(fuzzy) == 1:
+        return fuzzy[0]
+    return ""
+
+
 def _poly_contract_match_text(market):
     if not isinstance(market, dict):
         return ""
@@ -282,6 +370,22 @@ def _build_mapping_row(poly_market, poly_market_slug, kalshi_submarket):
     )
     # Extract expiry from Kalshi (markets API returns close_time)
     expiry_kalshi = kalshi_submarket.get("close_time") or ""
+    outcomes, token_ids = _extract_outcomes_tokens(poly_market)
+    outcomes_lc = [o.strip().lower() for o in outcomes]
+    primary_outcome = ""
+    if len(outcomes_lc) == 2 and "yes" in outcomes_lc and "no" in outcomes_lc:
+        primary_outcome = "yes"
+    else:
+        kalshi_name = str(kalshi_submarket.get("display_name", subcontract_display_name(kalshi_submarket))).strip()
+        primary_outcome = _match_primary_outcome(outcomes, kalshi_name)
+        if not primary_outcome:
+            raise RuntimeError(
+                f"Unable to map Kalshi submarket '{kalshi_name}' to Polymarket outcomes {outcomes}"
+            )
+    event_slug = str(poly_market.get("eventSlug") or poly_market.get("event_slug") or "").strip()
+    poly_event_url = f"https://polymarket.com/event/{event_slug}" if event_slug else ""
+    _k_ticker = kalshi_submarket["ticker"]
+    _k_event_ticker = str(kalshi_submarket.get("event_ticker") or "").strip()
     return {
         "pair_id": pair_id,
         "title_clean": poly_market.get("question", "N/A"),
@@ -289,9 +393,13 @@ def _build_mapping_row(poly_market, poly_market_slug, kalshi_submarket):
         "similarity_score": "1.0",
         "poly_market_id": poly_market.get("conditionId", "N/A"),
         "poly_slug": poly_market_slug,
-        "poly_url": f"https://polymarket.com/market/{poly_market_slug}",
-        "kalshi_market_id": kalshi_submarket["ticker"],
-        "kalshi_url": f"https://kalshi.com/markets/{kalshi_submarket['ticker']}",
+        "poly_url": f"https://polymarket.com/event/{event_slug}" if event_slug else f"https://polymarket.com/market/{poly_market_slug}",
+        "poly_event_url": poly_event_url,
+        "poly_outcomes_json": json.dumps(outcomes),
+        "poly_token_ids_json": json.dumps(token_ids),
+        "poly_primary_outcome": primary_outcome,
+        "kalshi_market_id": _k_ticker,
+        "kalshi_url": _build_kalshi_url(_k_event_ticker, _k_ticker),
         "expiry_poly_utc": expiry_poly,
         "expiry_kalshi_utc": expiry_kalshi,
     }

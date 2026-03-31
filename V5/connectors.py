@@ -22,6 +22,21 @@ _POLY_CLOB = "https://clob.polymarket.com"
 _POLY_GAMMA = "https://gamma-api.polymarket.com"
 _TIMEOUT = 10  # seconds
 
+def _slugify(text: str) -> str:
+    text = text.lower().strip()
+    slug = []
+    prev_dash = False
+    for ch in text:
+        is_alnum = "a" <= ch <= "z" or "0" <= ch <= "9"
+        if is_alnum:
+            slug.append(ch)
+            prev_dash = False
+        else:
+            if not prev_dash:
+                slug.append("-")
+                prev_dash = True
+    out = "".join(slug).strip("-")
+    return out
 
 # ── Kalshi ────────────────────────────────────────────────────────────────────
 
@@ -33,9 +48,32 @@ class KalshiConnector:
         self.base = (base_url or _KALSHI_BASE).rstrip("/")
         self.api_key = api_key.strip()
         self._private_key = None
+        self._event_url_cache: dict[str, str] = {}
         if private_key_base64.strip():
             key_bytes = base64.b64decode(private_key_base64.strip())
             self._private_key = serialization.load_pem_private_key(key_bytes, password=None)
+
+    def _event_url(self, event_ticker: str) -> str:
+        if not event_ticker:
+            return ""
+        cached = self._event_url_cache.get(event_ticker)
+        if cached is not None:
+            return cached
+        et = event_ticker.lower()
+        url = f"https://kalshi.com/markets/{et}"  # always-valid event page fallback
+        try:
+            r = requests.get(f"{self.base}/events/{event_ticker}", timeout=_TIMEOUT)
+            r.raise_for_status()
+            event = r.json().get("event", {})
+            title = str(event.get("title") or "").strip()
+            if title:
+                slug = _slugify(title)
+                if slug:
+                    url = f"https://kalshi.com/markets/{et}/{slug}"
+        except Exception:
+            pass  # keep the event-page fallback
+        self._event_url_cache[event_ticker] = url
+        return url
 
     def _signed_headers(self, method: str, path: str) -> dict[str, str]:
         if not self._private_key or not self.api_key:
@@ -157,6 +195,15 @@ class KalshiConnector:
 
         # Scalar bid/ask from the market summary endpoint — same as V1
         mkt = mkt_data.get("market", {})
+        event_ticker = str(mkt.get("event_ticker") or "").strip()
+        event_url = self._event_url(event_ticker) if event_ticker else ""
+        # Append the market ticker to form a direct 3-segment URL:
+        # /markets/{event_ticker}/{event_slug}/{market_ticker}
+        # Only do this when _event_url resolved past the bare fallback (i.e. has a slug).
+        if event_url and ticker and event_ticker:
+            _et_base = f"https://kalshi.com/markets/{event_ticker.lower()}"
+            if event_url != _et_base:
+                event_url = f"{event_url}/{ticker.lower()}"
         yes_bid = _scalar(mkt.get("yes_bid_dollars"))
         yes_ask = _scalar(mkt.get("yes_ask_dollars"))
         no_bid  = _scalar(mkt.get("no_bid_dollars"))
@@ -179,6 +226,8 @@ class KalshiConnector:
             "yes_ask": yes_ask,
             "no_bid":  no_bid,
             "no_ask":  no_ask,
+            "event_ticker": event_ticker,
+            "event_url": event_url,
             "depth": {
                 "buy_yes": self._derive_asks(no_bids),   # to buy YES, cross NO bids
                 "buy_no":  self._derive_asks(yes_bids),  # to buy NO, cross YES bids
@@ -275,7 +324,31 @@ class PolymarketConnector:
         )
 
     def _resolve_tokens(self, market_slug: str) -> tuple[str, str]:
-        """Look up YES and NO token IDs for a market slug via Gamma API."""
+        """Look up YES and NO token IDs for a market slug via Gamma API.
+
+        Raises on non-binary outcomes (3+ outcomes) to avoid accidental
+        default-to-index mapping that can invert or duplicate legs.
+        """
+        market = self._fetch_market(market_slug)
+        outcomes, token_ids = self._extract_outcomes_tokens(market, market_slug)
+        outcomes_lc = [o.strip().lower() for o in outcomes]
+        if "yes" not in outcomes_lc or "no" not in outcomes_lc:
+            raise RuntimeError(
+                f"Polymarket market '{market_slug}' is non-binary outcomes={outcomes!r}; "
+                "use explicit outcome mapping"
+            )
+        yes_idx = outcomes_lc.index("yes")
+        no_idx = outcomes_lc.index("no")
+        yes_id = str(token_ids[yes_idx]).strip()
+        no_id = str(token_ids[no_idx]).strip()
+        if not yes_id or not no_id or yes_id == no_id:
+            raise RuntimeError(
+                f"Polymarket market '{market_slug}' returned invalid token IDs: yes='{yes_id}', no='{no_id}'"
+            )
+        return yes_id, no_id
+
+    def _fetch_market(self, market_slug: str) -> dict[str, Any]:
+        """Fetch a Polymarket market payload for a given slug."""
         res = requests.get(
             f"{self.gamma_host}/markets",
             params={"slug": market_slug},
@@ -283,28 +356,59 @@ class PolymarketConnector:
         )
         res.raise_for_status()
         payload = res.json()
-        if not isinstance(payload, list) or not payload:
-            raise RuntimeError(
-                f"No Polymarket market found for slug '{market_slug}'"
-            )
-        market = payload[0]
+        if isinstance(payload, list) and payload:
+            market = payload[0]
+        elif isinstance(payload, dict) and payload.get("conditionId"):
+            market = payload
+        else:
+            raise RuntimeError(f"No Polymarket market found for slug '{market_slug}'")
+        if not isinstance(market, dict):
+            raise RuntimeError(f"Polymarket market payload malformed for slug '{market_slug}'")
+        return market
+
+    @staticmethod
+    def _extract_outcomes_tokens(market: dict[str, Any], market_slug: str = "") -> tuple[list[str], list[str]]:
         raw_ids = market.get("clobTokenIds", [])
         if isinstance(raw_ids, str):
             raw_ids = json.loads(raw_ids)
-        outcomes = [o.strip().lower() for o in market.get("outcomes", ["yes", "no"])]
-        yes_idx = outcomes.index("yes") if "yes" in outcomes else 0
-        no_idx = outcomes.index("no") if "no" in outcomes else 1
-        if len(raw_ids) < 2:
+        outcomes_raw = market.get("outcomes") or []
+        if isinstance(outcomes_raw, str):
+            try:
+                outcomes_raw = json.loads(outcomes_raw)
+            except json.JSONDecodeError:
+                outcomes_raw = [outcomes_raw]
+        outcomes = [str(o).strip() for o in outcomes_raw if str(o).strip()]
+        token_ids = [str(t).strip() for t in (raw_ids or []) if str(t).strip()]
+        if len(token_ids) < 2 or len(outcomes) < 2:
+            label = f" '{market_slug}'" if market_slug else ""
             raise RuntimeError(
-                f"Polymarket market '{market_slug}' has fewer than 2 token IDs"
+                f"Polymarket market{label} has insufficient outcomes/tokens "
+                f"(outcomes={len(outcomes)}, tokens={len(token_ids)})"
             )
-        yes_id = str(raw_ids[yes_idx]).strip()
-        no_id = str(raw_ids[no_idx]).strip()
-        if not yes_id or not no_id:
-            raise RuntimeError(
-                f"Polymarket market '{market_slug}' returned empty token ID(s): yes='{yes_id}', no='{no_id}'"
-            )
-        return yes_id, no_id
+        return outcomes, token_ids
+
+    def resolve_market_outcomes(self, market_slug: str) -> dict[str, Any]:
+        """Return outcomes + token IDs (aligned) for a market slug."""
+        market = self._fetch_market(market_slug)
+        outcomes, token_ids = self._extract_outcomes_tokens(market, market_slug)
+        return {
+            "market": market,
+            "outcomes": outcomes,
+            "token_ids": token_ids,
+        }
+
+    def get_books(self, token_ids: list[str]) -> dict[str, dict[str, Any]]:
+        """Fetch orderbooks for multiple Polymarket token IDs in parallel."""
+        token_ids = [str(t).strip() for t in token_ids if str(t).strip()]
+        if not token_ids:
+            return {}
+        books: dict[str, dict[str, Any]] = {}
+        with ThreadPoolExecutor(max_workers=min(10, len(token_ids))) as pool:
+            futures = {pool.submit(self._fetch_book, tid): tid for tid in token_ids}
+            for fut in futures:
+                tid = futures[fut]
+                books[tid] = fut.result()
+        return books
 
     @staticmethod
     def _parse_ask_levels(book: dict[str, Any]) -> list[dict[str, Any]]:
@@ -455,6 +559,24 @@ def _pick(row: dict, *keys: str, default: str = "") -> str:
     return default
 
 
+def _parse_json_list(value: Any) -> list[str]:
+    """Parse a JSON list or comma-delimited string into a list of strings."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(v).strip() for v in value if str(v).strip()]
+    raw = str(value).strip()
+    if not raw:
+        return []
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return [str(v).strip() for v in parsed if str(v).strip()]
+    except json.JSONDecodeError:
+        pass
+    return [v.strip() for v in raw.split(",") if v.strip()]
+
+
 def load_pairs(path: str) -> list[dict[str, Any]]:
     """Load the manual pairs list from an Excel (.xlsx) or CSV file.
 
@@ -468,6 +590,7 @@ def load_pairs(path: str) -> list[dict[str, Any]]:
         Title          : title_clean       | title
         Category       : category_tag      | category
         Resolution date: time to expiration (2 months out) | resolution_time_utc | resolution_date
+        Optional URLs  : kalshi_url | poly_url | poly_event_url
         Active flag    : active  (optional — if absent all rows are treated as active)
         Row ID         : pair_id
 
@@ -524,6 +647,12 @@ def load_pairs(path: str) -> list[dict[str, Any]]:
             "polymarket_no_token_id": _pick(row, "polymarket_no_token_id"),
             # Accept both "poly_slug" (actual file) and "polymarket_market_slug" (generic)
             "polymarket_market_slug": _pick(row, "poly_slug", "polymarket_market_slug"),
+            "poly_outcomes": _parse_json_list(_pick(row, "poly_outcomes_json", "poly_outcomes")),
+            "poly_token_ids": _parse_json_list(_pick(row, "poly_token_ids_json", "poly_token_ids")),
+            "poly_primary_outcome": _pick(row, "poly_primary_outcome"),
+            "poly_event_url": _pick(row, "poly_event_url"),
+            "polymarket_url": _pick(row, "poly_url", "polymarket_url"),
+            "kalshi_url": _pick(row, "kalshi_url"),
             # Accept several resolution-date column name variants
             "resolution_date": _pick(
                 row,
@@ -554,6 +683,15 @@ def load_pairs(path: str) -> list[dict[str, Any]]:
         # Polymarket slug check
         if not p.get("polymarket_market_slug"):
             print(f"  [WARN] pair {pid}: empty polymarket_market_slug — tokens will need resolution")
+
+        # Multi-outcome mapping sanity (requires explicit primary outcome)
+        outcomes = [str(o).strip().lower() for o in p.get("poly_outcomes", [])]
+        if len(outcomes) > 2:
+            primary = str(p.get("poly_primary_outcome", "")).strip().lower()
+            if not primary:
+                print(f"  [WARN] pair {pid}: missing poly_primary_outcome for multi-outcome market")
+            elif primary not in outcomes:
+                print(f"  [WARN] pair {pid}: poly_primary_outcome '{primary}' not in outcomes {outcomes}")
 
         # Resolution date format check
         rd = p.get("resolution_date")
