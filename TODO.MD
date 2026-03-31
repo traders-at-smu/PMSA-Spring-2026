@@ -3,6 +3,12 @@
 - [X] add script to polytoken to check for same information already exisiting 
 - [ ] increased data validation on contracts
 
+- V1
+    - [ ] Re-add sorting functionality to scanner
+    - [ ] Add spread calculation in scanner pairs tab
+
+- V4
+
 Ian
 
  - Make a gameplan
@@ -23,6 +29,9 @@ Fix 2: Remove duplicate GAME pairs from Pairs_for_Kalshi_and_Polymarket.xlsx (ea
 - Connect github to server, choose between droplet and app platform
 - OHHHHH i see what happened, we are paper trading so someone placed a bid and in theory we would have bought it but in reality we didnt because were paper trading so when the cycle went around again it still saw the bid and took it again
 - Buy many servers to not get rate liimited?
+- Add polymarket fees
+- Get Residential IP addresses for server
+   - Do I need the IP addresses to be in the country with the VPN
 
 Davis:
   - Get the URL's corrected so we can easily verify contracts
