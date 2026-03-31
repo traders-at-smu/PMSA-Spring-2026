@@ -104,7 +104,7 @@ def _normalize_levels(raw: list[Any], descending: bool = False) -> list[dict[str
             s = int(float(level["size"]))
         except (KeyError, TypeError, ValueError):
             continue
-        if s > 0 and 0.0 <= p <= 1.0:
+        if s > 0 and 0.0 < p <= 1.0:
             by_price[p] = by_price.get(p, 0) + s
     return [{"price": p, "size": by_price[p]} for p in sorted(by_price, reverse=descending)]
 
@@ -829,6 +829,9 @@ def evaluate_pair(
                     f"likely inverted (same-side) pair, skipping",
                     file=sys.stderr,
                 )
+                continue
+
+            if edge_dollar <= 0:
                 continue
 
             results.append({
