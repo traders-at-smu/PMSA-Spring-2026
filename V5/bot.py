@@ -799,15 +799,9 @@ def evaluate_pair(
         k_levels = strat["k_levels"]
         p_levels = strat["p_levels"]
 
-        # Fallback if depth is empty: use best ask as a single synthetic level
-        if not k_levels:
-            k_levels = [{"price": strat["k_price_hint"], "size": 200}]
-        if not p_levels:
-            leg_prices_hint = strat.get("p_leg_prices_hint")
-            if leg_prices_hint:
-                p_levels = [{"price": sum(leg_prices_hint), "size": 200, "leg_prices": leg_prices_hint}]
-            else:
-                p_levels = [{"price": strat["p_price_hint"], "size": 200}]
+        # Skip if either side has no liquidity
+        if not k_levels or not p_levels:
+            continue
 
         walk = _walk_depth(
             k_levels, p_levels, days, max_contracts,

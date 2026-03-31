@@ -13,6 +13,16 @@ config/settings.local.json
 *.csv
 logs/
 
+# Sensitive / generated data files
+**/config/settings.json
+**/config/config.json
+**/data/state.db
+**/data/state.db-shm
+**/data/state.db-wal
+**/opportunities*.json
+**/trades*.json
+config.json
+
 # Python artifacts
 __pycache__/
 *.py[cod]
