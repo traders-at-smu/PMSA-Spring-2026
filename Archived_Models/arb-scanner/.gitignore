@@ -1,0 +1,22 @@
+# Node / Next.js
+node_modules/
+.next/
+dist/
+out/
+coverage/
+*.tsbuildinfo
+*.js.map
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Debug output files
+debug_*.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

@@ -16,6 +16,9 @@
   "_doc_print_market_status": "Print a one-line market snapshot for every pair on each scan cycle, even when no arb is found. Shows Kalshi and Polymarket mid-prices, days to expiry, net-of-fees marginal edge%, and net-of-fees ARR for the better direction (1-contract). Useful for monitoring market conditions without needing to find a trade. Set to false (default) to suppress this output.",
   "print_market_status": false,
 
+  "_doc_skip_multi_outcome": "When true, pairs with 3 or more Polymarket outcomes (e.g. soccer Home/Draw/Away) are silently skipped each scan cycle rather than evaluated. They are NOT added to failed/bad logs — they resume being evaluated if this flag is set back to false.",
+  "skip_multi_outcome": false,
+
   "_doc_exit_enabled": "Enable exit/close logic for open positions. When true, open positions are monitored and sold at bids when the exit rule is met or max hold expires.",
   "exit_enabled": true,
 
@@ -50,6 +53,12 @@
 
   "_doc_failed_log": "File where pairs that fail to fetch are permanently logged (one JSON object per line). On each run, this file is read at startup and those pairs are skipped for the entire session — they will never be fetched again unless you remove them from this file.",
   "failed_log": "failed_pairs.json",
+
+  "_doc_bad_log": "File where same-side/inverted pairs are permanently logged (one JSON object per line). Pairs are added here when their combined entry cost per contract is below the same-side threshold (0.85), indicating both legs likely bet the same underlying outcome. Remove a pair from this file to retry it.",
+  "bad_log": "bad_pairs.json",
+
+  "_doc_user_pairs_dirs": "One path or a list of paths to Polytoken per-user pairs directories. Each directory is scanned for {username}/pairs.csv files at startup; new rows are merged into pairs_file (deduped by poly_market_id + kalshi_market_id) and each CSV is cleared afterward. Relative paths are resolved from the pairs_file directory.",
+  "user_pairs_dirs": ["../Polytoken/pairs"],
 
   "_doc_fees": "Fee formulas as math expressions. Available variables: p = contract price/probability (0–1), q = 1−p (complement), c = number of contracts. Operators: + − * / ** ( ). No function calls allowed.",
   "_doc_fees_examples": "Common formulas — Kalshi standard: 'p * (1 - p) * 0.07 * c'  |  Flat fee: '0.02 * c'  |  Using q shorthand: 'p * q * 0.07 * c'",

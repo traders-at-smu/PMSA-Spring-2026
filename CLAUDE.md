@@ -34,18 +34,20 @@ V5/
 ## Polytoken Pipeline
 ```
 Polytoken/
-├── polytoken.py          # Interactive/batch pair row generator from market URLs
-├── check_and_append_v2.py  # Validate and append rows to Excel; deduplicates by token
+├── polytoken.py          # Pair row generator: interactive/batch mode, writes to pairs/{user}/pairs.csv
+│                         #   --validate flag: live API checks (market open, CLOB accessible, price sanity)
+│                         #   --user flag: target subfolder (defaults to OS login name)
 ├── clean_pairs.py        # Remove expired/resolved pairs from Excel
 ├── backfill_pairs_links.py  # Backfill/fix URLs and outcome columns in existing Excel rows
 ├── retry_failed_pairs.py   # Re-validate pairs in failed_pairs.json
+├── pairs/                # Per-user staging CSVs: pairs/{username}/pairs.csv
 └── counter.txt           # Auto-incrementing pair_id counter
 ```
 
-The pipeline writes to `V5/Pairs_for_Kalshi_and_Polymarket.xlsx`. Run order for new pairs:
-1. `polytoken.py` — generate row(s)
-2. `check_and_append_v2.py` — validate and append to Excel
-3. `backfill_pairs_links.py --apply` — fix/update URLs and outcome mapping
+The pipeline writes to `V5/Pairs_for_Kalshi_and_Polymarket.xlsx` via V5 startup merge. Run order for new pairs:
+1. `polytoken.py [--validate]` — generate rows, optionally validate live, write to `pairs/{user}/pairs.csv`
+2. Start V5 (`python main.py ... scan`) — merges all `pairs/*/pairs.csv` into master Excel at startup, then clears them
+3. `backfill_pairs_links.py --apply` — fix/update URLs and outcome mapping (if needed)
 
 ## Key Commands
 ```bash
@@ -55,12 +57,14 @@ python main.py --config config.json scan       # one-shot opportunity scan, no t
 python main.py --config config.json run        # continuous scan + execute loop
 
 # Polytoken — from Polytoken/ directory
-python polytoken.py                            # interactive mode (prompts for URLs)
+python polytoken.py                            # interactive mode (prompts for URLs); validates by default
 python polytoken.py links.csv                 # batch mode from CSV/XLSX
+python polytoken.py --no-validate             # skip live API validation
+python polytoken.py --user dplynn links.csv   # explicit username override
+# config.json: "user_pairs_dirs": ["../Polytoken/pairs", "/other/repo/Polytoken/pairs"]
 python backfill_pairs_links.py                # dry-run: show URL/outcome updates
 python backfill_pairs_links.py --apply        # write updates to Excel
 python clean_pairs.py                         # remove expired pairs (dry-run by default)
-python check_and_append_v2.py                 # validate + append new rows
 ```
 
 ## Configuration

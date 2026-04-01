@@ -1,5 +1,7 @@
 import argparse
 import csv
+import datetime
+import getpass
 import json
 import sys
 from pathlib import Path
@@ -30,11 +32,14 @@ OUTPUT_FIELDS = [
     "resolution_time_utc",
 ]
 
+POLY_CLOB_HOST = "https://clob.polymarket.com"
+
 COUNTER_PATH = Path(__file__).resolve().parent / "counter.txt"
 REPO_ROOT = Path(__file__).resolve().parent.parent
+# Per-user staging directory: Polytoken/pairs/{username}/pairs.csv
+USER_PAIRS_DIR = Path(__file__).resolve().parent / "pairs"
+# Only the active V5 master list is checked for duplicates
 XLSX_PATHS = [
-    REPO_ROOT / "V2" / "Pairs_for_Kalshi_and_Polymarket.xlsx",
-    REPO_ROOT / "V4" / "Pairs_for_Kalshi_and_Polymarket.xlsx",
     REPO_ROOT / "V5" / "Pairs_for_Kalshi_and_Polymarket.xlsx",
 ]
 
@@ -44,7 +49,7 @@ def _normalize_header(value):
 
 
 def load_existing_pair_keys() -> set[tuple[str, str]]:
-    """Load all (poly_market_id, kalshi_market_id) tuples from existing Excel files."""
+    """Load all (poly_market_id, kalshi_market_id) tuples from the master Excel and all user CSVs."""
     keys: set[tuple[str, str]] = set()
     try:
         from openpyxl import load_workbook
@@ -80,6 +85,21 @@ def load_existing_pair_keys() -> set[tuple[str, str]]:
             wb.close()
         except Exception as exc:
             print(f"Warning: could not read {xlsx_path.name}: {exc}", file=sys.stderr)
+
+    # Also scan all per-user staging CSVs so duplicates across users are caught
+    if USER_PAIRS_DIR.exists():
+        for csv_file in sorted(USER_PAIRS_DIR.glob("*/pairs.csv")):
+            try:
+                with csv_file.open(newline="", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        poly_id = str(row.get("poly_market_id") or "").strip()
+                        kalshi_id = str(row.get("kalshi_market_id") or "").strip()
+                        if poly_id and kalshi_id:
+                            keys.add((poly_id, kalshi_id))
+            except Exception as exc:
+                print(f"Warning: could not read {csv_file}: {exc}", file=sys.stderr)
+
     return keys
 
 
@@ -241,16 +261,20 @@ def _build_kalshi_url(event_ticker: str, market_ticker: str) -> str:
 
 
 def event_ticker_from_market_like(value):
-    """Best-effort conversion of market-like value to Kalshi event ticker."""
+    """Best-effort conversion of market-like value to Kalshi event ticker.
+
+    URL path format is {event_ticker}/{slug}/{market_ticker}, so the first
+    segment is the event ticker.  For bare tickers (no "/") the API-returned
+    event_ticker is preferred; this heuristic is the last resort.
+    """
     ticker = str(value or "").strip()
     if not ticker:
         return ""
     if "/" in ticker:
-        ticker = ticker.split("/")[-1].strip()
-    ticker = ticker.upper()
-    if ticker.count("-") >= 2:
-        return ticker.rsplit("-", 1)[0]
-    return ticker
+        # First segment of the path is always the event ticker
+        return ticker.split("/")[0].strip().upper()
+    # Bare ticker — no reliable heuristic; return as-is (caller uses API first)
+    return ticker.upper()
 
 
 def _get_market_payload(market_like):
@@ -266,9 +290,8 @@ def _get_market_payload(market_like):
 
     for candidate in candidates:
         res = requests.get(f"{KALSHI_BASE}/markets/{candidate}", timeout=HTTP_TIMEOUT_SEC)
-        if res.status_code == 404:
+        if not res.ok:
             continue
-        res.raise_for_status()
         payload = res.json()
         market = payload.get("market")
         if isinstance(market, dict):
@@ -405,47 +428,73 @@ def _build_mapping_row(poly_market, poly_market_slug, kalshi_submarket):
     }
 
 
-def get_submarkets(market_like):
-    """Fetches all markets linked to the same Kalshi event."""
-    market_data = _get_market_payload(market_like)
-    event_ticker = ""
-    if isinstance(market_data, dict):
-        event_ticker = str(market_data.get("event_ticker", "")).strip()
-    if not event_ticker:
-        event_ticker = event_ticker_from_market_like(market_like)
-    if not event_ticker:
-        return []
-
+def _fetch_markets_for_event(event_ticker: str) -> list:
+    """Return all markets for a given event_ticker, paginated."""
     markets = []
     cursor = None
     while True:
         params = {"event_ticker": event_ticker, "limit": 500}
         if cursor:
             params["cursor"] = cursor
-
         res = requests.get(f"{KALSHI_BASE}/markets", params=params, timeout=HTTP_TIMEOUT_SEC)
         res.raise_for_status()
         payload = res.json()
-        page_markets = payload.get("markets", [])
-        if isinstance(page_markets, list):
-            markets.extend([m for m in page_markets if isinstance(m, dict)])
-
+        page = payload.get("markets", [])
+        if isinstance(page, list):
+            markets.extend([m for m in page if isinstance(m, dict)])
         cursor = payload.get("cursor")
-        if not cursor or not page_markets:
+        if not cursor or not page:
             break
+    return markets
 
-    # Deduplicate and attach a display name fallback for each subcontract.
-    deduped = {}
-    for market in markets:
-        ticker = str(market.get("ticker", "")).strip()
-        if not ticker:
-            continue
-        if ticker in deduped:
-            continue
-        market["display_name"] = subcontract_display_name(market)
-        deduped[ticker] = market
 
-    return list(deduped.values())
+def get_submarkets(market_like):
+    """Fetches all markets linked to the same Kalshi event.
+
+    Kalshi URL paths can take two forms:
+      {event_ticker}/{slug}/{market_ticker}  e.g. kxtesla/tesla-deliveries/kxtesla-26-q1
+      {series}/{slug}/{event_ticker}         e.g. kxratecutcount/number-of-rate-cuts/kxratecutcount-26dec31
+
+    We try multiple event_ticker candidates in order and use the first that
+    returns at least one market.
+    """
+    parts = [p for p in str(market_like).split("/") if p]
+
+    # Build ordered candidate list (deduped, uppercased)
+    candidates: list[str] = []
+
+    def _add(et: str) -> None:
+        et = et.strip().upper()
+        if et and et not in candidates:
+            candidates.append(et)
+
+    # 1. API lookup of the last segment — if it's a real market ticker the
+    #    response includes the authoritative event_ticker.
+    if parts:
+        market_data = _get_market_payload(parts[-1])
+        if isinstance(market_data, dict):
+            _add(str(market_data.get("event_ticker", "")))
+
+    # 2. Last URL segment — works when it IS the event ticker (e.g. rate cuts)
+    if parts:
+        _add(parts[-1])
+
+    # 3. First URL segment — works when it's the base event ticker (e.g. Tesla)
+    if len(parts) >= 2:
+        _add(parts[0])
+
+    for event_ticker in candidates:
+        markets = _fetch_markets_for_event(event_ticker)
+        if markets:
+            deduped = {}
+            for market in markets:
+                ticker = str(market.get("ticker", "")).strip()
+                if ticker and ticker not in deduped:
+                    market["display_name"] = subcontract_display_name(market)
+                    deduped[ticker] = market
+            return list(deduped.values())
+
+    return []
 
 
 def _normalize_header_name(value):
@@ -572,6 +621,120 @@ def build_output_rows(raw_poly_url, kalshi_url, context_label=""):
     return [_build_mapping_row(poly_data, poly_market_slug, selected)]
 
 
+# ---------------------------------------------------------------------------
+# Live API validation helpers (used by --validate flag)
+# ---------------------------------------------------------------------------
+
+def _validate_kalshi_market(ticker: str) -> dict:
+    """Verify the Kalshi market is open, not yet closed, and has an accessible orderbook."""
+    res = requests.get(f"{KALSHI_BASE}/markets/{ticker}", timeout=HTTP_TIMEOUT_SEC)
+    res.raise_for_status()
+    market = res.json().get("market", {})
+    if not isinstance(market, dict):
+        raise RuntimeError(f"Kalshi market payload malformed for {ticker}")
+    status = str(market.get("status", "")).strip().lower()
+    if status not in {"open", "active"}:
+        raise RuntimeError(f"Kalshi market '{ticker}' status is '{status}', expected active/open")
+
+    close_time = str(market.get("close_time") or "").strip()
+    if close_time:
+        try:
+            close_dt = datetime.datetime.fromisoformat(close_time.rstrip("Z")).replace(
+                tzinfo=datetime.timezone.utc
+            )
+            if close_dt <= datetime.datetime.now(datetime.timezone.utc):
+                raise RuntimeError(
+                    f"Kalshi market '{ticker}' has already closed (close_time={close_time})"
+                )
+        except ValueError:
+            pass  # Unparseable date — skip the check
+
+    orderbook_res = requests.get(
+        f"{KALSHI_BASE}/markets/{ticker}/orderbook", timeout=HTTP_TIMEOUT_SEC
+    )
+    orderbook_res.raise_for_status()
+
+    yes_sub = str(market.get("yes_sub_title", "")).strip()
+    display_name = (
+        yes_sub
+        or str(market.get("title", "")).strip()
+        or str(market.get("subtitle", "")).strip()
+    )
+    return {"close_time": close_time, "display_name": display_name}
+
+
+def _validate_poly_clob(slug: str) -> dict:
+    """Verify Polymarket CLOB tokens are accessible and prices look sane."""
+    res = requests.get(f"{POLY_GAMMA_BASE}/markets", params={"slug": slug}, timeout=HTTP_TIMEOUT_SEC)
+    res.raise_for_status()
+    payload = res.json()
+    if isinstance(payload, list) and payload:
+        market = payload[0]
+    elif isinstance(payload, dict) and payload.get("conditionId"):
+        market = payload
+    else:
+        raise RuntimeError(f"No Polymarket market found for slug '{slug}'")
+
+    outcomes, token_ids = _extract_outcomes_tokens(market)
+    if len(token_ids) < 2:
+        raise RuntimeError(f"Polymarket market '{slug}' does not expose at least two CLOB token IDs")
+
+    outcomes_lc = [o.strip().lower() for o in outcomes]
+    if "yes" in outcomes_lc and "no" in outcomes_lc:
+        yes_idx = outcomes_lc.index("yes")
+        no_idx = outcomes_lc.index("no")
+        if token_ids[yes_idx] == token_ids[no_idx]:
+            raise RuntimeError(f"Polymarket market '{slug}' YES and NO token IDs are identical")
+
+    for token_id in token_ids:
+        book_res = requests.get(
+            f"{POLY_CLOB_HOST}/book", params={"token_id": token_id}, timeout=HTTP_TIMEOUT_SEC
+        )
+        book_res.raise_for_status()
+
+    yes_ask = float(market.get("bestAsk") or 0)
+    yes_bid = float(market.get("bestBid") or 0)
+    if yes_ask > 0 and yes_bid > 0 and "yes" in outcomes_lc and "no" in outcomes_lc:
+        no_ask = 1.0 - yes_bid
+        ask_sum = yes_ask + no_ask
+        if ask_sum > 1.10:
+            raise RuntimeError(
+                f"Polymarket '{slug}' ask prices sum to {ask_sum:.3f} "
+                f"(YES ask={yes_ask:.3f}, NO ask={no_ask:.3f})"
+            )
+
+    end_date = str(
+        market.get("endDate") or market.get("end_date_iso") or market.get("end_date") or ""
+    ).strip()
+    return {"end_date": end_date}
+
+
+def validate_row(row: dict) -> dict:
+    """Run live API validation on a generated row.  Raises RuntimeError on failure.
+
+    Checks:
+    - Kalshi market is open/active and not yet closed
+    - Kalshi orderbook endpoint is accessible
+    - Polymarket CLOB token endpoints are accessible
+    - Ask-price sanity (sum ≤ 1.10)
+    Also populates resolution_time_utc if not already set.
+    """
+    kalshi_ticker = str(row.get("kalshi_market_id", "")).strip()
+    poly_slug = str(row.get("poly_slug", "")).strip()
+    if not kalshi_ticker or not poly_slug:
+        raise RuntimeError("Row missing kalshi_market_id or poly_slug")
+
+    kalshi_info = _validate_kalshi_market(kalshi_ticker)
+    poly_info = _validate_poly_clob(poly_slug)
+
+    validated = dict(row)
+    if not validated.get("resolution_time_utc"):
+        validated["resolution_time_utc"] = (
+            kalshi_info.get("close_time") or poly_info.get("end_date") or ""
+        )
+    return validated
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Create mapping rows from Polymarket and Kalshi links (interactive or file batch mode)."
@@ -580,6 +743,19 @@ def parse_args():
         "input_file",
         nargs="?",
         help="Optional .csv or .xlsx file where column 1 is Polymarket link and column 2 is Kalshi link.",
+    )
+    parser.add_argument(
+        "--user",
+        default=None,
+        help="Username for per-user pairs subfolder (e.g. --user dplynn). "
+             "Pairs are written to Polytoken/pairs/{username}/pairs.csv. "
+             "Defaults to the OS login name if omitted.",
+    )
+    parser.add_argument(
+        "--no-validate",
+        action="store_true",
+        help="Skip live API validation (Kalshi market open, CLOB token accessibility, price sanity). "
+             "Validation runs by default.",
     )
     return parser.parse_args()
 
@@ -595,52 +771,90 @@ def _is_duplicate(row, existing_keys):
     return False
 
 
+def _open_user_writer(username: str):
+    """Open the per-user pairs CSV for appending.  Returns (file_handle, csv.DictWriter)."""
+    out_dir = USER_PAIRS_DIR / username
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / "pairs.csv"
+    needs_header = not out_path.exists() or out_path.stat().st_size == 0
+    fh = out_path.open("a", newline="", encoding="utf-8")
+    writer = csv.DictWriter(fh, fieldnames=OUTPUT_FIELDS)
+    if needs_header:
+        writer.writeheader()
+    return fh, writer, out_path
+
+
 def main():
     args = parse_args()
-    writer = csv.DictWriter(sys.stdout, fieldnames=OUTPUT_FIELDS)
+
+    # Resolve username — falls back to OS login name automatically
+    username = (args.user or getpass.getuser()).strip().lower()
+    if not username:
+        print("ERROR: could not determine username; pass --user explicitly", file=sys.stderr)
+        sys.exit(1)
 
     existing_keys = load_existing_pair_keys()
     if existing_keys:
         print(f"Loaded {len(existing_keys)} existing pairs for duplicate checking", file=sys.stderr)
 
     duplicates_skipped = 0
+    fh, writer, out_path = _open_user_writer(username)
 
-    if args.input_file:
-        pairs = load_link_pairs(args.input_file)
-        successes = 0
-        for row_num, poly_link, kalshi_link in pairs:
-            context_label = f"[row {row_num}]"
-            try:
-                rows = build_output_rows(poly_link, kalshi_link, context_label=context_label)
-            except Exception as exc:
-                print(f"{context_label} Failed: {exc}", file=sys.stderr)
-                continue
+    def _maybe_validate(row, label=""):
+        if args.no_validate:
+            return row
+        try:
+            return validate_row(row)
+        except Exception as exc:
+            print(f"{label}Validation failed for {row.get('kalshi_market_id', '?')}: {exc}", file=sys.stderr)
+            return None
+
+    try:
+        if args.input_file:
+            pairs = load_link_pairs(args.input_file)
+            successes = 0
+            for row_num, poly_link, kalshi_link in pairs:
+                context_label = f"[row {row_num}] "
+                try:
+                    rows = build_output_rows(poly_link, kalshi_link, context_label=f"[row {row_num}]")
+                except Exception as exc:
+                    print(f"[row {row_num}] Failed: {exc}", file=sys.stderr)
+                    continue
+                for row in rows:
+                    row = _maybe_validate(row, label=context_label)
+                    if row is None:
+                        continue
+                    if _is_duplicate(row, existing_keys):
+                        print(f"{context_label}Skipped duplicate: {row.get('kalshi_market_id', '?')}", file=sys.stderr)
+                        duplicates_skipped += 1
+                        continue
+                    writer.writerow(row)
+                    successes += 1
+
+            if duplicates_skipped:
+                print(f"Skipped {duplicates_skipped} duplicate pair(s)", file=sys.stderr)
+            if successes == 0 and duplicates_skipped == 0:
+                raise RuntimeError("No rows were processed successfully")
+        else:
+            raw_poly_url = input("Paste Polymarket link: ").strip()
+            kalshi_url = input("Paste Kalshi link: ").strip()
+            rows = build_output_rows(raw_poly_url, kalshi_url)
             for row in rows:
+                row = _maybe_validate(row)
+                if row is None:
+                    continue
                 if _is_duplicate(row, existing_keys):
-                    print(f"{context_label} Skipped duplicate: {row.get('kalshi_market_id', '?')}", file=sys.stderr)
+                    print(f"Skipped duplicate: {row.get('kalshi_market_id', '?')}", file=sys.stderr)
                     duplicates_skipped += 1
                     continue
                 writer.writerow(row)
-                successes += 1
 
-        if duplicates_skipped:
-            print(f"Skipped {duplicates_skipped} duplicate pair(s)", file=sys.stderr)
-        if successes == 0 and duplicates_skipped == 0:
-            raise RuntimeError("No rows were processed successfully")
-        return
+            if duplicates_skipped:
+                print(f"Skipped {duplicates_skipped} duplicate pair(s)", file=sys.stderr)
+    finally:
+        fh.close()
 
-    raw_poly_url = input("Paste Polymarket link: ").strip()
-    kalshi_url = input("Paste Kalshi link: ").strip()
-    rows = build_output_rows(raw_poly_url, kalshi_url)
-    for row in rows:
-        if _is_duplicate(row, existing_keys):
-            print(f"Skipped duplicate: {row.get('kalshi_market_id', '?')}", file=sys.stderr)
-            duplicates_skipped += 1
-            continue
-        writer.writerow(row)
-
-    if duplicates_skipped:
-        print(f"Skipped {duplicates_skipped} duplicate pair(s)", file=sys.stderr)
+    print(f"Pairs written to {out_path}", file=sys.stderr)
 
 if __name__ == "__main__":
     main()

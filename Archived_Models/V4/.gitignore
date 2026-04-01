@@ -37,3 +37,14 @@ logs/
 data/runtime/
 *.sqlite
 *.db
+
+# Bot runtime state files
+failed_pairs.json
+expired_pairs.json
+bad_pairs.json
+opportunities.json
+entry_trades.json
+exit_trades.json
+open_positions.json
+cooldowns.json
+trades.json

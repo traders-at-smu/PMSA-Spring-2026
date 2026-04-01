@@ -11,6 +11,7 @@ config/settings.local.json
 *.zip
 .next/
 *.csv
+!Polytoken/pairs/**/pairs.csv
 logs/
 
 # Sensitive / generated data files

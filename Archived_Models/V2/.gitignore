@@ -25,11 +25,16 @@ dist/
 Thumbs.db
 
 # Secrets/config
+config.json
+credentials.json
 config/config.json
 config/credentials.json
 *.pem
 *.key
 *.env
+
+# Pip cache artifacts
+CACHEDIR.TAG
 
 # Runtime data
 logs/

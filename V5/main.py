@@ -18,6 +18,7 @@ Paper mode is the default. Live trading requires API credentials in config.
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import sys
 from pathlib import Path
@@ -207,6 +208,123 @@ def cmd_validate(args) -> int:
     return 0
 
 
+def _merge_user_pairs(pairs_file: str, user_pairs_dirs: str | list | None) -> None:
+    """Merge per-user staging CSVs into the master pairs Excel at startup.
+
+    Accepts a single directory path or a list of directory paths.  Each
+    directory is scanned for ``{username}/pairs.csv`` files.  New rows are
+    appended to the master Excel (deduped by poly_market_id + kalshi_market_id)
+    and each CSV is cleared after a successful write.
+    """
+    if not user_pairs_dirs:
+        return
+
+    # Normalise to a list of resolved Paths
+    raw = [user_pairs_dirs] if isinstance(user_pairs_dirs, str) else list(user_pairs_dirs)
+    dirs: list[Path] = []
+    pairs_parent = Path(pairs_file).parent
+    for entry in raw:
+        p = Path(entry)
+        if not p.is_absolute():
+            p = pairs_parent / entry
+        if p.exists():
+            dirs.append(p)
+
+    if not dirs:
+        return
+
+    csv_files = sorted(f for d in dirs for f in d.glob("*/pairs.csv"))
+    if not csv_files:
+        return
+
+    master = Path(pairs_file)
+    if not master.exists() or not master.suffix.lower() == ".xlsx":
+        print(
+            f"  [merge] pairs_file is not an .xlsx — skipping user pairs merge",
+            file=sys.stderr,
+        )
+        return
+
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        print("  [merge] openpyxl not installed — skipping user pairs merge", file=sys.stderr)
+        return
+
+    # Read the master Excel to build the existing-keys set
+    def _load_master_keys(ws) -> set[tuple[str, str]]:
+        headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
+        hmap = {str(h or "").strip().lower(): i + 1 for i, h in enumerate(headers)}
+        poly_col = hmap.get("poly_market_id")
+        kalshi_col = hmap.get("kalshi_market_id")
+        keys: set[tuple[str, str]] = set()
+        if poly_col is None or kalshi_col is None:
+            return keys
+        for r in range(2, ws.max_row + 1):
+            pid = str(ws.cell(row=r, column=poly_col).value or "").strip()
+            kid = str(ws.cell(row=r, column=kalshi_col).value or "").strip()
+            if pid and kid:
+                keys.add((pid, kid))
+        return keys
+
+    def _col_map(ws) -> dict[str, int]:
+        """Return {field_name: column_index} for the master sheet header row."""
+        return {
+            str(ws.cell(row=1, column=c).value or "").strip(): c
+            for c in range(1, ws.max_column + 1)
+        }
+
+    total_added = 0
+    total_skipped = 0
+    for csv_file in csv_files:
+        try:
+            with csv_file.open(newline="", encoding="utf-8") as f:
+                rows = list(csv.DictReader(f))
+            if not rows:
+                continue
+
+            wb = load_workbook(master)
+            ws = wb.active
+            existing = _load_master_keys(ws)
+            col_map = _col_map(ws)
+            added = 0
+            skipped = 0
+
+            for row in rows:
+                pid = str(row.get("poly_market_id") or "").strip()
+                kid = str(row.get("kalshi_market_id") or "").strip()
+                if not pid or not kid or (pid, kid) in existing:
+                    skipped += 1
+                    continue
+                next_r = ws.max_row + 1
+                for field, value in row.items():
+                    col = col_map.get(field)
+                    if col:
+                        ws.cell(row=next_r, column=col, value=value)
+                existing.add((pid, kid))
+                added += 1
+
+            if added:
+                wb.save(master)
+            total_added += added
+            total_skipped += skipped
+
+            # Clear the CSV after successful write (keep file, remove content)
+            csv_file.write_text("", encoding="utf-8")
+            print(
+                f"  [merge] {csv_file.parent.name}: added {added}, skipped {skipped} duplicate(s), cleared file",
+                file=sys.stderr,
+            )
+        except Exception as exc:
+            print(f"  [merge] failed to merge {csv_file}: {exc}", file=sys.stderr)
+
+    if total_added or total_skipped:
+        print(
+            f"  [merge] Total: {total_added} pair(s) added to {master.name}, {total_skipped} skipped",
+            file=sys.stderr,
+        )
+
+
 def cmd_scan(args) -> int:
     cfg = load_config(args.config)
     errors = _validate_config(cfg)
@@ -218,6 +336,7 @@ def cmd_scan(args) -> int:
     _compile_fee_fns(cfg)
     cfg["mode"] = _effective_mode(cfg)
 
+    _merge_user_pairs(cfg["pairs_file"], cfg.get("user_pairs_dirs"))
     pairs = load_pairs(cfg["pairs_file"])
     if not pairs:
         print(f"{Fore.YELLOW}No active pairs found in '{cfg['pairs_file']}'{Style.RESET_ALL}")
@@ -242,6 +361,7 @@ def cmd_run(args) -> int:
     _compile_fee_fns(cfg)
     cfg["mode"] = _effective_mode(cfg)
 
+    _merge_user_pairs(cfg["pairs_file"], cfg.get("user_pairs_dirs"))
     pairs = load_pairs(cfg["pairs_file"])
     if not pairs:
         print(f"{Fore.YELLOW}No active pairs found in '{cfg['pairs_file']}'{Style.RESET_ALL}")

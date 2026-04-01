@@ -822,10 +822,10 @@ def evaluate_pair(
             # underlying outcome (inverted / same-side pair).  Such an opportunity
             # is not a hedge — it's a leveraged directional bet.  Skip it and warn.
             cost_per_contract = walk["kp_cost"] / c
-            if cost_per_contract < 0.80:
+            if cost_per_contract < 0.85:
                 print(
                     f"  [WARN] {pair['pair_id']} {strat['strategy']}: "
-                    f"cost/contract={cost_per_contract:.3f} < 0.80 — "
+                    f"cost/contract={cost_per_contract:.3f} < 0.85 — "
                     f"likely inverted (same-side) pair, skipping",
                     file=sys.stderr,
                 )
@@ -1760,6 +1760,8 @@ def run_scan(
 
         try:
             _, kq, pq = result
+            if cfg.get("skip_multi_outcome", False) and pq.get("type") == "multi":
+                continue
             opps = evaluate_pair(pair, kq, pq, cfg)
         except Exception as exc:
             failed_ids.add(pair["pair_id"])
@@ -1773,7 +1775,7 @@ def run_scan(
 
         if opps and opps[0].get("_bad_pair"):
             reason = (
-                f"{opps[0].get('strategy')} cost/contract={opps[0].get('cost_per_contract', 0):.3f} < 0.80"
+                f"{opps[0].get('strategy')} cost/contract={opps[0].get('cost_per_contract', 0):.3f} < 0.85"
             )
             bad_ids.add(pair["pair_id"])
             _log_bad_pair(pair, reason, bad_log)
