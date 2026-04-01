@@ -822,14 +822,14 @@ def evaluate_pair(
             # underlying outcome (inverted / same-side pair).  Such an opportunity
             # is not a hedge — it's a leveraged directional bet.  Skip it and warn.
             cost_per_contract = walk["kp_cost"] / c
-            if cost_per_contract < 0.60:
+            if cost_per_contract < 0.80:
                 print(
                     f"  [WARN] {pair['pair_id']} {strat['strategy']}: "
-                    f"cost/contract={cost_per_contract:.3f} < 0.60 — "
+                    f"cost/contract={cost_per_contract:.3f} < 0.80 — "
                     f"likely inverted (same-side) pair, skipping",
                     file=sys.stderr,
                 )
-                continue
+                return [{"_bad_pair": True, "strategy": strat["strategy"], "cost_per_contract": cost_per_contract}]
 
             if edge_dollar <= 0:
                 continue
@@ -1205,20 +1205,24 @@ def _process_exit_positions(
         p_token_ids = [t for t in (position.get("p_token_ids") or []) if str(t).strip()]
         p_levels = []
         p_bid = 0.0
-        if p_token_ids:
-            books = poly.get_books(p_token_ids)
-            leg_bid_levels = []
-            leg_best_bids = []
-            for tid in p_token_ids:
-                book = books.get(tid)
-                if not book:
-                    raise RuntimeError(f"Missing orderbook for Polymarket token {tid}")
-                leg_bid_levels.append(_normalize_levels(poly._parse_bid_levels(book), descending=True))
-                leg_best_bids.append(poly._best_bid(book))
-            p_bid = sum(leg_best_bids)
-            p_levels = leg_bid_levels[0] if len(leg_bid_levels) == 1 else _combine_leg_levels(leg_bid_levels)
-        else:
-            pq = poly.get_quotes(position.get("yes_token_id", ""), position.get("no_token_id", ""), "")
+        try:
+            if p_token_ids:
+                books = poly.get_books(p_token_ids)
+                leg_bid_levels = []
+                leg_best_bids = []
+                for tid in p_token_ids:
+                    book = books.get(tid)
+                    if not book:
+                        raise RuntimeError(f"Missing orderbook for Polymarket token {tid}")
+                    leg_bid_levels.append(_normalize_levels(poly._parse_bid_levels(book), descending=True))
+                    leg_best_bids.append(poly._best_bid(book))
+                p_bid = sum(leg_best_bids)
+                p_levels = leg_bid_levels[0] if len(leg_bid_levels) == 1 else _combine_leg_levels(leg_bid_levels)
+            else:
+                pq = poly.get_quotes(position.get("yes_token_id", ""), position.get("no_token_id", ""), "")
+        except Exception as exc:
+            print(f"  {Fore.YELLOW}Exit Poly fetch failed for {pair_id}: {exc}{Style.RESET_ALL}")
+            continue
 
         if position["strategy"] == "BUY_KY_BUY_PN":
             k_bid = kq["yes_bid"]
@@ -1423,6 +1427,44 @@ def _log_failed_pair(pair: dict[str, Any], error: str, log_path: str) -> None:
         f.write(json.dumps(entry) + "\n")
 
 
+def _log_bad_pair(pair: dict[str, Any], reason: str, log_path: str) -> None:
+    """Append one entry to the bad-pairs log file."""
+    Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "pair_id": pair["pair_id"],
+        "kalshi_ticker": pair.get("kalshi_ticker", ""),
+        "title": pair.get("title", ""),
+        "reason": reason,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    with Path(log_path).open("a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def load_bad_ids(log_path: str) -> set[str]:
+    """Read the bad-pairs log and return the set of pair_ids to skip."""
+    p = Path(log_path)
+    ids: set[str] = set()
+    if not p.exists():
+        return ids
+    try:
+        with p.open(encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    entry = json.loads(line)
+                    pid = entry.get("pair_id", "")
+                    if pid:
+                        ids.add(pid)
+                except json.JSONDecodeError:
+                    pass
+    except OSError:
+        pass
+    return ids
+
+
 # ── Fill breakdown ────────────────────────────────────────────────────────────
 
 def _print_fill_breakdown(opp: dict[str, Any]) -> None:
@@ -1573,6 +1615,7 @@ def run_scan(
     execute: bool = False,
     failed_ids: set[str] | None = None,
     expired_ids: set[str] | None = None,
+    bad_ids: set[str] | None = None,
     skip_pair_ids: set[str] | None = None,
     on_new_position: Any | None = None,
 ) -> list[dict[str, Any]]:
@@ -1592,11 +1635,15 @@ def run_scan(
     if expired_ids is None:
         expired_ids = set()
 
+    if bad_ids is None:
+        bad_ids = set()
+
     mode = _resolve_execution_mode(cfg)
     log_path = cfg.get("entry_log", "entry_trades.json")
     opp_log_path = cfg.get("opportunities_log", "opportunities.json")
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")
+    bad_log = cfg.get("bad_log", "bad_pairs.json")
     max_workers = int(cfg.get("max_workers", 30))
     ts = datetime.now().strftime("%H:%M:%S")
     t0 = time.monotonic()
@@ -1631,11 +1678,12 @@ def run_scan(
         p for p in pairs
         if p["pair_id"] not in failed_ids
         and p["pair_id"] not in expired_ids
+        and p["pair_id"] not in bad_ids
         and p["pair_id"] not in skip_pair_ids
     ]
     skipped = len(pairs) - len(active_pairs)
 
-    skip_note = f"  {Style.DIM}({skipped} skipped — failed/expired){Style.RESET_ALL}" if skipped else ""
+    skip_note = f"  {Style.DIM}({skipped} skipped — failed/expired/bad){Style.RESET_ALL}" if skipped else ""
     print(
         f"\n{Style.DIM}[{ts}]{Style.RESET_ALL} "
         f"Fetching quotes for {len(active_pairs)} pair(s)  "
@@ -1721,6 +1769,14 @@ def run_scan(
                 f"  {Fore.YELLOW}! {label} (eval): {exc}  → logged to failed pairs{Style.RESET_ALL}",
                 file=sys.stderr,
             )
+            continue
+
+        if opps and opps[0].get("_bad_pair"):
+            reason = (
+                f"{opps[0].get('strategy')} cost/contract={opps[0].get('cost_per_contract', 0):.3f} < 0.80"
+            )
+            bad_ids.add(pair["pair_id"])
+            _log_bad_pair(pair, reason, bad_log)
             continue
 
         # Optional per-pair market status line (enabled via print_market_status in config).
@@ -1849,6 +1905,7 @@ def run_loop(
     pair_offset = 0
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")
+    bad_log = cfg.get("bad_log", "bad_pairs.json")
     position_file = cfg.get("position_file", "open_positions.json")
     cooldown_file = cfg.get("cooldown_file", "cooldowns.json")
 
@@ -1866,6 +1923,14 @@ def run_loop(
         print(
             f"  {Style.DIM}Loaded {len(expired_ids)} previously expired pair(s) from "
             f"{expired_log} — these will be skipped.{Style.RESET_ALL}"
+        )
+
+    # Load any previously flagged bad (same-side/inverted) pairs
+    bad_ids = load_bad_ids(bad_log)
+    if bad_ids:
+        print(
+            f"  {Style.DIM}Loaded {len(bad_ids)} bad pair(s) from "
+            f"{bad_log} — these will be skipped.{Style.RESET_ALL}"
         )
 
     positions = _load_open_positions(position_file)
@@ -1944,6 +2009,7 @@ def run_loop(
                 execute=True,
                 failed_ids=failed_ids,
                 expired_ids=expired_ids,
+                bad_ids=bad_ids,
                 skip_pair_ids=skip_pair_ids,
                 on_new_position=_on_new_position,
             )

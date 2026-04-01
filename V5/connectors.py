@@ -398,7 +398,12 @@ class PolymarketConnector:
         }
 
     def get_books(self, token_ids: list[str]) -> dict[str, dict[str, Any]]:
-        """Fetch orderbooks for multiple Polymarket token IDs in parallel."""
+        """Fetch orderbooks for multiple Polymarket token IDs in parallel.
+
+        Individual fetch failures are skipped with a warning rather than
+        propagating — callers should check whether a token is present in the
+        returned dict before using it.
+        """
         token_ids = [str(t).strip() for t in token_ids if str(t).strip()]
         if not token_ids:
             return {}
@@ -407,7 +412,10 @@ class PolymarketConnector:
             futures = {pool.submit(self._fetch_book, tid): tid for tid in token_ids}
             for fut in futures:
                 tid = futures[fut]
-                books[tid] = fut.result()
+                try:
+                    books[tid] = fut.result()
+                except Exception as exc:
+                    print(f"  [WARN] Polymarket book fetch failed for token …{tid[-8:]}: {exc}")
         return books
 
     @staticmethod

@@ -1469,5 +1469,504 @@
     "entry_timestamp": "2026-04-01T00:25:04.879714+00:00",
     "entry_trade_number": "T00034",
     "cooldown_until": "2026-04-01T01:25:04.879714+00:00"
+  },
+  "pair-0204": {
+    "pair_id": "pair-0204",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXTRUMPSAYMONTH-26APR01-THIR",
+    "p_token_id": "96711725173787320526655440313729623086653518807576111829526721151095098392809",
+    "p_token_ids": [
+      "96711725173787320526655440313729623086653518807576111829526721151095098392809"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "96711725173787320526655440313729623086653518807576111829526721151095098392809",
+    "no_token_id": "51675679135941600189729598754382128309485339631100275549039308732188510689687",
+    "title": "Will Trump say \"Third term\" in March?",
+    "contracts": 1000,
+    "entry_k_price": 0.71,
+    "entry_p_price": 0.19,
+    "entry_kp_cost": 905.368000000005,
+    "entry_fills": [
+      {
+        "k_price": 0.7,
+        "p_price": 0.169,
+        "contracts": 22
+      },
+      {
+        "k_price": 0.7,
+        "p_price": 0.17,
+        "contracts": 55
+      },
+      {
+        "k_price": 0.7,
+        "p_price": 0.173,
+        "contracts": 30
+      },
+      {
+        "k_price": 0.7,
+        "p_price": 0.18,
+        "contracts": 93
+      },
+      {
+        "k_price": 0.71,
+        "p_price": 0.18,
+        "contracts": 407
+      },
+      {
+        "k_price": 0.71,
+        "p_price": 0.188,
+        "contracts": 20
+      },
+      {
+        "k_price": 0.71,
+        "p_price": 0.19,
+        "contracts": 373
+      }
+    ],
+    "entry_fee": 14.48,
+    "entry_edge_dollar": 70.152,
+    "entry_arr": 0.07748451458411888,
+    "entry_edge_pct": 0.07748451458411888,
+    "entry_timestamp": "2026-04-01T13:17:14.619978+00:00",
+    "entry_trade_number": "T00035",
+    "cooldown_until": "2026-04-01T14:17:14.619978+00:00"
+  },
+  "pair-0319": {
+    "pair_id": "pair-0319",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXFRENCHPRES-27-DLIS",
+    "p_token_id": "79358475953126059185096320578578995575874288599466094920037110232928386404141",
+    "p_token_ids": [
+      "79358475953126059185096320578578995575874288599466094920037110232928386404141"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "55404192439775628931124671719520886657525387168536821457706619003199189099864",
+    "no_token_id": "79358475953126059185096320578578995575874288599466094920037110232928386404141",
+    "title": "Will David Lisnard win the 2027 French presidential election?",
+    "contracts": 382,
+    "entry_k_price": 0.03,
+    "entry_p_price": 0.95,
+    "entry_kp_cost": 374.7610000000027,
+    "entry_fills": [
+      {
+        "k_price": 0.03,
+        "p_price": 0.949,
+        "contracts": 379
+      },
+      {
+        "k_price": 0.03,
+        "p_price": 0.95,
+        "contracts": 3
+      }
+    ],
+    "entry_fee": 0.78,
+    "entry_edge_dollar": 2.639,
+    "entry_arr": 0.007041821320781223,
+    "entry_edge_pct": 0.007041821320781223,
+    "entry_timestamp": "2026-04-01T13:17:14.639002+00:00",
+    "entry_trade_number": "T00036",
+    "cooldown_until": "2026-04-01T14:17:14.639002+00:00"
+  },
+  "pair-0449": {
+    "pair_id": "pair-0449",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXMLB-26-SD",
+    "p_token_id": "77403403357262042499116091970429347185210491161428886619331507282750600367590",
+    "p_token_ids": [
+      "77403403357262042499116091970429347185210491161428886619331507282750600367590"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "31221080242705278649725019814790252911735511309312424063267127209870268745118",
+    "no_token_id": "77403403357262042499116091970429347185210491161428886619331507282750600367590",
+    "title": "Will the San Diego Padres win the 2026 World Series?",
+    "contracts": 101,
+    "entry_k_price": 0.01,
+    "entry_p_price": 0.97,
+    "entry_kp_cost": 98.95799999999988,
+    "entry_fills": [
+      {
+        "k_price": 0.01,
+        "p_price": 0.969,
+        "contracts": 92
+      },
+      {
+        "k_price": 0.01,
+        "p_price": 0.97,
+        "contracts": 9
+      }
+    ],
+    "entry_fee": 0.07,
+    "entry_edge_dollar": 0.962,
+    "entry_arr": 0.00972129590331364,
+    "entry_edge_pct": 0.00972129590331364,
+    "entry_timestamp": "2026-04-01T13:17:46.406872+00:00",
+    "entry_trade_number": "T00037",
+    "cooldown_until": "2026-04-01T14:17:46.406872+00:00"
+  },
+  "pair-0456": {
+    "pair_id": "pair-0456",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXMLB-26-LAD",
+    "p_token_id": "1204155327844132216976037605131756626466220080116229118353112706411786559118",
+    "p_token_ids": [
+      "1204155327844132216976037605131756626466220080116229118353112706411786559118"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "1204155327844132216976037605131756626466220080116229118353112706411786559118",
+    "no_token_id": "65347099416413012038874568960137034756796660297895673058090101511987410403548",
+    "title": "Will the Los Angeles Dodgers win the 2026 World Series?",
+    "contracts": 1000,
+    "entry_k_price": 0.67,
+    "entry_p_price": 0.29,
+    "entry_kp_cost": 972.7199999999943,
+    "entry_fills": [
+      {
+        "k_price": 0.67,
+        "p_price": 0.28,
+        "contracts": 276
+      },
+      {
+        "k_price": 0.67,
+        "p_price": 0.29,
+        "contracts": 724
+      }
+    ],
+    "entry_fee": 15.48,
+    "entry_edge_dollar": 1.8,
+    "entry_arr": 0.00185048112509835,
+    "entry_edge_pct": 0.00185048112509835,
+    "entry_timestamp": "2026-04-01T13:17:46.415775+00:00",
+    "entry_trade_number": "T00038",
+    "cooldown_until": "2026-04-01T14:17:46.415775+00:00"
+  },
+  "pair-0942": {
+    "pair_id": "pair-0942",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXGOVCA-26-TSTE",
+    "p_token_id": "20705956847651355292903061592334315186019059728484478747049630947764308652621",
+    "p_token_ids": [
+      "20705956847651355292903061592334315186019059728484478747049630947764308652621"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "20705956847651355292903061592334315186019059728484478747049630947764308652621",
+    "no_token_id": "36038186568927998467509291483985866554521847803798174147820946484272760262519",
+    "title": "Will Tom Steyer win the California Governor Election in 2026?",
+    "contracts": 387,
+    "entry_k_price": 0.85,
+    "entry_p_price": 0.129,
+    "entry_kp_cost": 378.8710000000005,
+    "entry_fills": [
+      {
+        "k_price": 0.85,
+        "p_price": 0.119,
+        "contracts": 68
+      },
+      {
+        "k_price": 0.85,
+        "p_price": 0.12,
+        "contracts": 306
+      },
+      {
+        "k_price": 0.85,
+        "p_price": 0.123,
+        "contracts": 3
+      },
+      {
+        "k_price": 0.85,
+        "p_price": 0.127,
+        "contracts": 5
+      },
+      {
+        "k_price": 0.85,
+        "p_price": 0.129,
+        "contracts": 5
+      }
+    ],
+    "entry_fee": 3.46,
+    "entry_edge_dollar": 0.799,
+    "entry_arr": 0.0013247071314161397,
+    "entry_edge_pct": 0.0021088972235919403,
+    "entry_timestamp": "2026-04-01T13:19:17.639684+00:00",
+    "entry_trade_number": "T00039",
+    "cooldown_until": "2026-04-01T14:19:17.639684+00:00"
+  },
+  "pair-1355": {
+    "pair_id": "pair-1355",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXPRESPERSON-28-AOCA",
+    "p_token_id": "11493926619286817179231142642565394485790380952577225820901334479399429951651",
+    "p_token_ids": [
+      "11493926619286817179231142642565394485790380952577225820901334479399429951651"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "8113830512143065501177519557124858581375945005490796772950589720955457782465",
+    "no_token_id": "11493926619286817179231142642565394485790380952577225820901334479399429951651",
+    "title": "Will Alexandria Ocasio-Cortez win the 2028 US Presidential Election?",
+    "contracts": 1000,
+    "entry_k_price": 0.04,
+    "entry_p_price": 0.936,
+    "entry_kp_cost": 978.671000000011,
+    "entry_fills": [
+      {
+        "k_price": 0.04,
+        "p_price": 0.935,
+        "contracts": 19
+      },
+      {
+        "k_price": 0.04,
+        "p_price": 0.936,
+        "contracts": 981
+      }
+    ],
+    "entry_fee": 2.69,
+    "entry_edge_dollar": 8.639,
+    "entry_arr": 0.002448165521770329,
+    "entry_edge_pct": 0.008827276990928454,
+    "entry_timestamp": "2026-04-01T13:19:50.706003+00:00",
+    "entry_trade_number": "T00040",
+    "cooldown_until": "2026-04-01T14:19:50.706003+00:00"
+  },
+  "pair-1416": {
+    "pair_id": "pair-1416",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXTOPCHEF-26DEC31-LAU",
+    "p_token_id": "80703514913841289447499707392341116994489630927660641096663560615279832145191",
+    "p_token_ids": [
+      "80703514913841289447499707392341116994489630927660641096663560615279832145191"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "80703514913841289447499707392341116994489630927660641096663560615279832145191",
+    "no_token_id": "57669623154671128997843596370697969875043321518393625147318336785734581120195",
+    "title": "Will Laurence Louie win Top Chef Season 23?",
+    "contracts": 61,
+    "entry_k_price": 0.95,
+    "entry_p_price": 0.034,
+    "entry_kp_cost": 59.06700000000007,
+    "entry_fills": [
+      {
+        "k_price": 0.94,
+        "p_price": 0.017,
+        "contracts": 20
+      },
+      {
+        "k_price": 0.94,
+        "p_price": 0.018,
+        "contracts": 6
+      },
+      {
+        "k_price": 0.95,
+        "p_price": 0.018,
+        "contracts": 10
+      },
+      {
+        "k_price": 0.95,
+        "p_price": 0.02,
+        "contracts": 14
+      },
+      {
+        "k_price": 0.95,
+        "p_price": 0.021,
+        "contracts": 5
+      },
+      {
+        "k_price": 0.95,
+        "p_price": 0.022,
+        "contracts": 5
+      },
+      {
+        "k_price": 0.95,
+        "p_price": 0.034,
+        "contracts": 1
+      }
+    ],
+    "entry_fee": 0.22,
+    "entry_edge_dollar": 1.103,
+    "entry_arr": 0.024249917308220785,
+    "entry_edge_pct": 0.018673709516310765,
+    "entry_timestamp": "2026-04-01T13:20:24.279812+00:00",
+    "entry_trade_number": "T00041",
+    "cooldown_until": "2026-04-01T14:20:24.279812+00:00"
+  },
+  "pair-0441": {
+    "pair_id": "pair-0441",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXMLBNLCY-26-SOHT",
+    "p_token_id": "54427851220045806849007732404021815404738754029648816420782067064780575043119",
+    "p_token_ids": [
+      "54427851220045806849007732404021815404738754029648816420782067064780575043119"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "54427851220045806849007732404021815404738754029648816420782067064780575043119",
+    "no_token_id": "50147062483585317603354345204880237466725997055003213335305816036870090985850",
+    "title": "Will Shohei Ohtani win the 2026 NL Cy Young Award?",
+    "contracts": 20,
+    "entry_k_price": 0.87,
+    "entry_p_price": 0.09,
+    "entry_kp_cost": 19.353999999999996,
+    "entry_fills": [
+      {
+        "k_price": 0.87,
+        "p_price": 0.089,
+        "contracts": 6
+      },
+      {
+        "k_price": 0.87,
+        "p_price": 0.09,
+        "contracts": 14
+      }
+    ],
+    "entry_fee": 0.16,
+    "entry_edge_dollar": 0.286,
+    "entry_arr": 0.014777307016637651,
+    "entry_edge_pct": 0.014777307016637651,
+    "entry_timestamp": "2026-04-01T20:05:44.941620+00:00",
+    "entry_trade_number": "T00042",
+    "cooldown_until": "2026-04-01T21:05:44.941620+00:00"
+  },
+  "pair-0720": {
+    "pair_id": "pair-0720",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXMLBNLEAST-26-NYM",
+    "p_token_id": "85768983909417015724908953360617786056730961413948369205154523713838651080661",
+    "p_token_ids": [
+      "85768983909417015724908953360617786056730961413948369205154523713838651080661"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "85768983909417015724908953360617786056730961413948369205154523713838651080661",
+    "no_token_id": "54410861073005018217406853639210806422192711631513910399230781272608013245491",
+    "title": "Will New York Mets win the 2026 NL East title?",
+    "contracts": 80,
+    "entry_k_price": 0.6,
+    "entry_p_price": 0.36,
+    "entry_kp_cost": 77.41000000000007,
+    "entry_fills": [
+      {
+        "k_price": 0.6,
+        "p_price": 0.34,
+        "contracts": 15
+      },
+      {
+        "k_price": 0.6,
+        "p_price": 0.35,
+        "contracts": 44
+      },
+      {
+        "k_price": 0.6,
+        "p_price": 0.36,
+        "contracts": 21
+      }
+    ],
+    "entry_fee": 1.35,
+    "entry_edge_dollar": 0.44,
+    "entry_arr": 0.005684020152434242,
+    "entry_edge_pct": 0.005684020152434243,
+    "entry_timestamp": "2026-04-01T20:06:18.413314+00:00",
+    "entry_trade_number": "T00043",
+    "cooldown_until": "2026-04-01T21:06:18.413314+00:00"
+  },
+  "pair-0804": {
+    "pair_id": "pair-0804",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "APPLEFOLD-26DEC31",
+    "p_token_id": "35608595602971585131748334524997534059288005974951964270070510209825391272871",
+    "p_token_ids": [
+      "35608595602971585131748334524997534059288005974951964270070510209825391272871"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "35608595602971585131748334524997534059288005974951964270070510209825391272871",
+    "no_token_id": "86136836547770521111743494575582395458930966240091848908759010720929112549108",
+    "title": "Will Apple release a foldable iPhone before 2027?",
+    "contracts": 50,
+    "entry_k_price": 0.17,
+    "entry_p_price": 0.8,
+    "entry_kp_cost": 48.63999999999996,
+    "entry_fills": [
+      {
+        "k_price": 0.17,
+        "p_price": 0.79,
+        "contracts": 36
+      },
+      {
+        "k_price": 0.17,
+        "p_price": 0.8,
+        "contracts": 14
+      }
+    ],
+    "entry_fee": 0.5,
+    "entry_edge_dollar": 0.36,
+    "entry_arr": 0.0074013157894745555,
+    "entry_edge_pct": 0.0074013157894745555,
+    "entry_timestamp": "2026-04-01T20:15:29.778067+00:00",
+    "entry_trade_number": "T00044",
+    "cooldown_until": "2026-04-01T21:15:29.778067+00:00"
+  },
+  "pair-0339": {
+    "pair_id": "pair-0339",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXUSAIRANAGREEMENT-27",
+    "p_token_id": "102936224134271070189104847090829839924697394514566827387181305960175107677216",
+    "p_token_ids": [
+      "102936224134271070189104847090829839924697394514566827387181305960175107677216"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "102936224134271070189104847090829839924697394514566827387181305960175107677216",
+    "no_token_id": "45763018441764333771124945243746174684578244015331389396782339063349542289693",
+    "title": "US-Iran nuclear deal before 2027?",
+    "contracts": 1000,
+    "entry_k_price": 0.57,
+    "entry_p_price": 0.39,
+    "entry_kp_cost": 970.1299999999956,
+    "entry_fills": [
+      {
+        "k_price": 0.56,
+        "p_price": 0.39,
+        "contracts": 710
+      },
+      {
+        "k_price": 0.57,
+        "p_price": 0.39,
+        "contracts": 290
+      }
+    ],
+    "entry_fee": 17.23,
+    "entry_edge_dollar": 2.64,
+    "entry_arr": 0.0027212847762716854,
+    "entry_edge_pct": 0.0027212847762716854,
+    "entry_timestamp": "2026-04-01T20:22:59.867069+00:00",
+    "entry_trade_number": "T00045",
+    "cooldown_until": "2026-04-01T21:22:59.867069+00:00"
   }
 }

@@ -49,3 +49,7 @@ DONE
 - Fix Fees
 - Should errors when looking up a pair automatically be added to failed pairs or should it be re run a couple times incase it shouldnt have been
  
+
+ LIVE TRADING:
+ - Make sure it is able to buy contracts and not $
+ 
