@@ -833,6 +833,11 @@ export class CrossPlatformScreener {
     }
   }
 
+  /** Flush the Kimi cache to disk immediately. Call before process exit. */
+  flushKimiCache(): void {
+    this.kimiService?.flushSync();
+  }
+
   invalidateCache(): void {
     this.cachedResults = null;
     this.cacheExpiry = 0;
@@ -997,6 +1002,7 @@ export class CrossPlatformScreener {
   private async computeResults(incremental: boolean): Promise<CrossPlatformResults> {
     this._scanning = true;
     this._abortRequested = false;
+    this._scanProgress = { done: 0, total: 0 };   // reset so UI shows 0/0 during text phase, not stale values
     const scanStart = Date.now();
     this._log("step", "Scan started — fetching markets from both venues...");
 

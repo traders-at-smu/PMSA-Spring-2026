@@ -140,7 +140,8 @@ export class KimiMatchingService {
       confidenceThreshold: 0.90,
       textScoreAutoAcceptMin: 0.99,
       textScoreAiZone: [0.50, 0.99],
-      maxAiCandidates: 1000,
+      maxAiCandidates: 500,
+      maxMatchesPerPoly: 3,
       fewShotExampleCount: 15,
       fewShotSelectionStrategy: "diverse",
     };
@@ -422,8 +423,26 @@ export class KimiMatchingService {
           semaphore.active++;
           return Promise.resolve();
         }
-        return new Promise<void>((resolve) => {
-          semaphore.queue.push(() => { semaphore.active++; resolve(); });
+        // If we wait more than 10 minutes to acquire a slot, a previous task is
+        // permanently hung (e.g. OS-level TCP hang that bypassed the 120s axios timeout).
+        // Throw so Promise.allSettled surfaces the error and the scan doesn't hang forever.
+        return new Promise<void>((resolve, reject) => {
+          let resolved = false;
+          const acquireTimeout = setTimeout(() => {
+            if (resolved) return;
+            resolved = true;
+            const idx = semaphore.queue.indexOf(resume);
+            if (idx !== -1) semaphore.queue.splice(idx, 1);
+            reject(new Error("[KimiMatch] Semaphore acquire timeout (10 min) — previous batch appears hung"));
+          }, 10 * 60 * 1000);
+          const resume = () => {
+            if (resolved) return;
+            resolved = true;
+            clearTimeout(acquireTimeout);
+            semaphore.active++;
+            resolve();
+          };
+          semaphore.queue.push(resume);
         });
       };
 

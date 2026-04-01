@@ -400,24 +400,43 @@ export function startServer(deps: ServerDeps): void {
       Connection: "keep-alive",
     });
 
-    // Send recent history first
-    const recent = crossPlatformScreener.getRecentLogs(100);
-    for (const entry of recent) {
-      res.write(`data: ${JSON.stringify(entry)}\n\n`);
-    }
+    let closed = false;
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      unsub();
+      clearInterval(ping);
+    };
 
-    // Subscribe to new entries
+    // Send recent history first
+    try {
+      const recent = crossPlatformScreener.getRecentLogs(100);
+      for (const entry of recent) {
+        res.write(`data: ${JSON.stringify(entry)}\n\n`);
+      }
+    } catch { /* client may have disconnected before history was sent */ }
+
+    // Subscribe to new entries — if res.write throws (broken socket), unsubscribe immediately
     const unsub = crossPlatformScreener.onLog((entry) => {
-      res.write(`data: ${JSON.stringify(entry)}\n\n`);
+      try {
+        res.write(`data: ${JSON.stringify(entry)}\n\n`);
+      } catch {
+        cleanup();
+      }
     });
 
     // Keep-alive ping every 15s
-    const ping = setInterval(() => res.write(": ping\n\n"), 15_000);
+    const ping = setInterval(() => {
+      try {
+        res.write(": ping\n\n");
+      } catch {
+        cleanup();
+      }
+    }, 15_000);
 
-    req.on("close", () => {
-      unsub();
-      clearInterval(ping);
-    });
+    req.on("close", cleanup);
+    req.on("error", cleanup);
+    res.on("error", cleanup);
   });
 
   // GET recent logs (non-streaming fallback)
@@ -842,6 +861,16 @@ export function startServer(deps: ServerDeps): void {
     if (req.path.startsWith("/api/")) return res.status(404).json({ error: "Not found" });
     res.sendFile(path.join(staticDir, "index.html"));
   });
+
+  // ---- Graceful shutdown: flush Kimi cache before process exits ----
+  // Prevents losing the last 30s of scan results if the server is killed mid-scan.
+  const gracefulShutdown = (signal: string) => {
+    console.log(`[Server] ${signal} received — flushing Kimi cache before exit...`);
+    try { crossPlatformScreener.flushKimiCache(); } catch { /* best-effort */ }
+    process.exit(0);
+  };
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT",  () => gracefulShutdown("SIGINT"));
 
   // ---- Start ----
   app.listen(PORT, BIND_HOST, () => {
