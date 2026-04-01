@@ -1,43 +1,4 @@
 {
-  "pair-0091": {
-    "pair_id": "pair-0091",
-    "strategy": "BUY_KN_BUY_PY",
-    "k_side": "no",
-    "p_side": "yes",
-    "kalshi_ticker": "KXTRUMPUFC-UFC327",
-    "p_token_id": "50787629581868943946224041264471979578686242498251911320486423625018816800513",
-    "p_token_ids": [
-      "50787629581868943946224041264471979578686242498251911320486423625018816800513"
-    ],
-    "p_leg_prices": [],
-    "p_leg_spend": [],
-    "yes_token_id": "50787629581868943946224041264471979578686242498251911320486423625018816800513",
-    "no_token_id": "22585452322039290961167814777244883021675407523398715127734946076847211154712",
-    "title": "Will Trump attend UFC 327?",
-    "contracts": 64,
-    "entry_k_price": 0.2,
-    "entry_p_price": 0.75,
-    "entry_kp_cost": 61.15999999999997,
-    "entry_fills": [
-      {
-        "k_price": 0.2,
-        "p_price": 0.74,
-        "contracts": 36
-      },
-      {
-        "k_price": 0.2,
-        "p_price": 0.75,
-        "contracts": 28
-      }
-    ],
-    "entry_fee": 0.72,
-    "entry_edge_dollar": 1.48,
-    "entry_arr": 0.024198822759974366,
-    "entry_edge_pct": 0.024198822759974363,
-    "entry_timestamp": "2026-03-31T15:44:22.491359+00:00",
-    "entry_trade_number": "T00001",
-    "cooldown_until": "2026-03-31T16:44:22.491359+00:00"
-  },
   "pair-0229": {
     "pair_id": "pair-0229",
     "strategy": "BUY_KY_BUY_PN",
@@ -53,20 +14,20 @@
     "yes_token_id": "71374746417250762730380527912272712513097236342003765299057478625453672420346",
     "no_token_id": "83927059231687845852651026871553434667801725822738488685067609860043289530006",
     "title": "Will Indianapolis Colts win the 2027 NFL AFC Championship?",
-    "contracts": 193,
+    "contracts": 167,
     "entry_k_price": 0.04,
     "entry_p_price": 0.94,
-    "entry_kp_cost": 187.6510000000008,
+    "entry_kp_cost": 162.40700000000066,
     "entry_fills": [
       {
         "k_price": 0.04,
         "p_price": 0.928,
-        "contracts": 25
+        "contracts": 5
       },
       {
         "k_price": 0.04,
         "p_price": 0.929,
-        "contracts": 59
+        "contracts": 53
       },
       {
         "k_price": 0.04,
@@ -79,13 +40,13 @@
         "contracts": 3
       }
     ],
-    "entry_fee": 0.52,
-    "entry_edge_dollar": 2.899,
-    "entry_arr": 0.015448891825778572,
-    "entry_edge_pct": 0.01544889182577857,
-    "entry_timestamp": "2026-03-31T15:44:49.132445+00:00",
-    "entry_trade_number": "T00002",
-    "cooldown_until": "2026-03-31T16:44:49.132445+00:00"
+    "entry_fee": 0.45,
+    "entry_edge_dollar": 2.473,
+    "entry_arr": 0.015227176168510827,
+    "entry_edge_pct": 0.015227176168510827,
+    "entry_timestamp": "2026-03-31T21:45:57.415247+00:00",
+    "entry_trade_number": "T00001",
+    "cooldown_until": "2026-03-31T22:45:57.415247+00:00"
   },
   "pair-0270": {
     "pair_id": "pair-0270",
@@ -117,9 +78,9 @@
     "entry_edge_dollar": 8.16,
     "entry_arr": 0.00843480597878875,
     "entry_edge_pct": 0.00843480597878875,
-    "entry_timestamp": "2026-03-31T15:44:49.147202+00:00",
-    "entry_trade_number": "T00003",
-    "cooldown_until": "2026-03-31T16:44:49.147202+00:00"
+    "entry_timestamp": "2026-03-31T21:45:57.428609+00:00",
+    "entry_trade_number": "T00002",
+    "cooldown_until": "2026-03-31T22:45:57.428609+00:00"
   },
   "pair-0272": {
     "pair_id": "pair-0272",
@@ -151,9 +112,83 @@
     "entry_edge_dollar": 4.1,
     "entry_arr": 0.004175365344443645,
     "entry_edge_pct": 0.004175365344443645,
-    "entry_timestamp": "2026-03-31T15:44:49.152923+00:00",
+    "entry_timestamp": "2026-03-31T21:45:57.433908+00:00",
+    "entry_trade_number": "T00003",
+    "cooldown_until": "2026-03-31T22:45:57.433908+00:00"
+  },
+  "pair-0298": {
+    "pair_id": "pair-0298",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXBRPRES-26-FBOL",
+    "p_token_id": "109876868437950584369987384406356259939519193117253465815665152916226511121427",
+    "p_token_ids": [
+      "109876868437950584369987384406356259939519193117253465815665152916226511121427"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "109876868437950584369987384406356259939519193117253465815665152916226511121427",
+    "no_token_id": "38310927461258927563020508025396887688249787380193911540547071417200646834355",
+    "title": "Will Fl\u00e1vio Bolsonaro win the 2026 Brazilian presidential election?",
+    "contracts": 1000,
+    "entry_k_price": 0.55,
+    "entry_p_price": 0.395,
+    "entry_kp_cost": 956.6529999999971,
+    "entry_fills": [
+      {
+        "k_price": 0.55,
+        "p_price": 0.385,
+        "contracts": 336
+      },
+      {
+        "k_price": 0.55,
+        "p_price": 0.386,
+        "contracts": 45
+      },
+      {
+        "k_price": 0.55,
+        "p_price": 0.387,
+        "contracts": 115
+      },
+      {
+        "k_price": 0.55,
+        "p_price": 0.389,
+        "contracts": 30
+      },
+      {
+        "k_price": 0.55,
+        "p_price": 0.39,
+        "contracts": 44
+      },
+      {
+        "k_price": 0.55,
+        "p_price": 0.391,
+        "contracts": 44
+      },
+      {
+        "k_price": 0.55,
+        "p_price": 0.393,
+        "contracts": 200
+      },
+      {
+        "k_price": 0.55,
+        "p_price": 0.394,
+        "contracts": 16
+      },
+      {
+        "k_price": 0.55,
+        "p_price": 0.395,
+        "contracts": 170
+      }
+    ],
+    "entry_fee": 17.33,
+    "entry_edge_dollar": 16.017,
+    "entry_arr": 0.01674274789291727,
+    "entry_edge_pct": 0.01674274789291727,
+    "entry_timestamp": "2026-03-31T21:45:57.442670+00:00",
     "entry_trade_number": "T00004",
-    "cooldown_until": "2026-03-31T16:44:49.152923+00:00"
+    "cooldown_until": "2026-03-31T22:45:57.442670+00:00"
   },
   "pair-0312": {
     "pair_id": "pair-0312",
@@ -170,29 +205,29 @@
     "yes_token_id": "1114938555853162662375805609341386795965961002028313810409954359771505507177",
     "no_token_id": "39814929193752558825038669670647206213767631805507014416889259758143556745530",
     "title": "Will Jordan Bardella win the 2027 French presidential election?",
-    "contracts": 1000,
-    "entry_k_price": 0.73,
-    "entry_p_price": 0.23,
-    "entry_kp_cost": 966.660000000011,
+    "contracts": 435,
+    "entry_k_price": 0.75,
+    "entry_p_price": 0.22,
+    "entry_kp_cost": 424.4,
     "entry_fills": [
       {
-        "k_price": 0.72,
-        "p_price": 0.23,
-        "contracts": 738
+        "k_price": 0.75,
+        "p_price": 0.21,
+        "contracts": 326
       },
       {
-        "k_price": 0.73,
-        "p_price": 0.23,
-        "contracts": 262
+        "k_price": 0.75,
+        "p_price": 0.22,
+        "contracts": 109
       }
     ],
-    "entry_fee": 14.04,
-    "entry_edge_dollar": 9.3,
-    "entry_arr": 0.009620756005202345,
-    "entry_edge_pct": 0.009620756005202345,
-    "entry_timestamp": "2026-03-31T15:44:49.167505+00:00",
+    "entry_fee": 5.71,
+    "entry_edge_dollar": 0.54,
+    "entry_arr": 0.0012723845428840718,
+    "entry_edge_pct": 0.0012723845428840718,
+    "entry_timestamp": "2026-03-31T21:45:57.446023+00:00",
     "entry_trade_number": "T00005",
-    "cooldown_until": "2026-03-31T16:44:49.167505+00:00"
+    "cooldown_until": "2026-03-31T22:45:57.446023+00:00"
   },
   "pair-0318": {
     "pair_id": "pair-0318",
@@ -224,9 +259,63 @@
     "entry_edge_dollar": 16.28,
     "entry_arr": 0.016838011708015767,
     "entry_edge_pct": 0.016838011708015767,
-    "entry_timestamp": "2026-03-31T15:44:49.172025+00:00",
+    "entry_timestamp": "2026-03-31T21:45:57.450625+00:00",
     "entry_trade_number": "T00006",
-    "cooldown_until": "2026-03-31T16:44:49.172025+00:00"
+    "cooldown_until": "2026-03-31T22:45:57.450625+00:00"
+  },
+  "pair-0338": {
+    "pair_id": "pair-0338",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXGTATRAILER-26MAY-26JUN",
+    "p_token_id": "8441400852834915183759801017793514978104486628517653995211751018945988243154",
+    "p_token_ids": [
+      "8441400852834915183759801017793514978104486628517653995211751018945988243154"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "8441400852834915183759801017793514978104486628517653995211751018945988243154",
+    "no_token_id": "109289569086508934142323222102974769075074494425163878721602922903101062859033",
+    "title": "GTA VI released before June 2026?",
+    "contracts": 1000,
+    "entry_k_price": 0.79,
+    "entry_p_price": 0.019,
+    "entry_kp_cost": 674.4299999999852,
+    "entry_fills": [
+      {
+        "k_price": 0.48,
+        "p_price": 0.019,
+        "contracts": 5
+      },
+      {
+        "k_price": 0.49,
+        "p_price": 0.019,
+        "contracts": 3
+      },
+      {
+        "k_price": 0.5,
+        "p_price": 0.019,
+        "contracts": 500
+      },
+      {
+        "k_price": 0.78,
+        "p_price": 0.019,
+        "contracts": 327
+      },
+      {
+        "k_price": 0.79,
+        "p_price": 0.019,
+        "contracts": 165
+      }
+    ],
+    "entry_fee": 16.15,
+    "entry_edge_dollar": 299.42,
+    "entry_arr": 0.44396008481239185,
+    "entry_edge_pct": 0.44396008481239185,
+    "entry_timestamp": "2026-03-31T21:45:57.455992+00:00",
+    "entry_trade_number": "T00007",
+    "cooldown_until": "2026-03-31T22:45:57.455992+00:00"
   },
   "pair-0368": {
     "pair_id": "pair-0368",
@@ -245,37 +334,27 @@
     "title": "Will Edmundo Gonz\u00e1lez be the leader of Venezuela end of 2026?",
     "contracts": 1000,
     "entry_k_price": 0.95,
-    "entry_p_price": 0.013,
-    "entry_kp_cost": 965.6940000000167,
+    "entry_p_price": 0.012,
+    "entry_kp_cost": 965.1980000000167,
     "entry_fills": [
       {
         "k_price": 0.95,
-        "p_price": 0.01,
-        "contracts": 26
-      },
-      {
-        "k_price": 0.95,
         "p_price": 0.011,
-        "contracts": 129
+        "contracts": 132
       },
       {
         "k_price": 0.95,
         "p_price": 0.012,
-        "contracts": 300
-      },
-      {
-        "k_price": 0.95,
-        "p_price": 0.013,
-        "contracts": 545
+        "contracts": 868
       }
     ],
     "entry_fee": 3.33,
-    "entry_edge_dollar": 20.976,
-    "entry_arr": 0.02172116633217455,
-    "entry_edge_pct": 0.02172116633217455,
-    "entry_timestamp": "2026-03-31T15:44:49.180315+00:00",
-    "entry_trade_number": "T00007",
-    "cooldown_until": "2026-03-31T16:44:49.180315+00:00"
+    "entry_edge_dollar": 21.472,
+    "entry_arr": 0.02224621269416528,
+    "entry_edge_pct": 0.02224621269416528,
+    "entry_timestamp": "2026-03-31T21:45:57.460271+00:00",
+    "entry_trade_number": "T00008",
+    "cooldown_until": "2026-03-31T22:45:57.460271+00:00"
   },
   "pair-0370": {
     "pair_id": "pair-0370",
@@ -294,52 +373,37 @@
     "title": "Will Diosdado Cabello Rond\u00f3n be the leader of Venezuela end of 2026?",
     "contracts": 1000,
     "entry_k_price": 0.95,
-    "entry_p_price": 0.02,
-    "entry_kp_cost": 969.3330000000167,
+    "entry_p_price": 0.015,
+    "entry_kp_cost": 967.1650000000169,
     "entry_fills": [
       {
         "k_price": 0.95,
-        "p_price": 0.011,
-        "contracts": 116
+        "p_price": 0.01,
+        "contracts": 92
       },
       {
         "k_price": 0.95,
         "p_price": 0.012,
-        "contracts": 8
+        "contracts": 142
       },
       {
         "k_price": 0.95,
-        "p_price": 0.013,
-        "contracts": 20
+        "p_price": 0.014,
+        "contracts": 279
       },
       {
         "k_price": 0.95,
         "p_price": 0.015,
-        "contracts": 249
-      },
-      {
-        "k_price": 0.95,
-        "p_price": 0.016,
-        "contracts": 326
-      },
-      {
-        "k_price": 0.95,
-        "p_price": 0.019,
-        "contracts": 200
-      },
-      {
-        "k_price": 0.95,
-        "p_price": 0.02,
-        "contracts": 81
+        "contracts": 487
       }
     ],
     "entry_fee": 3.33,
-    "entry_edge_dollar": 17.337,
-    "entry_arr": 0.017885494458543164,
-    "entry_edge_pct": 0.017885494458543164,
-    "entry_timestamp": "2026-03-31T15:44:49.184332+00:00",
-    "entry_trade_number": "T00008",
-    "cooldown_until": "2026-03-31T16:44:49.184332+00:00"
+    "entry_edge_dollar": 19.505,
+    "entry_arr": 0.02016718967289217,
+    "entry_edge_pct": 0.02016718967289217,
+    "entry_timestamp": "2026-03-31T21:45:57.464163+00:00",
+    "entry_trade_number": "T00009",
+    "cooldown_until": "2026-03-31T22:45:57.464163+00:00"
   },
   "pair-0372": {
     "pair_id": "pair-0372",
@@ -356,49 +420,64 @@
     "yes_token_id": "37090128566507509913630589460372620352013766554886380785463533062224343545231",
     "no_token_id": "21527446005162722668702146847806837944786417986794925592709069062391666573103",
     "title": "Will Nicol\u00e1s Maduro be the leader of Venezuela end of 2026?",
-    "contracts": 592,
-    "entry_k_price": 0.1,
-    "entry_p_price": 0.869,
-    "entry_kp_cost": 570.7070000000078,
+    "contracts": 544,
+    "entry_k_price": 0.11,
+    "entry_p_price": 0.867,
+    "entry_kp_cost": 523.5229999999973,
     "entry_fills": [
       {
-        "k_price": 0.09,
-        "p_price": 0.864,
-        "contracts": 70
-      },
-      {
-        "k_price": 0.09,
-        "p_price": 0.865,
-        "contracts": 73
-      },
-      {
-        "k_price": 0.09,
-        "p_price": 0.867,
-        "contracts": 29
-      },
-      {
-        "k_price": 0.09,
-        "p_price": 0.868,
-        "contracts": 101
-      },
-      {
-        "k_price": 0.09,
-        "p_price": 0.869,
-        "contracts": 283
+        "k_price": 0.1,
+        "p_price": 0.843,
+        "contracts": 37
       },
       {
         "k_price": 0.1,
-        "p_price": 0.869,
-        "contracts": 36
+        "p_price": 0.844,
+        "contracts": 33
+      },
+      {
+        "k_price": 0.1,
+        "p_price": 0.85,
+        "contracts": 24
+      },
+      {
+        "k_price": 0.1,
+        "p_price": 0.851,
+        "contracts": 50
+      },
+      {
+        "k_price": 0.1,
+        "p_price": 0.858,
+        "contracts": 62
+      },
+      {
+        "k_price": 0.1,
+        "p_price": 0.859,
+        "contracts": 309
+      },
+      {
+        "k_price": 0.1,
+        "p_price": 0.863,
+        "contracts": 20
+      },
+      {
+        "k_price": 0.1,
+        "p_price": 0.867,
+        "contracts": 8
+      },
+      {
+        "k_price": 0.11,
+        "p_price": 0.867,
+        "contracts": 1
       }
     ],
-    "entry_fee": 3.42,
-    "entry_edge_dollar": 11.953,
-    "entry_arr": 0.020944197285107838,
-    "entry_edge_pct": 0.020944197285107838,
-    "entry_timestamp": "2026-03-31T15:44:49.187189+00:00",
-    "entry_trade_number": "T00009",
-    "cooldown_until": "2026-03-31T16:44:49.187189+00:00"
+    "entry_fee": 3.43,
+    "entry_edge_dollar": 11.607,
+    "entry_arr": 0.0221709456891153,
+    "entry_edge_pct": 0.0221709456891153,
+    "entry_timestamp": "2026-03-31T21:45:57.466892+00:00",
+    "entry_trade_number": "T00010",
+    "cooldown_until": "2026-03-31T22:45:57.466892+00:00"
   },
   "pair-0374": {
     "pair_id": "pair-0374",
@@ -435,9 +514,9 @@
     "entry_edge_dollar": 11.021,
     "entry_arr": 0.01128115470871789,
     "entry_edge_pct": 0.01128115470871789,
-    "entry_timestamp": "2026-03-31T15:44:49.191421+00:00",
-    "entry_trade_number": "T00010",
-    "cooldown_until": "2026-03-31T16:44:49.191421+00:00"
+    "entry_timestamp": "2026-03-31T21:45:57.470382+00:00",
+    "entry_trade_number": "T00011",
+    "cooldown_until": "2026-03-31T22:45:57.470382+00:00"
   },
   "pair-0375": {
     "pair_id": "pair-0375",
@@ -456,27 +535,27 @@
     "title": "Will Vladimir Padrino L\u00f3pez be the leader of Venezuela end of 2026?",
     "contracts": 1000,
     "entry_k_price": 0.97,
-    "entry_p_price": 0.005,
-    "entry_kp_cost": 976.1440000000198,
+    "entry_p_price": 0.006,
+    "entry_kp_cost": 976.2860000000197,
     "entry_fills": [
       {
         "k_price": 0.97,
         "p_price": 0.004,
-        "contracts": 896
+        "contracts": 877
       },
       {
         "k_price": 0.97,
-        "p_price": 0.005,
-        "contracts": 104
+        "p_price": 0.006,
+        "contracts": 123
       }
     ],
     "entry_fee": 2.04,
-    "entry_edge_dollar": 11.816,
-    "entry_arr": 0.012104771427145968,
-    "entry_edge_pct": 0.012104771427145968,
-    "entry_timestamp": "2026-03-31T15:44:49.194825+00:00",
-    "entry_trade_number": "T00011",
-    "cooldown_until": "2026-03-31T16:44:49.194825+00:00"
+    "entry_edge_dollar": 11.674,
+    "entry_arr": 0.011957561616145309,
+    "entry_edge_pct": 0.011957561616145309,
+    "entry_timestamp": "2026-03-31T21:45:57.473744+00:00",
+    "entry_trade_number": "T00012",
+    "cooldown_until": "2026-03-31T22:45:57.473744+00:00"
   },
   "pair-0377": {
     "pair_id": "pair-0377",
@@ -496,31 +575,31 @@
     "contracts": 1000,
     "entry_k_price": 0.97,
     "entry_p_price": 0.006,
-    "entry_kp_cost": 976.4820000000198,
+    "entry_kp_cost": 977.2030000000196,
     "entry_fills": [
       {
         "k_price": 0.97,
         "p_price": 0.004,
-        "contracts": 679
+        "contracts": 379
       },
       {
         "k_price": 0.97,
         "p_price": 0.005,
-        "contracts": 200
+        "contracts": 79
       },
       {
         "k_price": 0.97,
         "p_price": 0.006,
-        "contracts": 121
+        "contracts": 542
       }
     ],
     "entry_fee": 2.04,
-    "entry_edge_dollar": 11.478,
-    "entry_arr": 0.011754440942055272,
-    "entry_edge_pct": 0.011754440942055272,
-    "entry_timestamp": "2026-03-31T15:44:49.198197+00:00",
-    "entry_trade_number": "T00012",
-    "cooldown_until": "2026-03-31T16:44:49.198197+00:00"
+    "entry_edge_dollar": 10.757,
+    "entry_arr": 0.011007948194981127,
+    "entry_edge_pct": 0.011007948194981127,
+    "entry_timestamp": "2026-03-31T21:45:57.477102+00:00",
+    "entry_trade_number": "T00013",
+    "cooldown_until": "2026-03-31T22:45:57.477102+00:00"
   },
   "pair-0391": {
     "pair_id": "pair-0391",
@@ -537,29 +616,58 @@
     "yes_token_id": "20509957320357703322777282914256500505443083705628329444478480468143184201534",
     "no_token_id": "92612233665686912140036324113928943757793133588788897776621378745454206219417",
     "title": "Will Seattle Sounders FC win the 2026 MLS Cup?",
-    "contracts": 93,
+    "contracts": 129,
     "entry_k_price": 0.94,
-    "entry_p_price": 0.04,
-    "entry_kp_cost": 91.4179999999999,
+    "entry_p_price": 0.039,
+    "entry_kp_cost": 126.80099999999982,
     "entry_fills": [
       {
         "k_price": 0.94,
         "p_price": 0.039,
-        "contracts": 92
-      },
-      {
-        "k_price": 0.94,
-        "p_price": 0.04,
-        "contracts": 1
+        "contracts": 129
       }
     ],
-    "entry_fee": 0.37,
-    "entry_edge_dollar": 0.282,
-    "entry_arr": 0.0030847316721005335,
-    "entry_edge_pct": 0.0030847316721005335,
-    "entry_timestamp": "2026-03-31T15:44:49.200049+00:00",
-    "entry_trade_number": "T00013",
-    "cooldown_until": "2026-03-31T16:44:49.200049+00:00"
+    "entry_fee": 0.51,
+    "entry_edge_dollar": 0.399,
+    "entry_arr": 0.0031466628812089584,
+    "entry_edge_pct": 0.0031466628812089584,
+    "entry_timestamp": "2026-03-31T21:45:57.479105+00:00",
+    "entry_trade_number": "T00014",
+    "cooldown_until": "2026-03-31T22:45:57.479105+00:00"
+  },
+  "pair-0397": {
+    "pair_id": "pair-0397",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXMLSCUP-26-MIA",
+    "p_token_id": "34215103566839885910350774244658713146768366751315354196689270332803814839943",
+    "p_token_ids": [
+      "34215103566839885910350774244658713146768366751315354196689270332803814839943"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "34215103566839885910350774244658713146768366751315354196689270332803814839943",
+    "no_token_id": "95330850088652964045342754396500611430491328230261187321150789382210939939481",
+    "title": "Will Inter Miami CF win the 2026 MLS Cup?",
+    "contracts": 69,
+    "entry_k_price": 0.77,
+    "entry_p_price": 0.19,
+    "entry_kp_cost": 67.10000000000007,
+    "entry_fills": [
+      {
+        "k_price": 0.77,
+        "p_price": 0.19,
+        "contracts": 69
+      }
+    ],
+    "entry_fee": 0.86,
+    "entry_edge_dollar": 0.35,
+    "entry_arr": 0.005216095380028861,
+    "entry_edge_pct": 0.005216095380028861,
+    "entry_timestamp": "2026-03-31T21:45:57.480569+00:00",
+    "entry_trade_number": "T00015",
+    "cooldown_until": "2026-03-31T22:45:57.480569+00:00"
   },
   "pair-0422": {
     "pair_id": "pair-0422",
@@ -596,107 +704,43 @@
     "entry_edge_dollar": 10.39,
     "entry_arr": 0.020232508324724993,
     "entry_edge_pct": 0.020232508324724993,
-    "entry_timestamp": "2026-03-31T15:44:49.203356+00:00",
-    "entry_trade_number": "T00014",
-    "cooldown_until": "2026-03-31T16:44:49.203356+00:00"
-  },
-  "pair-0456": {
-    "pair_id": "pair-0456",
-    "strategy": "BUY_KN_BUY_PY",
-    "k_side": "no",
-    "p_side": "yes",
-    "kalshi_ticker": "KXMLB-26-LAD",
-    "p_token_id": "1204155327844132216976037605131756626466220080116229118353112706411786559118",
-    "p_token_ids": [
-      "1204155327844132216976037605131756626466220080116229118353112706411786559118"
-    ],
-    "p_leg_prices": [],
-    "p_leg_spend": [],
-    "yes_token_id": "1204155327844132216976037605131756626466220080116229118353112706411786559118",
-    "no_token_id": "65347099416413012038874568960137034756796660297895673058090101511987410403548",
-    "title": "Will the Los Angeles Dodgers win the 2026 World Series?",
-    "contracts": 374,
-    "entry_k_price": 0.68,
-    "entry_p_price": 0.28,
-    "entry_kp_cost": 363.8900000000024,
-    "entry_fills": [
-      {
-        "k_price": 0.67,
-        "p_price": 0.28,
-        "contracts": 87
-      },
-      {
-        "k_price": 0.68,
-        "p_price": 0.28,
-        "contracts": 287
-      }
-    ],
-    "entry_fee": 5.72,
-    "entry_edge_dollar": 0.65,
-    "entry_arr": 0.0017862540877672188,
-    "entry_edge_pct": 0.0017862540877672185,
-    "entry_timestamp": "2026-03-31T15:45:19.804162+00:00",
-    "entry_trade_number": "T00015",
-    "cooldown_until": "2026-03-31T16:45:19.804162+00:00"
-  },
-  "pair-0473": {
-    "pair_id": "pair-0473",
-    "strategy": "BUY_KN_BUY_PY",
-    "k_side": "no",
-    "p_side": "yes",
-    "kalshi_ticker": "KXMLB-26-SEA",
-    "p_token_id": "63091623343687297303606592004867326730200634937409195873045953355010416684623",
-    "p_token_ids": [
-      "63091623343687297303606592004867326730200634937409195873045953355010416684623"
-    ],
-    "p_leg_prices": [],
-    "p_leg_spend": [],
-    "yes_token_id": "63091623343687297303606592004867326730200634937409195873045953355010416684623",
-    "no_token_id": "102039975525536046545638924824798876480719469785837400983070764668444799295423",
-    "title": "Will the Seattle Mariners win the 2026 World Series?",
-    "contracts": 1000,
-    "entry_k_price": 0.89,
-    "entry_p_price": 0.087,
-    "entry_kp_cost": 982.4619999999896,
-    "entry_fills": [
-      {
-        "k_price": 0.89,
-        "p_price": 0.082,
-        "contracts": 65
-      },
-      {
-        "k_price": 0.89,
-        "p_price": 0.083,
-        "contracts": 121
-      },
-      {
-        "k_price": 0.89,
-        "p_price": 0.084,
-        "contracts": 74
-      },
-      {
-        "k_price": 0.89,
-        "p_price": 0.085,
-        "contracts": 74
-      },
-      {
-        "k_price": 0.89,
-        "p_price": 0.086,
-        "contracts": 219
-      },
-      {
-        "k_price": 0.89,
-        "p_price": 0.087,
-        "contracts": 447
-      }
-    ],
-    "entry_fee": 6.86,
-    "entry_edge_dollar": 0.678,
-    "entry_arr": 0.0006901030268960666,
-    "entry_edge_pct": 0.0006901030268960665,
-    "entry_timestamp": "2026-03-31T15:45:19.811123+00:00",
+    "entry_timestamp": "2026-03-31T21:45:57.483605+00:00",
     "entry_trade_number": "T00016",
-    "cooldown_until": "2026-03-31T16:45:19.811123+00:00"
+    "cooldown_until": "2026-03-31T22:45:57.483605+00:00"
+  },
+  "pair-0514": {
+    "pair_id": "pair-0514",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXNBACOY-26-MJOH",
+    "p_token_id": "61176411792307069682087867455827081841465614685733318866140415916573316178793",
+    "p_token_ids": [
+      "61176411792307069682087867455827081841465614685733318866140415916573316178793"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "25475523485165949975510012377759235530663609002114542535065321675093084569420",
+    "no_token_id": "61176411792307069682087867455827081841465614685733318866140415916573316178793",
+    "title": "Will Mitch Johnson win the 2025\u20132026 NBA Coach of the Year?",
+    "contracts": 1000,
+    "entry_k_price": 0.07,
+    "entry_p_price": 0.879,
+    "entry_kp_cost": 953.560000000012,
+    "entry_fills": [
+      {
+        "k_price": 0.07,
+        "p_price": 0.879,
+        "contracts": 1000
+      }
+    ],
+    "entry_fee": 4.56,
+    "entry_edge_dollar": 31.88,
+    "entry_arr": 0.03343261042827678,
+    "entry_edge_pct": 0.03343261042827678,
+    "entry_timestamp": "2026-03-31T21:46:27.414072+00:00",
+    "entry_trade_number": "T00017",
+    "cooldown_until": "2026-03-31T22:46:27.414072+00:00"
   },
   "pair-0705": {
     "pair_id": "pair-0705",
@@ -728,9 +772,43 @@
     "entry_edge_dollar": 0.78,
     "entry_arr": 0.006336826712162344,
     "entry_edge_pct": 0.006336826712162344,
-    "entry_timestamp": "2026-03-31T15:45:46.718646+00:00",
-    "entry_trade_number": "T00017",
-    "cooldown_until": "2026-03-31T16:45:46.718646+00:00"
+    "entry_timestamp": "2026-03-31T21:46:53.954694+00:00",
+    "entry_trade_number": "T00018",
+    "cooldown_until": "2026-03-31T22:46:53.954694+00:00"
+  },
+  "pair-0884": {
+    "pair_id": "pair-0884",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXGOVFLNOMR-26-JCOL",
+    "p_token_id": "99707231507759124574081212672007537204787934380228084704600028791237773589839",
+    "p_token_ids": [
+      "99707231507759124574081212672007537204787934380228084704600028791237773589839"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "99707231507759124574081212672007537204787934380228084704600028791237773589839",
+    "no_token_id": "10574444280668215298066294963842408887607022959149756601065864731897028131080",
+    "title": "Will Jay Collins be the Republican nominee for Florida Governor?",
+    "contracts": 171,
+    "entry_k_price": 0.95,
+    "entry_p_price": 0.021,
+    "entry_kp_cost": 166.61099999999982,
+    "entry_fills": [
+      {
+        "k_price": 0.95,
+        "p_price": 0.021,
+        "contracts": 171
+      }
+    ],
+    "entry_fee": 0.57,
+    "entry_edge_dollar": 2.109,
+    "entry_arr": 0.02131928267459485,
+    "entry_edge_pct": 0.012658227848102317,
+    "entry_timestamp": "2026-03-31T21:47:22.363405+00:00",
+    "entry_trade_number": "T00019",
+    "cooldown_until": "2026-03-31T22:47:22.363405+00:00"
   },
   "pair-0897": {
     "pair_id": "pair-0897",
@@ -765,79 +843,50 @@
     ],
     "entry_fee": 0.13,
     "entry_edge_dollar": 2.668,
-    "entry_arr": 0.053228268836476654,
+    "entry_arr": 0.05328986325068959,
     "entry_edge_pct": 0.031640615734922314,
-    "entry_timestamp": "2026-03-31T15:46:15.012564+00:00",
-    "entry_trade_number": "T00018",
-    "cooldown_until": "2026-03-31T16:46:15.012564+00:00"
-  },
-  "pair-0925": {
-    "pair_id": "pair-0925",
-    "strategy": "BUY_KY_BUY_PN",
-    "k_side": "yes",
-    "p_side": "no",
-    "kalshi_ticker": "KXPRESNOMR-28-ITRU",
-    "p_token_id": "38205061485482832990648495179350163959936416627781540057460551493511094122497",
-    "p_token_ids": [
-      "38205061485482832990648495179350163959936416627781540057460551493511094122497"
-    ],
-    "p_leg_prices": [],
-    "p_leg_spend": [],
-    "yes_token_id": "64219883837418173804780196379638150140562767673275103175135949850170609939649",
-    "no_token_id": "38205061485482832990648495179350163959936416627781540057460551493511094122497",
-    "title": "Will Ivanka Trump win the 2028 Republican presidential nomination?",
-    "contracts": 1000,
-    "entry_k_price": 0.0,
-    "entry_p_price": 0.988,
-    "entry_kp_cost": 988.000000000027,
-    "entry_fills": [
-      {
-        "k_price": 0.0,
-        "p_price": 0.988,
-        "contracts": 1000
-      }
-    ],
-    "entry_fee": 0.0,
-    "entry_edge_dollar": 2.0,
-    "entry_arr": 0.000776146350036087,
-    "entry_edge_pct": 0.0020242914979483823,
-    "entry_timestamp": "2026-03-31T15:46:15.023519+00:00",
-    "entry_trade_number": "T00019",
-    "cooldown_until": "2026-03-31T16:46:15.023519+00:00"
-  },
-  "pair-0927": {
-    "pair_id": "pair-0927",
-    "strategy": "BUY_KY_BUY_PN",
-    "k_side": "yes",
-    "p_side": "no",
-    "kalshi_ticker": "KXPRESNOMR-28-VR",
-    "p_token_id": "61638209040977576407645319654548998972645370498978369829582391676362965890344",
-    "p_token_ids": [
-      "61638209040977576407645319654548998972645370498978369829582391676362965890344"
-    ],
-    "p_leg_prices": [],
-    "p_leg_spend": [],
-    "yes_token_id": "7847177314809025001842027337093046201021185723933452855314998541165696902642",
-    "no_token_id": "61638209040977576407645319654548998972645370498978369829582391676362965890344",
-    "title": "Will Vivek Ramaswamy win the 2028 Republican presidential nomination?",
-    "contracts": 1000,
-    "entry_k_price": 0.0,
-    "entry_p_price": 0.989,
-    "entry_kp_cost": 989.0000000000103,
-    "entry_fills": [
-      {
-        "k_price": 0.0,
-        "p_price": 0.989,
-        "contracts": 1000
-      }
-    ],
-    "entry_fee": 0.0,
-    "entry_edge_dollar": 1.0,
-    "entry_arr": 0.00038768078558650465,
-    "entry_edge_pct": 0.001011122345793371,
-    "entry_timestamp": "2026-03-31T15:46:15.028906+00:00",
+    "entry_timestamp": "2026-03-31T21:47:22.365959+00:00",
     "entry_trade_number": "T00020",
-    "cooldown_until": "2026-03-31T16:46:15.028906+00:00"
+    "cooldown_until": "2026-03-31T22:47:22.365959+00:00"
+  },
+  "pair-0937": {
+    "pair_id": "pair-0937",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXGOVCA-26-MMAH",
+    "p_token_id": "113017673827188867377109454527754982157460887938297582871131403025795572613918",
+    "p_token_ids": [
+      "113017673827188867377109454527754982157460887938297582871131403025795572613918"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "113017673827188867377109454527754982157460887938297582871131403025795572613918",
+    "no_token_id": "79955017462923061878809555241564377485121752430532900591057614800269144864244",
+    "title": "Will Matt Mahan win the California Governor Election in 2026?",
+    "contracts": 117,
+    "entry_k_price": 0.91,
+    "entry_p_price": 0.07,
+    "entry_kp_cost": 114.24000000000018,
+    "entry_fills": [
+      {
+        "k_price": 0.9,
+        "p_price": 0.07,
+        "contracts": 116
+      },
+      {
+        "k_price": 0.91,
+        "p_price": 0.07,
+        "contracts": 1
+      }
+    ],
+    "entry_fee": 0.74,
+    "entry_edge_dollar": 0.85,
+    "entry_arr": 0.004668547304829745,
+    "entry_edge_pct": 0.0074404761904745915,
+    "entry_timestamp": "2026-03-31T21:47:22.373355+00:00",
+    "entry_trade_number": "T00021",
+    "cooldown_until": "2026-03-31T22:47:22.373355+00:00"
   },
   "pair-0938": {
     "pair_id": "pair-0938",
@@ -854,142 +903,34 @@
     "yes_token_id": "89694314427486889897766629507723742460669068230376416068996390119126818537632",
     "no_token_id": "61757469317668577515958048784869874652534541383251022341140867651976647414109",
     "title": "Will Chad Bianco win the California Governor Election in 2026?",
-    "contracts": 1000,
+    "contracts": 435,
     "entry_k_price": 0.94,
-    "entry_p_price": 0.034,
-    "entry_kp_cost": 976.4040000000241,
+    "entry_p_price": 0.033,
+    "entry_kp_cost": 424.49199999999917,
     "entry_fills": [
       {
         "k_price": 0.94,
         "p_price": 0.031,
-        "contracts": 126
+        "contracts": 107
       },
       {
         "k_price": 0.94,
         "p_price": 0.032,
-        "contracts": 407
+        "contracts": 269
       },
       {
         "k_price": 0.94,
         "p_price": 0.033,
-        "contracts": 354
-      },
-      {
-        "k_price": 0.94,
-        "p_price": 0.034,
-        "contracts": 113
+        "contracts": 59
       }
     ],
-    "entry_fee": 3.95,
-    "entry_edge_dollar": 9.646,
-    "entry_arr": 0.006196002085189226,
-    "entry_edge_pct": 0.009879107418625552,
-    "entry_timestamp": "2026-03-31T15:46:15.035880+00:00",
-    "entry_trade_number": "T00021",
-    "cooldown_until": "2026-03-31T16:46:15.035880+00:00"
-  },
-  "pair-1019": {
-    "pair_id": "pair-1019",
-    "strategy": "BUY_KY_BUY_PN",
-    "k_side": "yes",
-    "p_side": "no",
-    "kalshi_ticker": "KXBALLONDOR-26-EHAA",
-    "p_token_id": "41582690056299530319797949041927935989019869883198101581541874744777936907826",
-    "p_token_ids": [
-      "41582690056299530319797949041927935989019869883198101581541874744777936907826"
-    ],
-    "p_leg_prices": [],
-    "p_leg_spend": [],
-    "yes_token_id": "28452090262595806306683841543702974671789939255165753137157118490078999198778",
-    "no_token_id": "41582690056299530319797949041927935989019869883198101581541874744777936907826",
-    "title": "Will Erling Haaland win the 2026 Ballon d'Or?",
-    "contracts": 138,
-    "entry_k_price": 0.02,
-    "entry_p_price": 0.966,
-    "entry_kp_cost": 131.5220000000001,
-    "entry_fills": [
-      {
-        "k_price": 0.02,
-        "p_price": 0.929,
-        "contracts": 100
-      },
-      {
-        "k_price": 0.02,
-        "p_price": 0.93,
-        "contracts": 10
-      },
-      {
-        "k_price": 0.02,
-        "p_price": 0.94,
-        "contracts": 26
-      },
-      {
-        "k_price": 0.02,
-        "p_price": 0.966,
-        "contracts": 2
-      }
-    ],
-    "entry_fee": 0.19,
-    "entry_edge_dollar": 4.908,
-    "entry_arr": 0.0496108585641761,
-    "entry_edge_pct": 0.03731695077629518,
-    "entry_timestamp": "2026-03-31T15:46:15.043658+00:00",
+    "entry_fee": 1.72,
+    "entry_edge_dollar": 4.438,
+    "entry_arr": 0.006559924189613505,
+    "entry_edge_pct": 0.01045484956135998,
+    "entry_timestamp": "2026-03-31T21:47:22.376257+00:00",
     "entry_trade_number": "T00022",
-    "cooldown_until": "2026-03-31T16:46:15.043658+00:00"
-  },
-  "pair-1020": {
-    "pair_id": "pair-1020",
-    "strategy": "BUY_KY_BUY_PN",
-    "k_side": "yes",
-    "p_side": "no",
-    "kalshi_ticker": "KXBALLONDOR-26-PEDR",
-    "p_token_id": "15088271960879255514674916121009958893050751523818352795843020762513178004940",
-    "p_token_ids": [
-      "15088271960879255514674916121009958893050751523818352795843020762513178004940"
-    ],
-    "p_leg_prices": [],
-    "p_leg_spend": [],
-    "yes_token_id": "53552470495843725048812481677645073699559091521993186199190332652220611054074",
-    "no_token_id": "15088271960879255514674916121009958893050751523818352795843020762513178004940",
-    "title": "Will Pedri win the 2026 Ballon d'Or?",
-    "contracts": 173,
-    "entry_k_price": 0.01,
-    "entry_p_price": 0.97,
-    "entry_kp_cost": 167.67600000000016,
-    "entry_fills": [
-      {
-        "k_price": 0.01,
-        "p_price": 0.956,
-        "contracts": 62
-      },
-      {
-        "k_price": 0.01,
-        "p_price": 0.958,
-        "contracts": 48
-      },
-      {
-        "k_price": 0.01,
-        "p_price": 0.959,
-        "contracts": 10
-      },
-      {
-        "k_price": 0.01,
-        "p_price": 0.96,
-        "contracts": 43
-      },
-      {
-        "k_price": 0.01,
-        "p_price": 0.97,
-        "contracts": 10
-      }
-    ],
-    "entry_fee": 0.12,
-    "entry_edge_dollar": 3.474,
-    "entry_arr": 0.02754415809181615,
-    "entry_edge_pct": 0.020718528590852887,
-    "entry_timestamp": "2026-03-31T15:46:15.046331+00:00",
-    "entry_trade_number": "T00023",
-    "cooldown_until": "2026-03-31T16:46:15.046331+00:00"
+    "cooldown_until": "2026-03-31T22:47:22.376257+00:00"
   },
   "pair-1303": {
     "pair_id": "pair-1303",
@@ -1006,108 +947,34 @@
     "yes_token_id": "13463336105761632504794966049217313575583993179728463234111873558017183074393",
     "no_token_id": "55001988309016934430219889436352177692269385320151457014046497758136037777383",
     "title": "Will Pam Bondi be the next to leave the Trump Cabinet before 2027?",
-    "contracts": 914,
-    "entry_k_price": 0.9,
-    "entry_p_price": 0.078,
-    "entry_kp_cost": 847.7039999999909,
+    "contracts": 478,
+    "entry_k_price": 0.89,
+    "entry_p_price": 0.066,
+    "entry_kp_cost": 458.3799999999953,
     "entry_fills": [
       {
-        "k_price": 0.88,
-        "p_price": 0.019,
-        "contracts": 294
-      },
-      {
-        "k_price": 0.88,
-        "p_price": 0.02,
-        "contracts": 125
-      },
-      {
-        "k_price": 0.88,
-        "p_price": 0.023,
-        "contracts": 185
-      },
-      {
         "k_price": 0.89,
-        "p_price": 0.023,
-        "contracts": 3
+        "p_price": 0.058,
+        "contracts": 100
       },
       {
         "k_price": 0.89,
         "p_price": 0.06,
-        "contracts": 55
+        "contracts": 178
       },
       {
-        "k_price": 0.9,
-        "p_price": 0.06,
-        "contracts": 220
-      },
-      {
-        "k_price": 0.9,
-        "p_price": 0.061,
-        "contracts": 5
-      },
-      {
-        "k_price": 0.9,
-        "p_price": 0.077,
-        "contracts": 17
-      },
-      {
-        "k_price": 0.9,
-        "p_price": 0.078,
-        "contracts": 10
+        "k_price": 0.89,
+        "p_price": 0.066,
+        "contracts": 200
       }
     ],
-    "entry_fee": 6.46,
-    "entry_edge_dollar": 50.696,
-    "entry_arr": 0.021275938076138784,
-    "entry_edge_pct": 0.05980389381200243,
-    "entry_timestamp": "2026-03-31T15:46:47.017483+00:00",
-    "entry_trade_number": "T00024",
-    "cooldown_until": "2026-03-31T16:46:47.017483+00:00"
-  },
-  "pair-1316": {
-    "pair_id": "pair-1316",
-    "strategy": "BUY_KN_BUY_PY",
-    "k_side": "no",
-    "p_side": "yes",
-    "kalshi_ticker": "KXCABOUT-26MAR-SWIL",
-    "p_token_id": "64814850308331222892421009145048575104928701539870212011086511107021443313252",
-    "p_token_ids": [
-      "64814850308331222892421009145048575104928701539870212011086511107021443313252"
-    ],
-    "p_leg_prices": [],
-    "p_leg_spend": [],
-    "yes_token_id": "64814850308331222892421009145048575104928701539870212011086511107021443313252",
-    "no_token_id": "95068001088311649230492382347198012139349201968173107030117759899677573200971",
-    "title": "Will Susie Wiles be the next to leave the Trump Cabinet before 2027?",
-    "contracts": 302,
-    "entry_k_price": 0.97,
-    "entry_p_price": 0.018,
-    "entry_kp_cost": 296.1960000000001,
-    "entry_fills": [
-      {
-        "k_price": 0.96,
-        "p_price": 0.017,
-        "contracts": 10
-      },
-      {
-        "k_price": 0.96,
-        "p_price": 0.018,
-        "contracts": 288
-      },
-      {
-        "k_price": 0.97,
-        "p_price": 0.018,
-        "contracts": 4
-      }
-    ],
-    "entry_fee": 0.81,
-    "entry_edge_dollar": 1.974,
-    "entry_arr": 0.002370976312094326,
-    "entry_edge_pct": 0.006664505935258864,
-    "entry_timestamp": "2026-03-31T15:46:47.021879+00:00",
-    "entry_trade_number": "T00025",
-    "cooldown_until": "2026-03-31T16:46:47.021879+00:00"
+    "entry_fee": 3.28,
+    "entry_edge_dollar": 11.56,
+    "entry_arr": 0.008974238246707194,
+    "entry_edge_pct": 0.02521925040360577,
+    "entry_timestamp": "2026-03-31T21:47:53.678721+00:00",
+    "entry_trade_number": "T00023",
+    "cooldown_until": "2026-03-31T22:47:53.678721+00:00"
   },
   "pair-1332": {
     "pair_id": "pair-1332",
@@ -1127,7 +994,7 @@
     "contracts": 1000,
     "entry_k_price": 0.19,
     "entry_p_price": 0.74,
-    "entry_kp_cost": 933.0700000000057,
+    "entry_kp_cost": 931.4700000000072,
     "entry_fills": [
       {
         "k_price": 0.18,
@@ -1137,75 +1004,55 @@
       {
         "k_price": 0.19,
         "p_price": 0.73,
-        "contracts": 632
+        "contracts": 792
       },
       {
         "k_price": 0.19,
         "p_price": 0.74,
-        "contracts": 300
+        "contracts": 140
       }
     ],
     "entry_fee": 10.75,
-    "entry_edge_dollar": 46.18,
-    "entry_arr": 0.06542060969814958,
-    "entry_edge_pct": 0.049492535393908264,
-    "entry_timestamp": "2026-03-31T15:46:47.027642+00:00",
-    "entry_trade_number": "T00026",
-    "cooldown_until": "2026-03-31T16:46:47.027642+00:00"
+    "entry_edge_dollar": 47.78,
+    "entry_arr": 0.06786513922997785,
+    "entry_edge_pct": 0.05129526447442477,
+    "entry_timestamp": "2026-03-31T21:47:53.686873+00:00",
+    "entry_trade_number": "T00024",
+    "cooldown_until": "2026-03-31T22:47:53.686873+00:00"
   },
-  "pair-1442": {
-    "pair_id": "pair-1442",
+  "pair-1444": {
+    "pair_id": "pair-1444",
     "strategy": "BUY_KN_BUY_PY",
     "k_side": "no",
     "p_side": "yes",
-    "kalshi_ticker": "KXNEXTISRAELPM-45JAN01-YLAP",
-    "p_token_id": "30912854850866302644106316438153629460678506137655559406260043509960678109607",
+    "kalshi_ticker": "KXNEXTISRAELPM-45JAN01-IBEN",
+    "p_token_id": "97037271592384590668192904767730391938961253014413658633971882704234126806284",
     "p_token_ids": [
-      "30912854850866302644106316438153629460678506137655559406260043509960678109607"
+      "97037271592384590668192904767730391938961253014413658633971882704234126806284"
     ],
     "p_leg_prices": [],
     "p_leg_spend": [],
-    "yes_token_id": "30912854850866302644106316438153629460678506137655559406260043509960678109607",
-    "no_token_id": "111793355166132295017239163560645146761744336187614021796771100619201573005168",
-    "title": "Will Yair Lapid be the next Prime Minister of Israel?",
-    "contracts": 167,
-    "entry_k_price": 0.95,
-    "entry_p_price": 0.032,
-    "entry_kp_cost": 162.82999999999973,
+    "yes_token_id": "97037271592384590668192904767730391938961253014413658633971882704234126806284",
+    "no_token_id": "58392130842716399501622105353245054198549423559503164971149451200205491369251",
+    "title": "Will Itamar Ben Gvir be the next Prime Minister of Israel?",
+    "contracts": 30,
+    "entry_k_price": 0.96,
+    "entry_p_price": 0.013,
+    "entry_kp_cost": 29.28000000000002,
     "entry_fills": [
       {
-        "k_price": 0.94,
-        "p_price": 0.029,
-        "contracts": 16
-      },
-      {
-        "k_price": 0.94,
-        "p_price": 0.03,
-        "contracts": 43
-      },
-      {
-        "k_price": 0.94,
-        "p_price": 0.031,
+        "k_price": 0.96,
+        "p_price": 0.013,
         "contracts": 30
-      },
-      {
-        "k_price": 0.94,
-        "p_price": 0.032,
-        "contracts": 77
-      },
-      {
-        "k_price": 0.95,
-        "p_price": 0.032,
-        "contracts": 1
       }
     ],
-    "entry_fee": 0.66,
-    "entry_edge_dollar": 1.84,
-    "entry_arr": 0.0006020386584360153,
-    "entry_edge_pct": 0.011300128968864995,
-    "entry_timestamp": "2026-03-31T15:47:18.004094+00:00",
-    "entry_trade_number": "T00027",
-    "cooldown_until": "2026-03-31T16:47:18.004094+00:00"
+    "entry_fee": 0.09,
+    "entry_edge_dollar": 0.33,
+    "entry_arr": 0.0006004816560321049,
+    "entry_edge_pct": 0.011270491803278012,
+    "entry_timestamp": "2026-03-31T21:48:26.017924+00:00",
+    "entry_trade_number": "T00025",
+    "cooldown_until": "2026-03-31T22:48:26.017924+00:00"
   },
   "pair-1445": {
     "pair_id": "pair-1445",
@@ -1222,34 +1069,39 @@
     "yes_token_id": "58945936829392654397399777214757608864525173988558750256164021442231118224154",
     "no_token_id": "39409206330527880169507414405291721950884951005340760541937649898052386499519",
     "title": "Will Naftali Bennett be the next Prime Minister of Israel?",
-    "contracts": 394,
-    "entry_k_price": 0.72,
-    "entry_p_price": 0.22,
-    "entry_kp_cost": 368.27,
+    "contracts": 728,
+    "entry_k_price": 0.71,
+    "entry_p_price": 0.25,
+    "entry_kp_cost": 700.1499999999933,
     "entry_fills": [
       {
         "k_price": 0.69,
-        "p_price": 0.21,
-        "contracts": 102
+        "p_price": 0.23,
+        "contracts": 136
       },
       {
         "k_price": 0.69,
-        "p_price": 0.22,
-        "contracts": 126
+        "p_price": 0.24,
+        "contracts": 92
       },
       {
-        "k_price": 0.72,
-        "p_price": 0.22,
-        "contracts": 166
+        "k_price": 0.71,
+        "p_price": 0.24,
+        "contracts": 116
+      },
+      {
+        "k_price": 0.71,
+        "p_price": 0.25,
+        "contracts": 384
       }
     ],
-    "entry_fee": 5.77,
-    "entry_edge_dollar": 16.02,
-    "entry_arr": 0.002317592886062082,
-    "entry_edge_pct": 0.04350069242675217,
-    "entry_timestamp": "2026-03-31T15:47:18.008185+00:00",
-    "entry_trade_number": "T00028",
-    "cooldown_until": "2026-03-31T16:47:18.008185+00:00"
+    "entry_fee": 10.63,
+    "entry_edge_dollar": 9.94,
+    "entry_arr": 0.0007564011292564296,
+    "entry_edge_pct": 0.014196957794768053,
+    "entry_timestamp": "2026-03-31T21:48:26.023426+00:00",
+    "entry_trade_number": "T00026",
+    "cooldown_until": "2026-03-31T22:48:26.023426+00:00"
   },
   "pair-1446": {
     "pair_id": "pair-1446",
@@ -1266,25 +1118,15 @@
     "yes_token_id": "28155793585619215559447305702051573036104753242134264350727089371549716604590",
     "no_token_id": "8804323954886936757860075689144107209232698513970387617746425654441716700790",
     "title": "Will Yariv Levin be the next Prime Minister of Israel?",
-    "contracts": 178,
+    "contracts": 510,
     "entry_k_price": 0.97,
     "entry_p_price": 0.017,
-    "entry_kp_cost": 169.58600000000064,
+    "entry_kp_cost": 490.16999999999894,
     "entry_fills": [
-      {
-        "k_price": 0.92,
-        "p_price": 0.017,
-        "contracts": 1
-      },
-      {
-        "k_price": 0.93,
-        "p_price": 0.017,
-        "contracts": 166
-      },
       {
         "k_price": 0.94,
         "p_price": 0.017,
-        "contracts": 6
+        "contracts": 506
       },
       {
         "k_price": 0.96,
@@ -1294,16 +1136,16 @@
       {
         "k_price": 0.97,
         "p_price": 0.017,
-        "contracts": 2
+        "contracts": 1
       }
     ],
-    "entry_fee": 0.8,
-    "entry_edge_dollar": 5.834,
-    "entry_arr": 0.001832809837784409,
-    "entry_edge_pct": 0.034401424645898473,
-    "entry_timestamp": "2026-03-31T15:47:18.010303+00:00",
-    "entry_trade_number": "T00029",
-    "cooldown_until": "2026-03-31T16:47:18.010303+00:00"
+    "entry_fee": 2.01,
+    "entry_edge_dollar": 12.72,
+    "entry_arr": 0.0013826022557829635,
+    "entry_edge_pct": 0.025950180549607422,
+    "entry_timestamp": "2026-03-31T21:48:26.027349+00:00",
+    "entry_trade_number": "T00027",
+    "cooldown_until": "2026-03-31T22:48:26.027349+00:00"
   },
   "pair-1449": {
     "pair_id": "pair-1449",
@@ -1321,38 +1163,53 @@
     "no_token_id": "25784364923363316075411165876034319781236639036007866640717571276538468383341",
     "title": "Will Shabana Mahmood be the next Prime Minister of the United Kingdom in 2026?",
     "contracts": 1000,
-    "entry_k_price": 0.95,
-    "entry_p_price": 0.02,
-    "entry_kp_cost": 956.0599999999922,
+    "entry_k_price": 0.93,
+    "entry_p_price": 0.021,
+    "entry_kp_cost": 953.1649999999809,
     "entry_fills": [
       {
         "k_price": 0.93,
+        "p_price": 0.013,
+        "contracts": 8
+      },
+      {
+        "k_price": 0.93,
+        "p_price": 0.014,
+        "contracts": 10
+      },
+      {
+        "k_price": 0.93,
+        "p_price": 0.015,
+        "contracts": 10
+      },
+      {
+        "k_price": 0.93,
+        "p_price": 0.017,
+        "contracts": 99
+      },
+      {
+        "k_price": 0.93,
         "p_price": 0.018,
-        "contracts": 169
-      },
-      {
-        "k_price": 0.93,
-        "p_price": 0.019,
-        "contracts": 442
+        "contracts": 550
       },
       {
         "k_price": 0.93,
         "p_price": 0.02,
-        "contracts": 268
+        "contracts": 155
       },
       {
-        "k_price": 0.95,
-        "p_price": 0.02,
-        "contracts": 121
+        "k_price": 0.93,
+        "p_price": 0.021,
+        "contracts": 168
       }
     ],
-    "entry_fee": 4.42,
-    "entry_edge_dollar": 29.52,
-    "entry_arr": 0.008214485276066335,
-    "entry_edge_pct": 0.030876723218216454,
-    "entry_timestamp": "2026-03-31T15:47:18.014785+00:00",
-    "entry_trade_number": "T00030",
-    "cooldown_until": "2026-03-31T16:47:18.014785+00:00"
+    "entry_fee": 4.56,
+    "entry_edge_dollar": 32.275,
+    "entry_arr": 0.00901003978272834,
+    "entry_edge_pct": 0.03386087403547107,
+    "entry_timestamp": "2026-03-31T21:48:26.032804+00:00",
+    "entry_trade_number": "T00028",
+    "cooldown_until": "2026-03-31T22:48:26.032804+00:00"
   },
   "pair-1450": {
     "pair_id": "pair-1450",
@@ -1370,28 +1227,77 @@
     "no_token_id": "44307889234130932930858382978336600446477425865846911922926947607191769332811",
     "title": "Will Wes Streeting be the next Prime Minister of the United Kingdom in 2026?",
     "contracts": 1000,
-    "entry_k_price": 0.88,
+    "entry_k_price": 0.91,
     "entry_p_price": 0.06,
-    "entry_kp_cost": 944.1799999999965,
+    "entry_kp_cost": 967.4699999999925,
     "entry_fills": [
       {
-        "k_price": 0.88,
+        "k_price": 0.9,
         "p_price": 0.05,
-        "contracts": 322
+        "contracts": 5
       },
       {
-        "k_price": 0.88,
+        "k_price": 0.91,
+        "p_price": 0.05,
+        "contracts": 817
+      },
+      {
+        "k_price": 0.91,
         "p_price": 0.06,
-        "contracts": 678
+        "contracts": 178
       }
     ],
-    "entry_fee": 7.4,
-    "entry_edge_dollar": 38.42,
-    "entry_arr": 0.01082559347892178,
-    "entry_edge_pct": 0.040691393590209075,
-    "entry_timestamp": "2026-03-31T15:47:18.018867+00:00",
-    "entry_trade_number": "T00031",
-    "cooldown_until": "2026-03-31T16:47:18.018867+00:00"
+    "entry_fee": 5.74,
+    "entry_edge_dollar": 16.79,
+    "entry_arr": 0.00461787032807456,
+    "entry_edge_pct": 0.017354543293339953,
+    "entry_timestamp": "2026-03-31T21:48:26.038044+00:00",
+    "entry_trade_number": "T00029",
+    "cooldown_until": "2026-03-31T22:48:26.038044+00:00"
+  },
+  "pair-1454": {
+    "pair_id": "pair-1454",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXNEXTUKPM-30-AR",
+    "p_token_id": "54066963382974859240347310461020134785981724636635890298517360968400982528991",
+    "p_token_ids": [
+      "54066963382974859240347310461020134785981724636635890298517360968400982528991"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "54066963382974859240347310461020134785981724636635890298517360968400982528991",
+    "no_token_id": "341760906399923559682824982870791179504347648524865319277821837070071218382",
+    "title": "Will Angela Rayner be the next Prime Minister of the United Kingdom in 2026?",
+    "contracts": 1000,
+    "entry_k_price": 0.75,
+    "entry_p_price": 0.21,
+    "entry_kp_cost": 964.9100000000009,
+    "entry_fills": [
+      {
+        "k_price": 0.75,
+        "p_price": 0.19,
+        "contracts": 10
+      },
+      {
+        "k_price": 0.75,
+        "p_price": 0.2,
+        "contracts": 802
+      },
+      {
+        "k_price": 0.75,
+        "p_price": 0.21,
+        "contracts": 188
+      }
+    ],
+    "entry_fee": 13.13,
+    "entry_edge_dollar": 11.96,
+    "entry_arr": 0.003298169086653541,
+    "entry_edge_pct": 0.012394938388035268,
+    "entry_timestamp": "2026-03-31T21:48:26.043112+00:00",
+    "entry_trade_number": "T00030",
+    "cooldown_until": "2026-03-31T22:48:26.043112+00:00"
   },
   "pair-1456": {
     "pair_id": "pair-1456",
@@ -1409,53 +1315,43 @@
     "no_token_id": "69165855929823223276623079497824884292884455984217711529407160439315932604807",
     "title": "Will Nigel Farage be the next Prime Minister of the United Kingdom in 2026?",
     "contracts": 1000,
-    "entry_k_price": 0.88,
-    "entry_p_price": 0.092,
-    "entry_kp_cost": 974.5929999999964,
+    "entry_k_price": 0.89,
+    "entry_p_price": 0.088,
+    "entry_kp_cost": 980.7619999999898,
     "entry_fills": [
       {
         "k_price": 0.88,
         "p_price": 0.081,
-        "contracts": 217
+        "contracts": 4
       },
       {
-        "k_price": 0.88,
+        "k_price": 0.89,
+        "p_price": 0.081,
+        "contracts": 413
+      },
+      {
+        "k_price": 0.89,
         "p_price": 0.082,
         "contracts": 116
       },
       {
-        "k_price": 0.88,
+        "k_price": 0.89,
         "p_price": 0.087,
-        "contracts": 10
+        "contracts": 443
       },
       {
-        "k_price": 0.88,
+        "k_price": 0.89,
         "p_price": 0.088,
-        "contracts": 200
-      },
-      {
-        "k_price": 0.88,
-        "p_price": 0.09,
-        "contracts": 200
-      },
-      {
-        "k_price": 0.88,
-        "p_price": 0.091,
-        "contracts": 10
-      },
-      {
-        "k_price": 0.88,
-        "p_price": 0.092,
-        "contracts": 247
+        "contracts": 24
       }
     ],
-    "entry_fee": 7.4,
-    "entry_edge_dollar": 8.007,
-    "entry_arr": 0.002185725864921235,
-    "entry_edge_pct": 0.008215737235957567,
-    "entry_timestamp": "2026-03-31T15:47:18.023936+00:00",
-    "entry_trade_number": "T00032",
-    "cooldown_until": "2026-03-31T16:47:18.023936+00:00"
+    "entry_fee": 6.86,
+    "entry_edge_dollar": 2.378,
+    "entry_arr": 0.0006451738615350279,
+    "entry_edge_pct": 0.002424645326807318,
+    "entry_timestamp": "2026-03-31T21:48:26.048060+00:00",
+    "entry_trade_number": "T00031",
+    "cooldown_until": "2026-03-31T22:48:26.048060+00:00"
   },
   "pair-1459": {
     "pair_id": "pair-1459",
@@ -1485,10 +1381,93 @@
     ],
     "entry_fee": 2.04,
     "entry_edge_dollar": 11.92,
-    "entry_arr": 0.0032490604374110577,
+    "entry_arr": 0.0032496544546206135,
     "entry_edge_pct": 0.012212614237100954,
-    "entry_timestamp": "2026-03-31T15:47:18.029687+00:00",
+    "entry_timestamp": "2026-03-31T21:48:26.052720+00:00",
+    "entry_trade_number": "T00032",
+    "cooldown_until": "2026-03-31T22:48:26.052720+00:00"
+  },
+  "pair-0473": {
+    "pair_id": "pair-0473",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXMLB-26-SEA",
+    "p_token_id": "63091623343687297303606592004867326730200634937409195873045953355010416684623",
+    "p_token_ids": [
+      "63091623343687297303606592004867326730200634937409195873045953355010416684623"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "63091623343687297303606592004867326730200634937409195873045953355010416684623",
+    "no_token_id": "102039975525536046545638924824798876480719469785837400983070764668444799295423",
+    "title": "Will the Seattle Mariners win the 2026 World Series?",
+    "contracts": 550,
+    "entry_k_price": 0.9,
+    "entry_p_price": 0.085,
+    "entry_kp_cost": 540.029999999995,
+    "entry_fills": [
+      {
+        "k_price": 0.89,
+        "p_price": 0.085,
+        "contracts": 549
+      },
+      {
+        "k_price": 0.9,
+        "p_price": 0.085,
+        "contracts": 1
+      }
+    ],
+    "entry_fee": 3.77,
+    "entry_edge_dollar": 0.7,
+    "entry_arr": 0.0012962242838454087,
+    "entry_edge_pct": 0.0012962242838454087,
+    "entry_timestamp": "2026-04-01T00:22:25.834755+00:00",
     "entry_trade_number": "T00033",
-    "cooldown_until": "2026-03-31T16:47:18.029687+00:00"
+    "cooldown_until": "2026-04-01T01:22:25.834755+00:00"
+  },
+  "pair-1427": {
+    "pair_id": "pair-1427",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXTOPCHEF-26DEC31-DUY",
+    "p_token_id": "27764163624769731313636324454647624980065686558321555559864948089512409050595",
+    "p_token_ids": [
+      "27764163624769731313636324454647624980065686558321555559864948089512409050595"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "27764163624769731313636324454647624980065686558321555559864948089512409050595",
+    "no_token_id": "49669091388295108918349315066072934758108345294691369351649724959608202498848",
+    "title": "Will Duyen Ha win Top Chef Season 23?",
+    "contracts": 53,
+    "entry_k_price": 0.96,
+    "entry_p_price": 0.018,
+    "entry_kp_cost": 51.94300000000004,
+    "entry_fills": [
+      {
+        "k_price": 0.96,
+        "p_price": 0.016,
+        "contracts": 16
+      },
+      {
+        "k_price": 0.96,
+        "p_price": 0.017,
+        "contracts": 9
+      },
+      {
+        "k_price": 0.96,
+        "p_price": 0.018,
+        "contracts": 28
+      }
+    ],
+    "entry_fee": 0.15,
+    "entry_edge_dollar": 0.377,
+    "entry_arr": 0.009407253373329106,
+    "entry_edge_pct": 0.007257955836204264,
+    "entry_timestamp": "2026-04-01T00:25:04.879714+00:00",
+    "entry_trade_number": "T00034",
+    "cooldown_until": "2026-04-01T01:25:04.879714+00:00"
   }
 }
