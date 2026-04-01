@@ -545,10 +545,12 @@ function enhancedSimilarity(
   const actionMismatch = aAction && bAction && aAction !== bAction;
   if (actionMismatch) return 0; // hard reject different actions on same entity
 
-  // Bet type mismatch: reject pairs where the bet type is fundamentally different
+  // Bet type mismatch: apply a 0.6× penalty instead of hard-rejecting.
+  // Titles can use different terminology (e.g. Kalshi says "total" / Poly says "over")
+  // and the AI verifier is better placed to make the final call.
   const betTypeA = extractBetType(aTitle);
   const betTypeB = extractBetType(bTitle);
-  if (betTypeA && betTypeB && betTypeA !== betTypeB) return 0;
+  const betTypeMismatch = !!(betTypeA && betTypeB && betTypeA !== betTypeB);
 
   // Resolution condition mismatch: contracts on the same event but different conditions
   // e.g., "Bitcoin above $40 on March 4" vs "Bitcoin above $40 on March 5" → reject
@@ -642,7 +644,9 @@ function enhancedSimilarity(
   }
   const entityScore = allEntities.size > 0 ? entityShared / allEntities.size : 0;
 
-  return 0.55 * weightedJaccard + 0.25 * bigramScore + 0.20 * entityScore;
+  const rawScore = 0.55 * weightedJaccard + 0.25 * bigramScore + 0.20 * entityScore;
+  // Apply bet type mismatch penalty — still lets high-text-similarity pairs reach AI review
+  return betTypeMismatch ? rawScore * 0.6 : rawScore;
 }
 
 function categoryTag(title: string): string {
@@ -1303,8 +1307,8 @@ export class CrossPlatformScreener {
 
       totalCandidates += candidateMap.size;
 
-      // Cap candidates per Poly market to avoid explosion — score all but keep top 3
-      const MAX_MATCHES_PER_POLY = 3;
+      // Cap candidates per Poly market — configurable, default 3 (fast) or 5 (deep)
+      const MAX_MATCHES_PER_POLY = getSettings().aiMatching.maxMatchesPerPoly ?? 3;
       const topMatches: Array<{ km: NormalizedMarket; score: number }> = [];
 
       for (const km of candidateMap.values()) {
@@ -1378,10 +1382,11 @@ export class CrossPlatformScreener {
     // Sort by text score descending so the best text matches get AI verification first
     ambiguousCandidates.sort((a, b) => b.textScore - a.textScore);
 
-    // Cap at maxAiCandidates to limit API calls; overflow falls back to text-only
+    // Cap at maxAiCandidates — set to 0 for no cap (deep mode: evaluate everything)
     const maxAi = getSettings().aiMatching.maxAiCandidates;
-    const aiCandidates = ambiguousCandidates.slice(0, maxAi);
-    const overflowCandidates = ambiguousCandidates.slice(maxAi);
+    const noCap = maxAi === 0;
+    const aiCandidates = noCap ? ambiguousCandidates : ambiguousCandidates.slice(0, maxAi);
+    const overflowCandidates = noCap ? [] : ambiguousCandidates.slice(maxAi);
 
     // Accept overflow candidates using text-only threshold
     for (const c of overflowCandidates) {

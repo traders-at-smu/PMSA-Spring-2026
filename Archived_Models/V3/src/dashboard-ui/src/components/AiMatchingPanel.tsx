@@ -337,7 +337,7 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
                 Model: <span className="text-zinc-400 font-medium">{verifierLabel}</span>
                 {scanModeLoaded && (
                   <> &middot; Mode: <span className={scanMode === "deep" ? "text-violet-400 font-semibold" : "text-blue-400 font-semibold"}>
-                    {scanMode === "deep" ? "🔬 Deep (~14h, 5000 candidates)" : "⚡ Fast (~30m, 500 candidates)"}
+                    {scanMode === "deep" ? "🔬 Deep (no cap, threshold 0.25, top-5/market)" : "⚡ Fast (~30m, 500 candidates)"}
                   </span></>
                 )}
                 {status?.lastScanAt && (
@@ -376,7 +376,7 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
                 <button
                   onClick={() => handleScanModeChange("deep")}
                   disabled={status?.scanning}
-                  title="Deep scan: ~14 hours, 5000 AI candidates — more pairs found"
+                  title="Deep scan: no candidate cap, threshold 0.25, top-5 per market — finds every possible pair"
                   className={`px-3 py-1.5 transition-all ${
                     scanMode === "deep"
                       ? "bg-violet-500/20 text-violet-300"

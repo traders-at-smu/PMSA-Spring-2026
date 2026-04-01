@@ -46,7 +46,8 @@ export interface AiMatchingConfig {
   confidenceThreshold: number;
   textScoreAutoAcceptMin: number;
   textScoreAiZone: [number, number];
-  maxAiCandidates: number;
+  maxAiCandidates: number;           // 0 = no cap (evaluate everything)
+  maxMatchesPerPoly: number;         // top-N Kalshi candidates per Poly market
   fewShotExampleCount: number;
   fewShotSelectionStrategy: "diverse" | "recent" | "hard";
 }
@@ -167,7 +168,8 @@ const defaults: RuntimeSettings = {
     confidenceThreshold: 0.90,
     textScoreAutoAcceptMin: 0.99,
     textScoreAiZone: [0.50, 0.99],
-    maxAiCandidates: 1000,
+    maxAiCandidates: 500,
+    maxMatchesPerPoly: 3,
     fewShotExampleCount: 15,
     fewShotSelectionStrategy: "diverse",
   },

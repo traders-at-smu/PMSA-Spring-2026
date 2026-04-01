@@ -137,13 +137,15 @@ export function startServer(deps: ServerDeps): void {
     }
     _scanMode = mode;
     if (mode === "deep") {
-      runtime.aiMatching.maxAiCandidates = 5000;
-      (runtime.aiMatching as any).textScoreAiZone = [0.40, 0.99];
+      runtime.aiMatching.maxAiCandidates = 0;           // 0 = no cap, evaluate everything
+      runtime.aiMatching.textScoreAiZone = [0.25, 0.99]; // lower threshold = more candidates
+      runtime.aiMatching.maxMatchesPerPoly = 5;          // top-5 Kalshi per Poly market
     } else {
       runtime.aiMatching.maxAiCandidates = 500;
-      (runtime.aiMatching as any).textScoreAiZone = [0.50, 0.99];
+      runtime.aiMatching.textScoreAiZone = [0.50, 0.99];
+      runtime.aiMatching.maxMatchesPerPoly = 3;
     }
-    res.json({ ok: true, scanMode: _scanMode, maxAiCandidates: runtime.aiMatching.maxAiCandidates });
+    res.json({ ok: true, scanMode: _scanMode, maxAiCandidates: runtime.aiMatching.maxAiCandidates, maxMatchesPerPoly: runtime.aiMatching.maxMatchesPerPoly });
   });
 
   app.get("/api/cross-platform/arbs", async (_req, res) => {
