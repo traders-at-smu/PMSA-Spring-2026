@@ -1176,6 +1176,7 @@ def _process_exit_positions(
     """Evaluate and close open positions using bid rules."""
     target_sum = float(cfg.get("exit_target_total_price", 0.99))
     exit_candidates = []
+    resolved_404: list[str] = []
 
     for pair_id, position in list(positions.items()):
         age = _position_age_seconds(position)
@@ -1190,6 +1191,39 @@ def _process_exit_positions(
                     print(f"  {Fore.YELLOW}Rate limited fetching {pair_id} — retrying in {fetch_delay}s...{Style.RESET_ALL}")
                     time.sleep(fetch_delay)
                     fetch_delay = min(fetch_delay * 2, 60)
+                elif "404" in str(exc):
+                    # Market delisted/resolved — auto-close the position
+                    print(f"  {Fore.CYAN}Market gone (404) for {pair_id} — auto-closing as resolved{Style.RESET_ALL}")
+                    trade_number = _next_trade_number(log_path)
+                    exit_log = {
+                        "title": position.get("title", pair_id),
+                        "pair_id": pair_id,
+                        "trade_phase": "exit",
+                        "corresponding_entry_trade_number": position.get("entry_trade_number", ""),
+                        "entry_k_price": position.get("entry_k_price", 0.0),
+                        "entry_p_price": position.get("entry_p_price", 0.0),
+                        "entry_fills": position.get("entry_fills", []),
+                        "entry_fee": position.get("entry_fee", 0.0),
+                        "entry_kp_cost": round(position.get("entry_kp_cost", 0.0), 4),
+                        "exit_fills": [],
+                        "total_contracts": position.get("contracts", 0),
+                        "edge_pct": 0.0,
+                        "total_profit": 0.0,
+                        "arr": 0.0,
+                        "fee": 0.0,
+                        "hold_duration_seconds": round(_position_age_seconds(position), 2),
+                        "close_reason": "market_resolved_404",
+                        "kalshi_token": position.get("kalshi_ticker", ""),
+                        "polymarket_token": position.get("p_token_id", ""),
+                        "strategy": position.get("strategy", ""),
+                        "execution_date": datetime.now(timezone.utc).date().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "mode": mode,
+                        "trade_number": trade_number,
+                    }
+                    _write_trade_log(exit_log, log_path)
+                    resolved_404.append(pair_id)
+                    break
                 elif shutdown:
                     print(f"  {Fore.YELLOW}Exit fetch failed for {pair_id}: {exc} — retrying in {fetch_delay}s...{Style.RESET_ALL}")
                     time.sleep(fetch_delay)
@@ -1341,6 +1375,12 @@ def _process_exit_positions(
             exit_candidates.append(pair_id)
 
     for pair_id in exit_candidates:
+        pos = positions.pop(pair_id, None)
+        if cooldowns is not None and pos is not None:
+            cooldowns[pair_id] = pos.get("cooldown_until", "")
+
+    # Remove positions whose markets returned 404 (resolved/delisted)
+    for pair_id in resolved_404:
         pos = positions.pop(pair_id, None)
         if cooldowns is not None and pos is not None:
             cooldowns[pair_id] = pos.get("cooldown_until", "")

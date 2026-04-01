@@ -9,6 +9,7 @@ import path from "path";
 import os from "os";
 import fs from "fs";
 import axios from "axios";
+import * as XLSX from "xlsx";
 import { getRedactedSettings, getSettings, getSettingsWithMeta, validateSettingsForMode, saveSettings, invalidateSettingsCache } from "../config";
 import type { CrossPlatformScreener } from "../crossPlatformScreener";
 import type { StateStore } from "../services/stateStore";
@@ -98,6 +99,51 @@ export function startServer(deps: ServerDeps): void {
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  // Stop a running scan
+  app.post("/api/cross-platform/stop", (_req, res) => {
+    crossPlatformScreener.abortScan();
+    res.json({ ok: true });
+  });
+
+  // Update AI matching confidence threshold at runtime
+  app.post("/api/ai-matching/confidence", (req, res) => {
+    const { threshold } = req.body;
+    if (typeof threshold !== "number" || threshold < 0 || threshold > 1) {
+      return res.status(400).json({ error: "threshold must be a number between 0 and 1" });
+    }
+    const settings = runtime;
+    settings.aiMatching.confidenceThreshold = threshold;
+    res.json({ ok: true, confidenceThreshold: threshold });
+  });
+
+  // Get current AI matching confidence threshold
+  app.get("/api/ai-matching/confidence", (_req, res) => {
+    res.json({ confidenceThreshold: runtime.aiMatching.confidenceThreshold });
+  });
+
+  // Scan mode: "fast" (~30 min, 500 candidates) or "deep" (~14 hr, 5000 candidates)
+  let _scanMode: "fast" | "deep" = "fast";
+
+  app.get("/api/ai-matching/scan-mode", (_req, res) => {
+    res.json({ scanMode: _scanMode });
+  });
+
+  app.post("/api/ai-matching/scan-mode", (req, res) => {
+    const { mode } = req.body;
+    if (mode !== "fast" && mode !== "deep") {
+      return res.status(400).json({ error: "mode must be 'fast' or 'deep'" });
+    }
+    _scanMode = mode;
+    if (mode === "deep") {
+      runtime.aiMatching.maxAiCandidates = 5000;
+      (runtime.aiMatching as any).textScoreAiZone = [0.40, 0.99];
+    } else {
+      runtime.aiMatching.maxAiCandidates = 500;
+      (runtime.aiMatching as any).textScoreAiZone = [0.50, 0.99];
+    }
+    res.json({ ok: true, scanMode: _scanMode, maxAiCandidates: runtime.aiMatching.maxAiCandidates });
   });
 
   app.get("/api/cross-platform/arbs", async (_req, res) => {
@@ -286,6 +332,46 @@ export function startServer(deps: ServerDeps): void {
     }
   });
 
+  // Export verified matches as V5-compatible Excel
+  app.get("/api/ai-matching/export", (req, res) => {
+    try {
+      const minConf = req.query.minConfidence ? parseFloat(req.query.minConfidence as string) : 0.90;
+      const allResults = stateStore.listAiMatches({ verdict: "verified", limit: 5000 });
+
+      // Filter by confidence threshold
+      const matches = allResults.filter(r => r.ai_confidence >= minConf);
+
+      // Build V5-compatible rows
+      let pairCounter = 1;
+      const rows = matches.map(r => ({
+        pair_id: `ai-${String(pairCounter++).padStart(4, "0")}`,
+        title_clean: r.poly_title || r.kalshi_title || "",
+        category_tag: "ai-matched",
+        similarity_score: r.text_score?.toFixed(4) ?? "",
+        poly_market_id: r.poly_slug,
+        poly_slug: r.poly_slug,
+        poly_url: r.poly_url || `https://polymarket.com/market/${r.poly_slug}`,
+        kalshi_market_id: r.kalshi_ticker,
+        kalshi_url: r.kalshi_url || `https://kalshi.com/markets/${r.kalshi_ticker}`,
+        ai_confidence: r.ai_confidence?.toFixed(4) ?? "",
+        ai_reasoning: r.ai_reasoning || "",
+        resolution_time_utc: "",
+        active: "true",
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Pairs");
+      const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="AI_Matched_Pairs_${new Date().toISOString().slice(0, 10)}.xlsx"`);
+      res.send(buf);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/ai-matching/status", (_req, res) => {
     try {
       const screenerStatus = crossPlatformScreener.getStatus();
@@ -296,6 +382,7 @@ export function startServer(deps: ServerDeps): void {
         matchStats,
         lastScanAt: screenerStatus.lastScanAt,
         scanning: screenerStatus.scanning,
+        scanProgress: screenerStatus.scanProgress,
         lastScanDurationMs: screenerStatus.lastScanDurationMs,
       });
     } catch (err: any) {

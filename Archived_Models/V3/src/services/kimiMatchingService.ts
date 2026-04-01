@@ -63,7 +63,7 @@ const DEFAULT_BASE_URL = "https://api.moonshot.ai/v1";
 const DEFAULT_MODEL = "kimi-k2.5";
 const DEFAULT_CACHE_PATH = "data/kimi-match-cache.json";
 const CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-const MAX_CONCURRENCY = 8;
+const MAX_CONCURRENCY = 2;
 const FLUSH_DEBOUNCE_MS = 30_000;
 
 const BASE_SYSTEM_PROMPT = `You are a prediction market matching expert. Given two market titles from different platforms (Polymarket and Kalshi), determine if they refer to the same real-world event with the same resolution criteria.
@@ -169,78 +169,225 @@ export class KimiMatchingService {
     // API call
     this._cacheMisses++;
     this._totalCalls++;
-    const start = Date.now();
 
-    try {
-      const resp = await axios.post(
-        `${this.baseUrl}/chat/completions`,
-        {
-          model: this.model,
-          messages: [
-            { role: "system", content: this.fewShotSystemPrompt },
-            { role: "user", content: `Polymarket: "${polyTitle}"\nKalshi: "${kalshiTitle}"` },
-          ],
-          temperature: 1,
-          max_tokens: 4096,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${this.apiKey}`,
-            "Content-Type": "application/json",
+    const MAX_RETRIES = 3;
+    let lastErr = "";
+
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const start = Date.now();
+      try {
+        const resp = await axios.post(
+          `${this.baseUrl}/chat/completions`,
+          {
+            model: this.model,
+            messages: [
+              { role: "system", content: this.fewShotSystemPrompt },
+              { role: "user", content: `Polymarket: "${polyTitle}"\nKalshi: "${kalshiTitle}"` },
+            ],
+            temperature: 1,
+            max_tokens: 4096,
           },
-          timeout: 30_000,
+          {
+            headers: {
+              Authorization: `Bearer ${this.apiKey}`,
+              "Content-Type": "application/json",
+            },
+            timeout: 120_000,
+          }
+        );
+
+        const latencyMs = Date.now() - start;
+        this._totalLatencyMs += latencyMs;
+
+        const usage = resp.data?.usage;
+        if (usage) {
+          this._totalTokensUsed += (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
         }
-      );
 
-      const latencyMs = Date.now() - start;
-      this._totalLatencyMs += latencyMs;
+        const content = resp.data?.choices?.[0]?.message?.content || "";
 
-      const usage = resp.data?.usage;
-      if (usage) {
-        this._totalTokensUsed += (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
+        if (!content) {
+          // Empty content — model ran out of tokens for the answer, retry
+          if (attempt < MAX_RETRIES) {
+            console.warn(`[KimiMatch] Empty response (attempt ${attempt + 1}/${MAX_RETRIES + 1}), retrying in ${2 ** attempt}s...`);
+            await new Promise(r => setTimeout(r, 2000 * (2 ** attempt)));
+            continue;
+          }
+          console.warn(`[KimiMatch] Failed to parse response (0 chars): `);
+          return { match: false, confidence: 0, reasoning: "Empty response after retries", fromCache: false, latencyMs };
+        }
+
+        // Debug: log first few raw responses
+        if (this._totalCalls <= 3) {
+          console.log(`[KimiMatch DEBUG] Raw response #${this._totalCalls} (${content.length} chars):\n${content.substring(0, 500)}`);
+        }
+
+        const parsed = this.parseResponse(content);
+        const result: KimiMatchResult = {
+          match: parsed.match,
+          confidence: parsed.confidence,
+          reasoning: parsed.reasoning,
+          fromCache: false,
+          latencyMs,
+        };
+
+        // Cache the result
+        this.cache.set(key, {
+          result: { match: parsed.match, confidence: parsed.confidence, reasoning: parsed.reasoning, latencyMs },
+          timestamp: Date.now(),
+        });
+        this.scheduleDiskFlush();
+        return result;
+
+      } catch (err: any) {
+        const latencyMs = Date.now() - start;
+        const msg = err?.response?.data?.error?.message || err?.message || "Unknown error";
+        lastErr = msg;
+        const isRetryable = msg.includes("overloaded") || msg.includes("timeout") || msg.includes("429") || msg.includes("503") || msg.includes("ECONNRESET");
+
+        if (isRetryable && attempt < MAX_RETRIES) {
+          const delay = 3000 * (2 ** attempt); // 3s, 6s, 12s
+          console.warn(`[KimiMatch] Retryable error (attempt ${attempt + 1}/${MAX_RETRIES + 1}): ${msg} — retrying in ${delay / 1000}s`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        console.warn(`[KimiMatch] API error (${latencyMs}ms): ${msg}`);
+        return { match: false, confidence: 0, reasoning: `API error: ${msg}`, fromCache: false, latencyMs };
       }
-
-      const content = resp.data?.choices?.[0]?.message?.content || "";
-
-      // Debug: log first few raw responses to diagnose format issues
-      if (this._totalCalls <= 3) {
-        console.log(`[KimiMatch DEBUG] Raw response #${this._totalCalls} (${content.length} chars):\n${content.substring(0, 500)}`);
-      }
-
-      const parsed = this.parseResponse(content);
-
-      const result: KimiMatchResult = {
-        match: parsed.match,
-        confidence: parsed.confidence,
-        reasoning: parsed.reasoning,
-        fromCache: false,
-        latencyMs,
-      };
-
-      // Cache the result
-      this.cache.set(key, {
-        result: { match: parsed.match, confidence: parsed.confidence, reasoning: parsed.reasoning, latencyMs },
-        timestamp: Date.now(),
-      });
-      this.scheduleDiskFlush();
-
-      return result;
-    } catch (err: any) {
-      const latencyMs = Date.now() - start;
-      const msg = err?.response?.data?.error?.message || err?.message || "Unknown error";
-      console.warn(`[KimiMatch] API error (${latencyMs}ms): ${msg}`);
-      return {
-        match: false,
-        confidence: 0,
-        reasoning: `API error: ${msg}`,
-        fromCache: false,
-        latencyMs,
-      };
     }
+
+    return { match: false, confidence: 0, reasoning: `Failed after ${MAX_RETRIES + 1} attempts: ${lastErr}`, fromCache: false, latencyMs: 0 };
   }
 
-  async judgePairs(candidates: KimiCandidate[]): Promise<Map<string, KimiMatchResult>> {
+  /** Send multiple pairs in one API call and parse array response */
+  async judgeBatch(batch: KimiCandidate[]): Promise<KimiMatchResult[]> {
+    if (batch.length === 1) {
+      // Single pair — use the standard method (has retry logic)
+      const c = batch[0];
+      return [await this.judgePair(c.polyTitle, c.kalshiTitle, c.polySlug, c.kalshiTicker)];
+    }
+
+    this._cacheMisses += batch.length;
+    this._totalCalls++;
+    const start = Date.now();
+
+    // Build multi-pair prompt
+    const pairsText = batch.map((c, i) =>
+      `Pair ${i + 1}:\n  Polymarket: "${c.polyTitle}"\n  Kalshi: "${c.kalshiTitle}"`
+    ).join("\n\n");
+
+    const batchPrompt = `Evaluate each pair below. Respond with a JSON ARRAY of objects, one per pair in order:\n[{"match": boolean, "confidence": number, "reasoning": "string"}, ...]\n\n${pairsText}`;
+
+    const MAX_RETRIES = 2;
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const resp = await axios.post(
+          `${this.baseUrl}/chat/completions`,
+          {
+            model: this.model,
+            messages: [
+              { role: "system", content: this.fewShotSystemPrompt },
+              { role: "user", content: batchPrompt },
+            ],
+            temperature: 1,
+            max_tokens: 8192,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${this.apiKey}`,
+              "Content-Type": "application/json",
+            },
+            timeout: 120_000,
+          }
+        );
+
+        const latencyMs = Date.now() - start;
+        this._totalLatencyMs += latencyMs;
+        const perPairLatency = Math.round(latencyMs / batch.length);
+
+        const usage = resp.data?.usage;
+        if (usage) {
+          this._totalTokensUsed += (usage.prompt_tokens || 0) + (usage.completion_tokens || 0);
+        }
+
+        let content = resp.data?.choices?.[0]?.message?.content || "";
+        // Strip thinking tags
+        content = content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+
+        // Try to parse as JSON array
+        let parsed: any[] | null = null;
+        try {
+          // Extract array from content
+          const arrMatch = content.match(/\[[\s\S]*\]/);
+          if (arrMatch) parsed = JSON.parse(arrMatch[0]);
+        } catch { /* fall through */ }
+
+        if (!parsed || !Array.isArray(parsed) || parsed.length < batch.length) {
+          // Batch parse failed — fall back to individual calls
+          console.warn(`[KimiMatch] Batch parse failed (got ${parsed?.length ?? 0}/${batch.length}), falling back to individual calls`);
+          const fallbackResults: KimiMatchResult[] = [];
+          for (const c of batch) {
+            fallbackResults.push(await this.judgePair(c.polyTitle, c.kalshiTitle, c.polySlug, c.kalshiTicker));
+          }
+          return fallbackResults;
+        }
+
+        // Map parsed results
+        const batchResults: KimiMatchResult[] = parsed.map((item) => {
+          const result: KimiMatchResult = {
+            match: typeof item.match === "boolean" ? item.match : false,
+            confidence: typeof item.confidence === "number" ? Math.max(0, Math.min(1, item.confidence)) : 0,
+            reasoning: String(item.reasoning || ""),
+            fromCache: false,
+            latencyMs: perPairLatency,
+          };
+          return result;
+        });
+
+        // Cache each result
+        for (let i = 0; i < batch.length; i++) {
+          const c = batch[i];
+          const result = batchResults[i];
+          const key = this.cacheKey(c.polyTitle, c.kalshiTitle);
+          this.cache.set(key, {
+            result: { match: result.match, confidence: result.confidence, reasoning: result.reasoning, latencyMs: result.latencyMs },
+            timestamp: Date.now(),
+          });
+        }
+        this.scheduleDiskFlush();
+        return batchResults;
+
+      } catch (err: any) {
+        const msg = err?.response?.data?.error?.message || err?.message || "Unknown error";
+        const isRetryable = msg.includes("overloaded") || msg.includes("timeout") || msg.includes("429");
+        if (isRetryable && attempt < MAX_RETRIES) {
+          const delay = 3000 * (2 ** attempt);
+          console.warn(`[KimiMatch] Batch retry (attempt ${attempt + 1}): ${msg} — waiting ${delay / 1000}s`);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        // Fall back to individual calls on permanent error
+        console.warn(`[KimiMatch] Batch failed: ${msg}, falling back to individual calls`);
+        const fallbackResults: KimiMatchResult[] = [];
+        for (const c of batch) {
+          fallbackResults.push(await this.judgePair(c.polyTitle, c.kalshiTitle, c.polySlug, c.kalshiTicker));
+        }
+        return fallbackResults;
+      }
+    }
+
+    // Should never reach here, but just in case
+    return batch.map(() => ({ match: false, confidence: 0, reasoning: "Batch exhausted retries", fromCache: false, latencyMs: 0 }));
+  }
+
+  async judgePairs(
+    candidates: KimiCandidate[],
+    isAborted?: () => boolean,
+    onProgress?: (done: number, total: number, result: { key: string; result: KimiMatchResult; polyTitle: string; kalshiTitle: string }) => void,
+  ): Promise<Map<string, KimiMatchResult>> {
     const results = new Map<string, KimiMatchResult>();
+    let completed = 0;
+    const total = candidates.length;
 
     // Split into cached and uncached
     const uncached: KimiCandidate[] = [];
@@ -249,14 +396,25 @@ export class KimiMatchingService {
       const cached = this.cache.get(key);
       if (cached && Date.now() - cached.timestamp < CACHE_MAX_AGE_MS) {
         this._cacheHits++;
-        results.set(`${c.polySlug}::${c.kalshiTicker}`, { ...cached.result, fromCache: true });
+        const resultKey = `${c.polySlug}::${c.kalshiTicker}`;
+        const cachedResult = { ...cached.result, fromCache: true };
+        results.set(resultKey, cachedResult);
+        completed++;
+        onProgress?.(completed, total, { key: resultKey, result: cachedResult, polyTitle: c.polyTitle, kalshiTitle: c.kalshiTitle });
       } else {
         uncached.push(c);
       }
     }
 
-    // Process uncached with concurrency limiter
+    // Process uncached in batches of BATCH_SIZE with concurrency limiter
+    const BATCH_SIZE = 10;
     if (uncached.length > 0) {
+      // Chunk uncached into batches
+      const batches: KimiCandidate[][] = [];
+      for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
+        batches.push(uncached.slice(i, i + BATCH_SIZE));
+      }
+
       const semaphore = { active: 0, queue: [] as (() => void)[] };
 
       const acquire = (): Promise<void> => {
@@ -275,11 +433,20 @@ export class KimiMatchingService {
         if (next) next();
       };
 
-      const tasks = uncached.map(async (c) => {
+      const tasks = batches.map(async (batch) => {
+        if (isAborted?.()) return;
         await acquire();
         try {
-          const result = await this.judgePair(c.polyTitle, c.kalshiTitle, c.polySlug, c.kalshiTicker);
-          results.set(`${c.polySlug}::${c.kalshiTicker}`, result);
+          if (isAborted?.()) return;
+          const batchResults = await this.judgeBatch(batch);
+          for (let i = 0; i < batch.length; i++) {
+            const c = batch[i];
+            const result = batchResults[i] || { match: false, confidence: 0, reasoning: "Batch parse failed", fromCache: false, latencyMs: 0 };
+            const resultKey = `${c.polySlug}::${c.kalshiTicker}`;
+            results.set(resultKey, result);
+            completed++;
+            onProgress?.(completed, total, { key: resultKey, result, polyTitle: c.polyTitle, kalshiTitle: c.kalshiTitle });
+          }
         } finally {
           release();
         }

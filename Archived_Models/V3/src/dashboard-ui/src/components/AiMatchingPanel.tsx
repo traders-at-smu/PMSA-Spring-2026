@@ -45,6 +45,7 @@ interface MatchStatus {
   lastScanAt: string | null;
   scanning: boolean;
   lastScanDurationMs: number;
+  scanProgress: { done: number; total: number };
 }
 
 interface ResultsResponse {
@@ -192,10 +193,10 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [rescanning, setRescanning] = useState(false);
 
-  const statusPoll = usePolling<MatchStatus>("/api/ai-matching/status", 10_000, paused);
+  const statusPoll = usePolling<MatchStatus>("/api/ai-matching/status", 3_000, paused);
   const resultsPoll = usePolling<ResultsResponse>(
     `/api/ai-matching/results${verdictFilter !== "all" ? `?verdict=${verdictFilter}` : ""}`,
-    30_000,
+    5_000,
     paused
   );
 
@@ -232,6 +233,55 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
       resultsPoll.refetch();
     } catch { /* silent */ }
     finally { setRunningCycle(false); }
+  }
+
+  async function handleStopScan() {
+    try {
+      await fetch("/api/cross-platform/stop", { method: "POST" });
+      statusPoll.refetch();
+    } catch { /* silent */ }
+  }
+
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.90);
+  const [confidenceLoaded, setConfidenceLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/ai-matching/confidence")
+      .then(r => r.json())
+      .then(d => { setConfidenceThreshold(d.confidenceThreshold); setConfidenceLoaded(true); })
+      .catch(() => setConfidenceLoaded(true));
+  }, []);
+
+  const [scanMode, setScanMode] = useState<"fast" | "deep">("fast");
+  const [scanModeLoaded, setScanModeLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/ai-matching/scan-mode")
+      .then(r => r.json())
+      .then(d => { setScanMode(d.scanMode); setScanModeLoaded(true); })
+      .catch(() => setScanModeLoaded(true));
+  }, []);
+
+  async function handleScanModeChange(mode: "fast" | "deep") {
+    setScanMode(mode);
+    try {
+      await fetch("/api/ai-matching/scan-mode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode }),
+      });
+    } catch { /* silent */ }
+  }
+
+  async function handleConfidenceChange(val: number) {
+    setConfidenceThreshold(val);
+    try {
+      await fetch("/api/ai-matching/confidence", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ threshold: val }),
+      });
+    } catch { /* silent */ }
   }
 
   async function handleOverride(polySlug: string, kalshiTicker: string, action: "approved" | "rejected") {
@@ -285,6 +335,11 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
               </div>
               <p className="text-[11px] text-zinc-500 mt-0.5">
                 Model: <span className="text-zinc-400 font-medium">{verifierLabel}</span>
+                {scanModeLoaded && (
+                  <> &middot; Mode: <span className={scanMode === "deep" ? "text-violet-400 font-semibold" : "text-blue-400 font-semibold"}>
+                    {scanMode === "deep" ? "🔬 Deep (~14h, 5000 candidates)" : "⚡ Fast (~30m, 500 candidates)"}
+                  </span></>
+                )}
                 {status?.lastScanAt && (
                   <> &middot; Last scan: <span className="text-zinc-400">{timeAgo(status.lastScanAt)}</span></>
                 )}
@@ -301,6 +356,38 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
                 <p className="text-[13px] text-zinc-300 font-mono">{(status.lastScanDurationMs / 1000).toFixed(1)}s</p>
               </div>
             ) : null}
+
+            {/* ── Fast / Deep mode toggle ── */}
+            {scanModeLoaded && (
+              <div className="flex items-center rounded-lg overflow-hidden border border-white/[0.08] text-[11px] font-semibold uppercase tracking-wider">
+                <button
+                  onClick={() => handleScanModeChange("fast")}
+                  disabled={status?.scanning}
+                  title="Fast scan: ~30 min, 500 AI candidates"
+                  className={`px-3 py-1.5 transition-all ${
+                    scanMode === "fast"
+                      ? "bg-blue-500/20 text-blue-300"
+                      : "bg-white/[0.03] text-zinc-500 hover:text-zinc-300"
+                  } ${status?.scanning ? "cursor-not-allowed opacity-50" : ""}`}
+                >
+                  ⚡ Fast
+                </button>
+                <div className="w-px h-full bg-white/[0.08]" />
+                <button
+                  onClick={() => handleScanModeChange("deep")}
+                  disabled={status?.scanning}
+                  title="Deep scan: ~14 hours, 5000 AI candidates — more pairs found"
+                  className={`px-3 py-1.5 transition-all ${
+                    scanMode === "deep"
+                      ? "bg-violet-500/20 text-violet-300"
+                      : "bg-white/[0.03] text-zinc-500 hover:text-zinc-300"
+                  } ${status?.scanning ? "cursor-not-allowed opacity-50" : ""}`}
+                >
+                  🔬 Deep
+                </button>
+              </div>
+            )}
+
             <button
               onClick={handleRunCycle}
               disabled={runningCycle || rescanning || status?.scanning}
@@ -323,9 +410,51 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
             >
               {rescanning ? "Rescanning..." : "Force Rescan"}
             </button>
+            {status?.scanning && (
+              <button
+                onClick={handleStopScan}
+                className="px-3 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wider transition-all border bg-amber-500/10 text-amber-400 border-amber-500/30 hover:bg-amber-500/20"
+              >
+                Stop
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {/* ── Progress Bar (visible during scan) ── */}
+      {status?.scanning && status.scanProgress?.total > 0 && (() => {
+        const { done, total } = status.scanProgress;
+        const pct = Math.round((done / total) * 100);
+        return (
+          <div className="glass-card rounded-xl p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] text-zinc-400 font-medium">
+                AI Verification Progress
+              </span>
+              <span className="text-[12px] font-mono text-zinc-200 tabular-nums">
+                {done} / {total} <span className="text-zinc-500">({pct}%)</span>
+              </span>
+            </div>
+            <div className="w-full h-2.5 bg-zinc-800 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-blue-500 to-emerald-500 rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between mt-1.5">
+              <span className="text-[10px] text-zinc-600">
+                {stats?.verified ?? 0} verified so far
+              </span>
+              {done > 0 && (
+                <span className="text-[10px] text-zinc-600">
+                  ~{Math.round(((total - done) / done) * (Date.now() - new Date(status.lastScanAt || Date.now()).getTime()) / 1000 / 60)}m remaining
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Stats Row ── */}
       <div className="grid grid-cols-4 gap-4">
@@ -356,6 +485,33 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
         </div>
       </div>
 
+      {/* ── Confidence Threshold Slider ── */}
+      {confidenceLoaded && (
+        <div className="glass-card rounded-xl p-5">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-wider">Min Confidence to Verify</p>
+            <span className="text-[13px] font-mono text-zinc-200 tabular-nums">{(confidenceThreshold * 100).toFixed(0)}%</span>
+          </div>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            step={5}
+            value={confidenceThreshold * 100}
+            onChange={(e) => handleConfidenceChange(Number(e.target.value) / 100)}
+            className="w-full h-1.5 rounded-full appearance-none bg-zinc-700 accent-emerald-500 cursor-pointer"
+          />
+          <div className="flex justify-between mt-1">
+            <span className="text-[9px] text-zinc-600">0%</span>
+            <span className="text-[9px] text-zinc-600">50%</span>
+            <span className="text-[9px] text-zinc-600">100%</span>
+          </div>
+          <p className="text-[10px] text-zinc-600 mt-1">
+            Pairs below this threshold are rejected. Takes effect on next scan.
+          </p>
+        </div>
+      )}
+
       {/* ── Live Scan Terminal ── */}
       <ScanTerminal paused={paused} />
 
@@ -381,6 +537,23 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
         ))}
 
         <div className="flex-1" />
+
+        <button
+          onClick={() => {
+            const link = document.createElement("a");
+            link.href = `/api/ai-matching/export?minConfidence=${confidenceThreshold}`;
+            link.download = "";
+            link.click();
+          }}
+          disabled={!stats?.verified}
+          className={`px-3 py-1.5 rounded-lg text-[11px] font-semibold uppercase tracking-wider transition-all border ${
+            stats?.verified
+              ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
+              : "bg-zinc-800/50 text-zinc-600 border-zinc-700 cursor-not-allowed"
+          }`}
+        >
+          Export to Excel
+        </button>
 
         <input
           type="text"

@@ -167,9 +167,10 @@ const STOPWORDS = new Set([
   "and", "or", "is", "are", "was", "were", "this", "that", "it", "its",
   "before", "after", "during", "from", "with", "than", "not", "no", "yes",
   "does", "do", "did", "has", "have", "had", "been", "being", "would",
-  "could", "should", "may", "might", "can", "shall", "above", "below",
+  "could", "should", "may", "might", "can", "shall",
   "more", "less", "over", "under", "between", "through", "into",
-  "2024", "2025", "2026", "2027", "2028",
+  // NOTE: "above"/"below" removed — critical for price threshold markets
+  // NOTE: years removed — critical for resolution date matching
 ]);
 
 // Synonym map: normalize variant forms to a canonical token
@@ -494,6 +495,31 @@ function countSharedTokens(a: Set<string>, b: Set<string>): number {
   return count;
 }
 
+// Bet type extraction — identifies the fundamental bet type from a market title
+// Returns null if no specific bet type detected (generic "will X happen" style)
+function extractBetType(title: string): string | null {
+  const t = title.toLowerCase();
+  // Over/Under and Totals
+  if (/\bo\/u\b|over\/under|totals?\b/i.test(t)) return "totals";
+  // Spread / Handicap
+  if (/\bspread\b|handicap/i.test(t)) return "spread";
+  // Both Teams to Score / BTTS
+  if (/both teams to score|btts/i.test(t)) return "btts";
+  // Winner / Moneyline
+  if (/\bwinner\b|\bmoneyline\b|\bto win\b/i.test(t)) return "winner";
+  // Draw
+  if (/\bend in a draw\b|\bdraw at halftime\b/i.test(t)) return "draw";
+  // Points / Rebounds / Assists (player props)
+  if (/:\s*points\b|points\s+o\/u/i.test(t)) return "points";
+  if (/:\s*rebounds\b|rebounds\s+o\/u/i.test(t)) return "rebounds";
+  if (/:\s*assists\b|assists\s+o\/u/i.test(t)) return "assists";
+  // Specific player prop thresholds (e.g. "20+ points", "8+ rebounds")
+  if (/\d+\+\s*points/i.test(t)) return "points";
+  if (/\d+\+\s*rebounds/i.test(t)) return "rebounds";
+  if (/\d+\+\s*assists/i.test(t)) return "assists";
+  return null;
+}
+
 // Enhanced similarity: combines weighted-Jaccard on unigrams, bigram overlap, and entity matching
 function enhancedSimilarity(
   aTokens: Set<string>,
@@ -509,7 +535,7 @@ function enhancedSimilarity(
 ): number {
   if (aTokens.size === 0 || bTokens.size === 0) return 0;
 
-  // Hard filter: need at least 2 shared tokens to even consider
+  // Require at least 2 shared tokens to avoid noise from single common words
   const sharedCount = countSharedTokens(aTokens, bTokens);
   if (sharedCount < 2) return 0;
 
@@ -518,6 +544,11 @@ function enhancedSimilarity(
   const bAction = extractAction(bTitle);
   const actionMismatch = aAction && bAction && aAction !== bAction;
   if (actionMismatch) return 0; // hard reject different actions on same entity
+
+  // Bet type mismatch: reject pairs where the bet type is fundamentally different
+  const betTypeA = extractBetType(aTitle);
+  const betTypeB = extractBetType(bTitle);
+  if (betTypeA && betTypeB && betTypeA !== betTypeB) return 0;
 
   // Resolution condition mismatch: contracts on the same event but different conditions
   // e.g., "Bitcoin above $40 on March 4" vs "Bitcoin above $40 on March 5" → reject
@@ -713,6 +744,8 @@ export class CrossPlatformScreener {
   private _lastScanAt: string | null = null;
   private _scanning = false;
   private _lastScanDurationMs = 0;
+  private _abortRequested = false;
+  private _scanProgress = { done: 0, total: 0 };
 
   // Incremental scan state — persists between scans
   private _prevPolyIds = new Set<string>();
@@ -788,6 +821,14 @@ export class CrossPlatformScreener {
     return { enabled: false };
   }
 
+  /** Request the current scan to abort early. Results so far are kept. */
+  abortScan(): void {
+    if (this._scanning) {
+      this._abortRequested = true;
+      this._log("warn", "Abort requested — finishing current AI calls then stopping...");
+    }
+  }
+
   invalidateCache(): void {
     this.cachedResults = null;
     this.cacheExpiry = 0;
@@ -819,10 +860,12 @@ export class CrossPlatformScreener {
     kimiStats: Record<string, unknown> | null;
     matchedPairs: number;
     arbCount: number;
+    scanProgress: { done: number; total: number };
   } {
     return {
       lastScanAt: this._lastScanAt,
       scanning: this._scanning,
+      scanProgress: { ...this._scanProgress },
       lastScanDurationMs: this._lastScanDurationMs,
       cacheTtlMs: this.CACHE_TTL,
       cacheExpiresAt: this.cacheExpiry,
@@ -949,6 +992,7 @@ export class CrossPlatformScreener {
 
   private async computeResults(incremental: boolean): Promise<CrossPlatformResults> {
     this._scanning = true;
+    this._abortRequested = false;
     const scanStart = Date.now();
     this._log("step", "Scan started — fetching markets from both venues...");
 
@@ -1229,16 +1273,20 @@ export class CrossPlatformScreener {
       textScore: number;
     }> = [];
     let processed = 0;
+    let totalCandidates = 0;
+    let emptyTokenMarkets = 0;
+    let belowThreshold = 0;
 
     // In incremental mode, only iterate over the specified Poly subset
     const polyToProcess = incrementalOpts?.onlyPoly ?? polyMarkets;
 
-    // Primary pass: enhanced similarity with threshold 0.15
+    // Primary pass: enhanced similarity
     for (const pm of polyToProcess) {
-      if (pm.tokens.size === 0) continue;
+      if (pm.tokens.size === 0) { emptyTokenMarkets++; continue; }
 
-      // Yield to event loop every 500 markets so Express can serve requests
-      if (++processed % 500 === 0) {
+      // Yield to event loop and log progress every 2000 markets
+      if (++processed % 2000 === 0) {
+        this._log("info", `Text matching: ${processed}/${polyToProcess.length} Poly markets scored (${pairs.length} high, ${ambiguousCandidates.length} ambiguous so far)`);
         await new Promise((r) => setTimeout(r, 0));
       }
 
@@ -1253,14 +1301,15 @@ export class CrossPlatformScreener {
         }
       }
 
-      let bestMatch: NormalizedMarket | null = null;
-      let bestScore = 0;
+      totalCandidates += candidateMap.size;
+
+      // Cap candidates per Poly market to avoid explosion — score all but keep top 3
+      const MAX_MATCHES_PER_POLY = 3;
+      const topMatches: Array<{ km: NormalizedMarket; score: number }> = [];
 
       for (const km of candidateMap.values()) {
-        // Category mismatch penalty: different categories get a 0.5x multiplier
-        // Only skip penalty when BOTH are "other" (unknown)
-        const catMatch = pm.category === km.category || (pm.category === "other" && km.category === "other");
-        const catMultiplier = catMatch ? 1.0 : 0.5;
+        const catMatch = pm.category === km.category || pm.category === "other" || km.category === "other";
+        const catMultiplier = catMatch ? 1.0 : 0.85;
 
         const score = enhancedSimilarity(
           pm.tokens, km.tokens,
@@ -1270,31 +1319,57 @@ export class CrossPlatformScreener {
           pm.conditions, km.conditions
         ) * catMultiplier;
 
-        if (score > bestScore) {
-          bestScore = score;
-          bestMatch = km;
+        if (score >= rerankLow) {
+          topMatches.push({ km, score });
+        } else if (score > 0) {
+          belowThreshold++;
         }
       }
 
-      if (bestMatch && bestScore >= rerankLow) {
-        if (bestScore >= rerankHigh) {
-          // High-confidence text match — accept directly
-          usedKalshi.add(bestMatch.id);
-          matchedPoly.add(pm.id);
-          pairs.push({
-            polymarket: pm,
-            kalshi: bestMatch,
-            similarityScore: bestScore,
-          });
+      // Sort by score descending and take top N
+      topMatches.sort((a, b) => b.score - a.score);
+      for (const { km, score } of topMatches.slice(0, MAX_MATCHES_PER_POLY)) {
+        if (score >= rerankHigh) {
+          pairs.push({ polymarket: pm, kalshi: km, similarityScore: score });
         } else {
-          // Ambiguous zone — collect for embedding re-ranking
-          ambiguousCandidates.push({
-            polymarket: pm,
-            kalshi: bestMatch,
-            textScore: bestScore,
-          });
+          ambiguousCandidates.push({ polymarket: pm, kalshi: km, textScore: score });
         }
       }
+    }
+
+    this._log("info", `Pipeline: ${polyToProcess.length} Poly markets processed, ${emptyTokenMarkets} skipped (no tokens)`);
+    this._log("info", `Pipeline: ${totalCandidates.toLocaleString()} candidate pairs from inverted index`);
+    this._log("info", `Pipeline: ${belowThreshold.toLocaleString()} pairs below ${(rerankLow * 100).toFixed(0)}% threshold (dropped)`);
+
+    // Deduplicate: keep only best score per unique (polyId, kalshiId) pair
+    const dedupPairs = (list: MatchedPair[]): MatchedPair[] => {
+      const best = new Map<string, MatchedPair>();
+      for (const p of list) {
+        const key = `${p.polymarket.id}||${p.kalshi.id}`;
+        const existing = best.get(key);
+        if (!existing || p.similarityScore > existing.similarityScore) best.set(key, p);
+      }
+      return [...best.values()];
+    };
+    const dedupAmbiguous = (list: typeof ambiguousCandidates): typeof ambiguousCandidates => {
+      const best = new Map<string, typeof ambiguousCandidates[0]>();
+      for (const c of list) {
+        const key = `${c.polymarket.id}||${c.kalshi.id}`;
+        const existing = best.get(key);
+        if (!existing || c.textScore > existing.textScore) best.set(key, c);
+      }
+      return [...best.values()];
+    };
+
+    const rawPairs = pairs.length;
+    const rawAmbiguous = ambiguousCandidates.length;
+    const dedupedPairs = dedupPairs(pairs);
+    pairs.length = 0; pairs.push(...dedupedPairs);
+    const dedupedAmbig = dedupAmbiguous(ambiguousCandidates);
+    ambiguousCandidates.length = 0; ambiguousCandidates.push(...dedupedAmbig);
+
+    if (rawPairs !== pairs.length || rawAmbiguous !== ambiguousCandidates.length) {
+      this._log("info", `Dedup: ${rawPairs} → ${pairs.length} high-conf, ${rawAmbiguous} → ${ambiguousCandidates.length} ambiguous`);
     }
 
     this._log("info", `Text pass: ${pairs.length} high-confidence, ${ambiguousCandidates.length} ambiguous (need AI)`);
@@ -1336,65 +1411,79 @@ export class CrossPlatformScreener {
       }));
 
       try {
-        const kimiResults = await this.kimiService.judgePairs(kimiCandidates);
-        const stats = this.kimiService.getCacheStats();
-        this._log("info", `Kimi done: ${stats.cacheMisses} API calls, ${stats.cacheSize} cached, ${(stats.hitRate * 100).toFixed(0)}% hit rate`);
+        // Build lookup map: key -> candidate for live processing
+        const candidateByKey = new Map<string, typeof aiCandidates[0]>();
+        for (const c of aiCandidates) {
+          candidateByKey.set(`${c.polymarket.slug}::${c.kalshi.slug || c.kalshi.id}`, c);
+        }
 
         let aiAccepted = 0;
         let aiRejected = 0;
+
+        // Live progress callback — fires after each pair is evaluated
+        this._scanProgress = { done: 0, total: aiCandidates.length };
+        const onProgress = (done: number, total: number, item: { key: string; result: import("./services/kimiMatchingService").KimiMatchResult; polyTitle: string; kalshiTitle: string }) => {
+          this._scanProgress = { done, total };
+          const pct = Math.round((done / total) * 100);
+          const { result } = item;
+          const c = candidateByKey.get(item.key);
+
+          // Progress bar log (every 10 pairs or on matches)
+          const isMatch = result.match && result.confidence >= getSettings().aiMatching.confidenceThreshold;
+          if (isMatch || done % 10 === 0 || done === total) {
+            this._log("info", `[${done}/${total} ${pct}%] ${isMatch ? "✓" : "·"} ${done === total ? "AI verification complete" : ""}`);
+          }
+
+          // Log individual result
+          const tag = isMatch ? "MATCH" : "NO";
+          this._log("detail", `[${tag} ${(result.confidence * 100).toFixed(0)}%] "${item.polyTitle}" ↔ "${item.kalshiTitle}"${result.fromCache ? " (cached)" : ""}`);
+
+          if (isMatch) aiAccepted++; else aiRejected++;
+
+          // Persist to SQLite immediately
+          if (this.stateStore && c) {
+            try {
+              this.stateStore.upsertAiMatch({
+                polySlug: c.polymarket.slug,
+                kalshiTicker: c.kalshi.slug || c.kalshi.id,
+                polyTitle: c.polymarket.title,
+                kalshiTitle: c.kalshi.title,
+                textScore: c.textScore,
+                aiMatch: result.match,
+                aiConfidence: result.confidence,
+                aiReasoning: result.reasoning,
+                aiModel: getSettings().apiKeys.kimi.model,
+                aiLatencyMs: result.latencyMs,
+                fromCache: result.fromCache,
+                finalVerdict: isMatch ? "verified" : "pending",
+                polyUrl: c.polymarket.url,
+                kalshiUrl: c.kalshi.url,
+              });
+            } catch { /* non-critical */ }
+          }
+
+          // Add to matched pairs immediately if verified
+          if (isMatch && c && !usedKalshi.has(c.kalshi.id)) {
+            const combined = KIMI_TEXT_WEIGHT * c.textScore + KIMI_AI_WEIGHT * result.confidence;
+            usedKalshi.add(c.kalshi.id);
+            matchedPoly.add(c.polymarket.id);
+            pairs.push({ polymarket: c.polymarket, kalshi: c.kalshi, similarityScore: combined });
+          }
+        };
+
+        const kimiResults = await this.kimiService.judgePairs(kimiCandidates, () => this._abortRequested, onProgress);
+        const stats = this.kimiService.getCacheStats();
+        this._log("info", `Kimi done: ${stats.cacheMisses} API calls, ${stats.cacheSize} cached, ${(stats.hitRate * 100).toFixed(0)}% hit rate`);
+
+        // Handle any candidates that got no result (fallback to text-only)
         for (const c of aiCandidates) {
           const key = `${c.polymarket.slug}::${c.kalshi.slug || c.kalshi.id}`;
           const result = kimiResults.get(key);
-
-          if (result) {
-            const verdict = result.match && result.confidence >= getSettings().aiMatching.confidenceThreshold;
-            const tag = verdict ? "MATCH" : "NO";
-            this._log("detail", `[${tag} ${(result.confidence * 100).toFixed(0)}%] "${c.polymarket.title}" ↔ "${c.kalshi.title}"${result.fromCache ? " (cached)" : ""}`);
-            if (verdict) aiAccepted++; else aiRejected++;
-            // Persist to SQLite
-            if (this.stateStore) {
-              try {
-                this.stateStore.upsertAiMatch({
-                  polySlug: c.polymarket.slug,
-                  kalshiTicker: c.kalshi.slug || c.kalshi.id,
-                  polyTitle: c.polymarket.title,
-                  kalshiTitle: c.kalshi.title,
-                  textScore: c.textScore,
-                  aiMatch: result.match,
-                  aiConfidence: result.confidence,
-                  aiReasoning: result.reasoning,
-                  aiModel: getSettings().apiKeys.kimi.model,
-                  aiLatencyMs: result.latencyMs,
-                  fromCache: result.fromCache,
-                  finalVerdict: result.match && result.confidence >= getSettings().aiMatching.confidenceThreshold ? "verified" : "pending",
-                  polyUrl: c.polymarket.url,
-                  kalshiUrl: c.kalshi.url,
-                });
-              } catch { /* non-critical */ }
-            }
-
-            if (result.match && result.confidence >= getSettings().aiMatching.confidenceThreshold) {
-              const combined = KIMI_TEXT_WEIGHT * c.textScore + KIMI_AI_WEIGHT * result.confidence;
-              if (!usedKalshi.has(c.kalshi.id)) {
-                usedKalshi.add(c.kalshi.id);
-                matchedPoly.add(c.polymarket.id);
-                pairs.push({
-                  polymarket: c.polymarket,
-                  kalshi: c.kalshi,
-                  similarityScore: combined,
-                });
-              }
-            }
-          } else {
-            // No result — fall back to text-only threshold
+          if (!result) {
             if (c.textScore >= PRIMARY_THRESHOLD && !usedKalshi.has(c.kalshi.id)) {
               usedKalshi.add(c.kalshi.id);
               matchedPoly.add(c.polymarket.id);
-              pairs.push({
-                polymarket: c.polymarket,
-                kalshi: c.kalshi,
-                similarityScore: c.textScore,
-              });
+              pairs.push({ polymarket: c.polymarket, kalshi: c.kalshi, similarityScore: c.textScore });
             }
           }
         }
