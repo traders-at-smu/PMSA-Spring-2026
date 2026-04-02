@@ -74,7 +74,18 @@ def validate_formula(formula: str, name: str = "formula") -> None:
         raise ValueError(f"Fee formula '{name}' did not return a number")
 
 
-def apply_fee(formula_fn, p: float, c: int, round_up: bool = False) -> float:
+def _round_half_up(value: float, decimals: int) -> float:
+    factor = 10 ** max(0, int(decimals))
+    return math.floor(value * factor + 0.5) / factor
+
+
+def apply_fee(
+    formula_fn,
+    p: float,
+    c: int,
+    round_up: bool = False,
+    round_decimals: int | None = None,
+) -> float:
     """Evaluate the compiled fee formula; optionally round up to nearest cent.
 
     Always returns a non-negative value — fees cannot be negative.
@@ -82,4 +93,6 @@ def apply_fee(formula_fn, p: float, c: int, round_up: bool = False) -> float:
     fee = max(0.0, formula_fn(p, c))
     if round_up:
         fee = math.ceil(fee * 100.0) / 100.0
+    if round_decimals is not None:
+        fee = _round_half_up(fee, round_decimals)
     return fee
