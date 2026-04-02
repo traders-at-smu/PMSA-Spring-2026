@@ -698,9 +698,9 @@ def _validate_poly_clob(slug: str) -> dict:
         no_ask = 1.0 - yes_bid
         ask_sum = yes_ask + no_ask
         if ask_sum > 1.10:
-            raise RuntimeError(
-                f"Polymarket '{slug}' ask prices sum to {ask_sum:.3f} "
-                f"(YES ask={yes_ask:.3f}, NO ask={no_ask:.3f})"
+            print(
+                f"  ⚠ Polymarket '{slug}' ask prices sum to {ask_sum:.3f} "
+                f"(YES ask={yes_ask:.3f}, NO ask={no_ask:.3f}) — allowing anyway"
             )
 
     end_date = str(
@@ -716,7 +716,7 @@ def validate_row(row: dict) -> dict:
     - Kalshi market is open/active and not yet closed
     - Kalshi orderbook endpoint is accessible
     - Polymarket CLOB token endpoints are accessible
-    - Ask-price sanity (sum ≤ 1.10)
+    - Ask-price sanity (sum > 1.10 logs a warning but no longer rejects)
     Also populates resolution_time_utc if not already set.
     """
     kalshi_ticker = str(row.get("kalshi_market_id", "")).strip()
