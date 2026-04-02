@@ -1342,6 +1342,8 @@ def _process_exit_positions(
                 for tid in p_token_ids:
                     book = books.get(tid)
                     if not book:
+                        # If a multi-outcome leg is 404, we can't reliably exit. 
+                        # But if ALL books are missing or it's a 404 error, it's resolved.
                         raise RuntimeError(f"Missing orderbook for Polymarket token {tid}")
                     leg_bid_levels.append(_normalize_levels(poly._parse_bid_levels(book), descending=True))
                     leg_best_bids.append(poly._best_bid(book))
@@ -1349,7 +1351,42 @@ def _process_exit_positions(
                 p_levels = leg_bid_levels[0] if len(leg_bid_levels) == 1 else _combine_leg_levels(leg_bid_levels)
             else:
                 pq = poly.get_quotes(position.get("yes_token_id", ""), position.get("no_token_id", ""), "")
+                p_bid = pq["no_bid"] if position["strategy"] == "BUY_KY_BUY_PN" else pq["yes_bid"]
+                p_levels = pq.get("depth", {}).get("no_bids" if position["strategy"] == "BUY_KY_BUY_PN" else "yes_bids", [])
         except Exception as exc:
+            if _is_404_error(exc):
+                print(f"  {Fore.CYAN}Polymarket market gone (404) for {pair_id} — auto-closing as resolved{Style.RESET_ALL}")
+                trade_number = _next_trade_number(log_path)
+                exit_log = {
+                    "title": position.get("title", pair_id),
+                    "pair_id": pair_id,
+                    "trade_phase": "exit",
+                    "corresponding_entry_trade_number": position.get("entry_trade_number", ""),
+                    "entry_k_price": position.get("entry_k_price", 0.0),
+                    "entry_p_price": position.get("entry_p_price", 0.0),
+                    "entry_fills": position.get("entry_fills", []),
+                    "entry_fee": position.get("entry_fee", 0.0),
+                    "entry_kp_cost": round(position.get("entry_kp_cost", 0.0), 4),
+                    "exit_fills": [],
+                    "total_contracts": position.get("contracts", 0),
+                    "edge_pct": 0.0,
+                    "total_profit": 0.0,
+                    "arr": 0.0,
+                    "fee": 0.0,
+                    "hold_duration_seconds": round(_position_age_seconds(position), 2),
+                    "close_reason": "poly_market_resolved_404",
+                    "kalshi_token": position.get("kalshi_ticker", ""),
+                    "polymarket_token": position.get("p_token_id", ""),
+                    "strategy": position.get("strategy", ""),
+                    "execution_date": datetime.now(timezone.utc).date().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "mode": mode,
+                    "trade_number": trade_number,
+                }
+                _write_trade_log(exit_log, log_path)
+                resolved_404.append(pair_id)
+                continue
+
             print(f"  {Fore.YELLOW}Exit Poly fetch failed for {pair_id}: {exc}{Style.RESET_ALL}")
             continue
 
@@ -1358,17 +1395,11 @@ def _process_exit_positions(
             k_levels = kq.get("depth", {}).get("sell_yes", [])
             k_side = "yes"
             p_side = "no"
-            if not p_token_ids:
-                p_bid = pq["no_bid"]
-                p_levels = pq.get("depth", {}).get("no_bids", [])
         else:
             k_bid = kq["no_bid"]
             k_levels = kq.get("depth", {}).get("sell_no", [])
             k_side = "no"
             p_side = "yes"
-            if not p_token_ids:
-                p_bid = pq["yes_bid"]
-                p_levels = pq.get("depth", {}).get("yes_bids", [])
 
         target_hit = (k_bid + p_bid) >= target_sum
         if not (target_hit or shutdown):
@@ -1705,6 +1736,7 @@ def _build_polymarket_quotes(pair: dict[str, Any], poly) -> dict[str, Any]:
         for outcome, tid in zip(outcomes, token_ids):
             book = books.get(tid)
             if not book:
+                # Raise so Phase 2 catch logic handles this as a failure/expired
                 raise RuntimeError(f"Missing orderbook for Polymarket token {tid}")
             tokens[tid] = {
                 "outcome": outcome,
@@ -1737,11 +1769,17 @@ def _build_polymarket_quotes(pair: dict[str, Any], poly) -> dict[str, Any]:
         }
 
     # Binary yes/no path
-    pq = poly.get_quotes(
-        pair.get("polymarket_yes_token_id", ""),
-        pair.get("polymarket_no_token_id", ""),
-        slug,
-    )
+    try:
+        pq = poly.get_quotes(
+            pair.get("polymarket_yes_token_id", ""),
+            pair.get("polymarket_no_token_id", ""),
+            slug,
+        )
+    except requests.HTTPError as exc:
+        # Re-raise so run_scan can catch 404s and log accordingly
+        raise
+    except Exception as exc:
+        raise RuntimeError(f"Polymarket quote fetch failed: {exc}") from exc
     fee_rate = _resolve_poly_fee_rate(poly, [pq["yes_token_id"], pq["no_token_id"]], market)
     pair["poly_fee_rate"] = fee_rate
     pq["type"] = "binary"
