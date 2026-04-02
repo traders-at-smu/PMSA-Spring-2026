@@ -77,7 +77,7 @@ def _days_to_resolution(resolution_date: Any) -> float:
     conservative rather than crashing on a bad value.
     """
     if not resolution_date:
-    return 365.0
+        return 365.0
 
 
 def _kalshi_fee_rate_for_ticker(ticker: str) -> float:
@@ -389,9 +389,28 @@ def _check_holdings(opp: dict[str, Any], cfg: dict[str, Any]) -> bool:
     if str(holdings.get("mode", "auto")).lower() == "off":
         return True
 
+    try:
+        k_needed, p_needed = _estimate_required_cash(opp, cfg)
+    except FeeRateError as exc:
+        failed_log = cfg.get("failed_log", "failed_pairs.json")
+        _log_failed_pair(
+            {
+                "pair_id": opp.get("pair_id", ""),
+                "kalshi_ticker": opp.get("kalshi_ticker", ""),
+                "title": opp.get("title", ""),
+            },
+            f"holdings fee error: {exc}",
+            failed_log,
+        )
+        print(
+            f"  {Fore.YELLOW}! {opp.get('pair_id', '')}: {exc}  "
+            f"â†’ logged to failed pairs{Style.RESET_ALL}",
+            file=sys.stderr,
+        )
+        return False
+
     kalshi_cfg = holdings.get("kalshi", {}) or {}
     poly_cfg = holdings.get("polymarket", {}) or {}
-    k_needed, p_needed = _estimate_required_cash(opp, cfg)
 
     try:
         k_balance = _fetch_holdings_balance(kalshi_cfg)

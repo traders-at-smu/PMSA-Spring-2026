@@ -27,7 +27,7 @@ from colorama import Fore, Style, init as colorama_init
 
 from connectors import KalshiConnector, PolymarketConnector, load_pairs
 from fees import parse_formula, validate_formula
-from bot import run_scan, run_loop
+from bot import run_scan, run_loop, _resolve_poly_fee_rate
 
 _SCRIPT_DIR = Path(__file__).parent
 
@@ -325,6 +325,57 @@ def _merge_user_pairs(pairs_file: str, user_pairs_dirs: str | list | None) -> No
         )
 
 
+def _health_check_fee_rate(pairs: list[dict], poly, sample_limit: int = 5) -> bool:
+    """Verify Polymarket fee-rate endpoint reachability before scanning."""
+    checked = 0
+    print(f"  [health] checking fee-rate endpoint (sample {sample_limit} pairs)...")
+    for pair in pairs:
+        if checked >= sample_limit:
+            break
+
+        token_ids = [str(t).strip() for t in (pair.get("poly_token_ids") or []) if str(t).strip()]
+        if not token_ids:
+            y = str(pair.get("polymarket_yes_token_id") or "").strip()
+            n = str(pair.get("polymarket_no_token_id") or "").strip()
+            if y and n:
+                token_ids = [y, n]
+
+        if not token_ids:
+            slug = str(pair.get("polymarket_market_slug") or "").strip()
+            if slug:
+                try:
+                    info = poly.resolve_market_outcomes(slug)
+                    token_ids = [str(t).strip() for t in (info.get("token_ids") or []) if str(t).strip()]
+                except Exception as exc:
+                    print(
+                        f"  [health] {pair.get('pair_id', '')}: token resolution failed ({exc})",
+                        file=sys.stderr,
+                    )
+                    continue
+
+        if not token_ids:
+            continue
+
+        checked += 1
+        try:
+            rate = _resolve_poly_fee_rate(poly, token_ids)
+            print(
+                f"  [health] fee-rate ok for {pair.get('pair_id', '')} (rate={rate:.4f})"
+            )
+            return True
+        except Exception as exc:
+            print(
+                f"  [health] {pair.get('pair_id', '')}: fee-rate check failed ({exc})",
+                file=sys.stderr,
+            )
+
+    if checked == 0:
+        print("  [health] no usable token IDs found to test fee-rate endpoint", file=sys.stderr)
+    else:
+        print("  [health] fee-rate endpoint check failed on all samples", file=sys.stderr)
+    return False
+
+
 def cmd_scan(args) -> int:
     cfg = load_config(args.config)
     errors = _validate_config(cfg)
@@ -344,6 +395,9 @@ def cmd_scan(args) -> int:
 
     _print_banner(cfg, len(pairs))
     kalshi, poly = _build_connectors(cfg)
+    if args.health_check and not _health_check_fee_rate(pairs, poly):
+        print(f"  {Fore.RED}âœ—{Style.RESET_ALL} fee-rate health check failed â€” aborting scan")
+        return 1
 
     # scan-only: no trades placed
     run_scan(pairs, kalshi, poly, cfg, execute=False)
@@ -369,6 +423,9 @@ def cmd_run(args) -> int:
 
     _print_banner(cfg, len(pairs))
     kalshi, poly = _build_connectors(cfg)
+    if args.health_check and not _health_check_fee_rate(pairs, poly):
+        print(f"  {Fore.RED}âœ—{Style.RESET_ALL} fee-rate health check failed â€” aborting run")
+        return 1
 
     run_loop(pairs, kalshi, poly, cfg)
     return 0
@@ -406,11 +463,21 @@ def main() -> int:
         "scan",
         help="Run one scan cycle and print opportunities (no trades placed)",
     )
+    s.add_argument(
+        "--health-check",
+        action="store_true",
+        help="Verify Polymarket fee-rate endpoint before scanning",
+    )
     s.set_defaults(func=cmd_scan)
 
     s = sub.add_parser(
         "run",
         help="Scan and execute trades continuously until Ctrl+C",
+    )
+    s.add_argument(
+        "--health-check",
+        action="store_true",
+        help="Verify Polymarket fee-rate endpoint before running",
     )
     s.set_defaults(func=cmd_run)
 
