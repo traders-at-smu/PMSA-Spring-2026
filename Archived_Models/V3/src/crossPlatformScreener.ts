@@ -1421,7 +1421,7 @@ export class CrossPlatformScreener {
     }
 
     if (this.kimiService && aiCandidates.length > 0) {
-      this._log("step", `Kimi AI verification: sending ${aiCandidates.length} candidates (max ${maxAi})...`);
+      this._log("step", `Kimi AI verification: sending ${aiCandidates.length} candidates (${noCap ? "no cap — deep mode" : `max ${maxAi}`})...`);
       if (overflowCandidates.length > 0) {
         this._log("detail", `${overflowCandidates.length} overflow candidates using text-only threshold`);
       }

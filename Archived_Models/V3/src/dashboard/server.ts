@@ -123,8 +123,23 @@ export function startServer(deps: ServerDeps): void {
     res.json({ confidenceThreshold: runtime.aiMatching.confidenceThreshold });
   });
 
-  // Scan mode: "fast" (~30 min, 500 candidates) or "deep" (~14 hr, 5000 candidates)
-  let _scanMode: "fast" | "deep" = "fast";
+  // Scan mode: "fast" (500 candidates) or "deep" (no cap, threshold 0.25)
+  // Detect current mode from persisted settings so it survives server restarts
+  function applyScanMode(mode: "fast" | "deep"): void {
+    if (mode === "deep") {
+      runtime.aiMatching.maxAiCandidates = 0;
+      runtime.aiMatching.textScoreAiZone = [0.25, 0.99];
+      runtime.aiMatching.maxMatchesPerPoly = 5;
+    } else {
+      runtime.aiMatching.maxAiCandidates = 500;
+      runtime.aiMatching.textScoreAiZone = [0.50, 0.99];
+      runtime.aiMatching.maxMatchesPerPoly = 3;
+    }
+  }
+
+  // Derive current mode from persisted settings (maxAiCandidates=0 means deep)
+  let _scanMode: "fast" | "deep" = runtime.aiMatching.maxAiCandidates === 0 ? "deep" : "fast";
+  applyScanMode(_scanMode); // ensure all three settings are consistent on startup
 
   app.get("/api/ai-matching/scan-mode", (_req, res) => {
     res.json({ scanMode: _scanMode });
@@ -136,14 +151,21 @@ export function startServer(deps: ServerDeps): void {
       return res.status(400).json({ error: "mode must be 'fast' or 'deep'" });
     }
     _scanMode = mode;
-    if (mode === "deep") {
-      runtime.aiMatching.maxAiCandidates = 0;           // 0 = no cap, evaluate everything
-      runtime.aiMatching.textScoreAiZone = [0.25, 0.99]; // lower threshold = more candidates
-      runtime.aiMatching.maxMatchesPerPoly = 5;          // top-5 Kalshi per Poly market
-    } else {
-      runtime.aiMatching.maxAiCandidates = 500;
-      runtime.aiMatching.textScoreAiZone = [0.50, 0.99];
-      runtime.aiMatching.maxMatchesPerPoly = 3;
+    applyScanMode(mode);
+    // Persist to settings.json so the mode survives server restarts
+    try {
+      saveSettings({
+        aiMatching: {
+          maxAiCandidates: runtime.aiMatching.maxAiCandidates,
+          textScoreAiZone: runtime.aiMatching.textScoreAiZone,
+          maxMatchesPerPoly: runtime.aiMatching.maxMatchesPerPoly,
+        },
+      });
+      invalidateSettingsCache();
+      // Re-apply after cache invalidation so runtime object stays live
+      applyScanMode(mode);
+    } catch (err: any) {
+      console.warn("[Server] Could not persist scan mode:", err?.message);
     }
     res.json({ ok: true, scanMode: _scanMode, maxAiCandidates: runtime.aiMatching.maxAiCandidates, maxMatchesPerPoly: runtime.aiMatching.maxMatchesPerPoly });
   });
