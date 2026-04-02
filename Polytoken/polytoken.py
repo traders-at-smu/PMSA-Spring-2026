@@ -382,18 +382,26 @@ def _poly_contract_match_text(market):
     return _normalize_match_text(" ".join(pieces))
 
 
-def _extract_category(poly_market: dict) -> str:
-    """Return a category string from Polymarket event tags, or 'default'.
+# Official Polymarket top-level categories (lowercase for matching)
+_POLY_OFFICIAL_CATEGORIES = {
+    "crypto", "economics", "mentions", "culture", "weather",
+    "finance", "politics", "tech", "sports", "geopolitics",
+}
 
-    Tags live on the event object, not the market. We pull the event slug
-    from market.events[0] and do one extra GET /events?slug= to retrieve them.
+
+def _extract_category(poly_market: dict) -> str:
+    """Return the official Polymarket category from event tags, or 'other'.
+
+    Tags live on the event object. We pull the event slug from market.events[0]
+    and do one extra GET /events?slug= to retrieve them, then match against
+    Polymarket's official top-level category list.
     """
     events = poly_market.get("events") or []
     event_slug = ""
     if isinstance(events, list) and events and isinstance(events[0], dict):
         event_slug = str(events[0].get("slug") or "").strip()
     if not event_slug:
-        return "default"
+        return "other"
     try:
         res = requests.get(
             f"{POLY_GAMMA_BASE}/events",
@@ -405,14 +413,27 @@ def _extract_category(poly_market: dict) -> str:
         if isinstance(event_data, list) and event_data:
             event_data = event_data[0]
         tags = event_data.get("tags") or [] if isinstance(event_data, dict) else []
+        # First pass: exact match against official categories (lowest ID wins)
+        best_label = ""
+        best_id = float("inf")
         for tag in tags:
-            if isinstance(tag, dict):
-                label = str(tag.get("label") or tag.get("slug") or "").strip().lower()
-                if label:
-                    return label
+            if not isinstance(tag, dict):
+                continue
+            label = str(tag.get("label") or tag.get("slug") or "").strip().lower()
+            if label not in _POLY_OFFICIAL_CATEGORIES:
+                continue
+            try:
+                tag_id = float(tag.get("id", float("inf")))
+            except (ValueError, TypeError):
+                tag_id = float("inf")
+            if tag_id < best_id:
+                best_id = tag_id
+                best_label = label
+        if best_label:
+            return best_label
     except Exception:
         pass
-    return "default"
+    return "other"
 
 
 def _build_mapping_row(poly_market, poly_market_slug, kalshi_submarket):

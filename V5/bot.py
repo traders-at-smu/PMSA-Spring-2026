@@ -20,7 +20,7 @@ from typing import Any
 import requests
 from colorama import Fore, Style
 
-from fees import apply_fee
+from fees import apply_fee, parse_formula
 
 
 # ── Error classification ───────────────────────────────────────────────────────
@@ -316,6 +316,9 @@ def _estimate_required_cash(opp: dict[str, Any], cfg: dict[str, Any]) -> tuple[f
     k_fee_fn = fee_cfg["kalshi"]["_fn"]
     p_fee_fn = fee_cfg["polymarket"]["_fn"]
     k_rup = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
+    opp_poly_rate = opp.get("poly_fee_rate")
+    if opp_poly_rate is not None:
+        p_fee_fn = parse_formula(f"p * (1 - p) * {opp_poly_rate} * c")
 
     k_avg = k_spend / contracts if contracts else 0.0
     p_avg = p_spend / contracts if contracts else 0.0
@@ -706,6 +709,9 @@ def evaluate_pair(
     k_fee_fn = fee_cfg["kalshi"]["_fn"]
     p_fee_fn = fee_cfg["polymarket"]["_fn"]
     k_round_up = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
+    pair_poly_rate = pair.get("poly_fee_rate")
+    if pair_poly_rate is not None:
+        p_fee_fn = parse_formula(f"p * (1 - p) * {pair_poly_rate} * c")
 
     k_depth = kalshi_quotes["depth"]
     poly_type = poly_quotes.get("type", "binary")
@@ -865,6 +871,7 @@ def evaluate_pair(
                 "days": days,
                 "slippage": walk["slippage"],
                 "remaining": walk["remaining"],
+                "poly_fee_rate": pair.get("poly_fee_rate"),
             })
 
     return results
@@ -1098,6 +1105,7 @@ def _record_open_position(
         "entry_timestamp": now.isoformat(),
         "entry_trade_number": trade.get("trade_number", ""),
         "cooldown_until": (now + timedelta(seconds=cooldown_seconds)).isoformat(),
+        "poly_fee_rate": opp.get("poly_fee_rate"),
     }
     positions[opp["pair_id"]] = pos
     _save_open_positions(position_file, positions)
@@ -1336,6 +1344,9 @@ def _process_exit_positions(
         k_fee_fn = fee_cfg["kalshi"]["_fn"]
         p_fee_fn = fee_cfg["polymarket"]["_fn"]
         k_rup = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
+        pos_poly_rate = position.get("poly_fee_rate")
+        if pos_poly_rate is not None:
+            p_fee_fn = parse_formula(f"p * (1 - p) * {pos_poly_rate} * c")
         # Use blended average exit prices for fee calculation, not just the last fill price
         exit_k_spend_val = walk.get("k_spend", exit_k_price * exit_contracts)
         exit_p_spend_val = walk.get("p_spend", exit_p_price * exit_contracts)
@@ -1557,6 +1568,9 @@ def _build_polymarket_quotes(pair: dict[str, Any], poly) -> dict[str, Any]:
         event_slug = str(market.get("eventSlug") or market.get("event_slug") or "").strip()
         if event_slug and not pair.get("poly_event_url"):
             pair["poly_event_url"] = f"https://polymarket.com/event/{event_slug}"
+        # Override fee rate to 0 for markets with fees disabled
+        if not market.get("feesEnabled", True):
+            pair["poly_fee_rate"] = 0.0
         if not primary:
             outcomes_lc = [o.strip().lower() for o in outcomes]
             if len(outcomes_lc) == 2 and "yes" in outcomes_lc and "no" in outcomes_lc:
@@ -1843,6 +1857,9 @@ def run_scan(
             k_fee_fn  = fee_cfg["kalshi"]["_fn"]
             p_fee_fn  = fee_cfg["polymarket"]["_fn"]
             k_rup     = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
+            _pair_poly_rate = pair.get("poly_fee_rate")
+            if _pair_poly_rate is not None:
+                p_fee_fn = parse_formula(f"p * (1 - p) * {_pair_poly_rate} * c")
             def _net_edge(ka: float, pa: float) -> float:
                 return 1.0 - (ka + pa
                                + apply_fee(k_fee_fn, ka, 1, k_rup)

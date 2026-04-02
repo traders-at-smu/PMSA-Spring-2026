@@ -62,6 +62,7 @@
 
   "_doc_fees": "Fee formulas as math expressions. Available variables: p = contract price/probability (0–1), q = 1−p (complement), c = number of contracts. Operators: + − * / ** ( ). No function calls allowed.",
   "_doc_fees_examples": "Common formulas — Kalshi standard: 'p * (1 - p) * 0.07 * c'  |  Flat fee: '0.02 * c'  |  Using q shorthand: 'p * q * 0.07 * c'",
+  "_doc_fees_polymarket": "Polymarket taker fee formula is 'p * (1 - p) * rate * c' where rate varies by category (crypto=0.072, sports=0.03, finance/politics/mentions/tech=0.04, economics/culture/weather/other=0.05, geopolitics=0). The bot automatically uses per-pair rates derived from category_tag at runtime — the formula below is the fallback for pairs with no category.",
   "fees": {
     "kalshi": {
       "_doc": "Kalshi taker fee. round_up_to_cent=true matches Kalshi's actual billing (rounds fee up to the nearest cent).",
@@ -69,8 +70,8 @@
       "round_up_to_cent": true
     },
     "polymarket": {
-      "_doc": "Polymarket taker fee.",
-      "formula": "0"
+      "_doc": "Polymarket taker fee fallback formula — used only if a pair has no category_tag. Per-pair rates from category are applied automatically at runtime.",
+      "formula": "p * (1 - p) * 0.05 * c"
     }
   },
 

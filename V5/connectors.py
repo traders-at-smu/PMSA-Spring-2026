@@ -481,6 +481,30 @@ class PolymarketConnector:
                 pass
         return max(prices) if prices else 0.0
 
+    def get_fee_rate(self, token_id: str) -> float:
+        """Fetch the live taker fee rate for a token from the CLOB API.
+
+        Returns the fee rate as a decimal (e.g. 0.03 for 3% Sports).
+        The endpoint returns base_fee in basis points (bps); divide by 10000.
+        Returns 0.0 on any error or if the market has no fees.
+
+        Endpoint: GET https://clob.polymarket.com/fee-rate?token_id={token_id}
+        Response:  {"base_fee": <int bps>}  e.g. {"base_fee": 300} for Sports (3%)
+        """
+        if not token_id:
+            return 0.0
+        try:
+            res = requests.get(
+                f"{self.clob_host}/fee-rate",
+                params={"token_id": token_id},
+                timeout=_TIMEOUT,
+            )
+            res.raise_for_status()
+            bps = int(res.json().get("base_fee", 0))
+            return bps / 10000.0
+        except Exception:
+            return 0.0
+
     def _fetch_book(self, token_id: str) -> dict[str, Any]:
         res = requests.get(
             f"{self.clob_host}/book",
@@ -555,6 +579,28 @@ class PolymarketConnector:
 
 
 # ── Excel / CSV pairs loader ──────────────────────────────────────────────────
+
+# Polymarket taker fee rates by official category (from Polymarket fee docs).
+# Formula: fee = contracts × rate × price × (1 − price)
+# Live rate: GET https://clob.polymarket.com/fee-rate?token_id={token_id}
+#   → returns {"base_fee": <int bps>}; rate = base_fee / 10000
+#   e.g. Sports = 300 bps → 0.03; Crypto = 720 bps → 0.072
+# Maker orders pay 0 fees — only taker (immediately filled) orders incur fees.
+# Markets with feesEnabled=false on the market object have rate 0 regardless of category.
+_POLY_FEE_RATES: dict[str, float] = {
+    "crypto":      0.072,
+    "sports":      0.030,
+    "finance":     0.040,
+    "politics":    0.040,
+    "mentions":    0.040,
+    "tech":        0.040,
+    "economics":   0.050,
+    "culture":     0.050,
+    "weather":     0.050,
+    "other":       0.050,
+    "geopolitics": 0.000,
+}
+
 
 def _pick(row: dict, *keys: str, default: str = "") -> str:
     """Return the first non-empty string value found among the given keys."""
@@ -671,6 +717,9 @@ def load_pairs(path: str) -> list[dict[str, Any]]:
             # Accept both "category_tag" (actual file) and "category" (generic)
             "category": _pick(row, "category_tag", "category", default="default"),
         })
+        pairs[-1]["poly_fee_rate"] = _POLY_FEE_RATES.get(
+            pairs[-1]["category"].lower(), 0.05
+        )
 
     # ── Data validation ──
     seen_ids: set[str] = set()

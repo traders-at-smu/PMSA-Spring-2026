@@ -84,6 +84,7 @@ python clean_pairs.py                         # remove expired pairs (dry-run by
 - **Same-side guard:** `evaluate_pair` rejects strategies where `kp_cost / contracts < 0.60` (inverted/same-side pairs)
 - **Multi-outcome markets:** Supported via `poly_outcomes_json`, `poly_token_ids_json`, `poly_primary_outcome` columns in the pairs Excel
 - **URL resolution:** `_resolve_kalshi_url` prefers live API `event_url` (3-segment) over Excel-stored `kalshi_url`; `_resolve_polymarket_url` checks `poly_event_url` first
+- **Polymarket fee rates:** Per-pair rates are derived from `category_tag` at pair-load time via `_POLY_FEE_RATES` in `connectors.py`. Formula: `p * (1-p) * rate * c`. Rates: crypto=7.2%, sports=3%, finance/politics/mentions/tech=4%, economics/culture/weather/other=5%, geopolitics=0%. The `fees.polymarket.formula` in config is a fallback for uncategorized pairs.
 
 ## Secrets / .gitignore
 Never commit: `config.json`, `credentials.json`, `.env`, `*.pem`, `*.key`, private keys

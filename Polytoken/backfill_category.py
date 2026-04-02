@@ -92,21 +92,43 @@ def _fetch_event_tags(market: dict[str, Any]) -> list:
     return []
 
 
+# Official Polymarket top-level categories (lowercase for matching)
+_POLY_OFFICIAL_CATEGORIES = {
+    "crypto", "economics", "mentions", "culture", "weather",
+    "finance", "politics", "tech", "sports", "geopolitics",
+}
+
+
 def _extract_category(market: dict[str, Any]) -> str:
+    """Return the official Polymarket category from event tags, or 'other'.
+
+    Matches tags against Polymarket's official top-level category list.
+    When multiple official tags exist, returns the one with the lowest numeric id.
+    """
     tags = _fetch_event_tags(market)
+    best_label = ""
+    best_id = float("inf")
     for tag in tags:
-        if isinstance(tag, dict):
-            label = str(tag.get("label") or tag.get("slug") or "").strip().lower()
-            if label:
-                return label
-    return "default"
+        if not isinstance(tag, dict):
+            continue
+        label = str(tag.get("label") or tag.get("slug") or "").strip().lower()
+        if label not in _POLY_OFFICIAL_CATEGORIES:
+            continue
+        try:
+            tag_id = float(tag.get("id", float("inf")))
+        except (ValueError, TypeError):
+            tag_id = float("inf")
+        if tag_id < best_id:
+            best_id = tag_id
+            best_label = label
+    return best_label or "other"
 
 
 # ---------------------------------------------------------------------------
 # Excel backfill
 # ---------------------------------------------------------------------------
 
-def backfill_xlsx(target_path: Path, apply: bool) -> int:
+def backfill_xlsx(target_path: Path, apply: bool, force: bool = False) -> int:
     """Backfill category_tag in the master Excel file. Returns number of changes."""
     try:
         from openpyxl import load_workbook
@@ -152,8 +174,8 @@ def backfill_xlsx(target_path: Path, apply: bool) -> int:
         pair_id = str(ws.cell(row=r, column=col_pair_id).value or r) if col_pair_id else str(r)
         current = str(ws.cell(row=r, column=col_category).value or "").strip()
 
-        # Skip rows that already have a non-default, non-empty category
-        if current and current != "default":
+        # Skip rows that already have a non-default, non-empty category (unless --force)
+        if not force and current and current != "default":
             continue
 
         market = _fetch_poly_market(poly_slug)
@@ -189,7 +211,7 @@ def backfill_xlsx(target_path: Path, apply: bool) -> int:
 # CSV backfill
 # ---------------------------------------------------------------------------
 
-def backfill_csv(csv_path: Path, apply: bool) -> int:
+def backfill_csv(csv_path: Path, apply: bool, force: bool = False) -> int:
     """Backfill category_tag in a single pairs CSV. Returns number of changes."""
     if not csv_path.exists():
         return 0
@@ -220,7 +242,7 @@ def backfill_csv(csv_path: Path, apply: bool) -> int:
             continue
 
         current = str(row.get("category_tag") or "").strip()
-        if current and current != "default":
+        if not force and current and current != "default":
             continue
 
         pair_id = row.get("pair_id", "?")
@@ -280,20 +302,25 @@ def main() -> None:
         action="store_true",
         help="Only update master Excel, skip CSVs.",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Re-process rows that already have a non-default category.",
+    )
     args = parser.parse_args()
 
     total = 0
 
     if not args.csv_only:
         print(f"\n=== Excel: {args.target} ===")
-        total += backfill_xlsx(Path(args.target).resolve(), apply=args.apply)
+        total += backfill_xlsx(Path(args.target).resolve(), apply=args.apply, force=args.force)
 
     if not args.xlsx_only and USER_PAIRS_DIR.exists():
         csv_files = sorted(USER_PAIRS_DIR.glob("*/pairs.csv"))
         if csv_files:
             print(f"\n=== Staging CSVs ({len(csv_files)} file(s)) ===")
             for csv_path in csv_files:
-                total += backfill_csv(csv_path, apply=args.apply)
+                total += backfill_csv(csv_path, apply=args.apply, force=args.force)
         else:
             print("\nNo staging CSVs found.")
 
