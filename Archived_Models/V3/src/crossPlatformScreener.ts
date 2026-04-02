@@ -1298,6 +1298,11 @@ export class CrossPlatformScreener {
       if (++processed % 2000 === 0) {
         this._log("info", `Text matching: ${processed}/${polyToProcess.length} Poly markets scored (${pairs.length} high, ${ambiguousCandidates.length} ambiguous so far)`);
         await new Promise((r) => setTimeout(r, 0));
+        // Check abort flag — stop text matching immediately if Stop was pressed
+        if (this._abortRequested) {
+          this._log("warn", "Abort: stopping text matching early.");
+          break;
+        }
       }
 
       // Gather candidate kalshi markets that share at least one token
