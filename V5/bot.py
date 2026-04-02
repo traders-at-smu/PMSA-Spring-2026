@@ -79,6 +79,40 @@ def _days_to_resolution(resolution_date: Any) -> float:
     if not resolution_date:
         return 365.0
 
+    try:
+        # Handle datetime/date objects directly
+        if hasattr(resolution_date, "year") and hasattr(resolution_date, "month") and hasattr(resolution_date, "day"):
+            dt = resolution_date
+            # Ensure it's a datetime with timezone
+            if not isinstance(dt, datetime):
+                dt = datetime(dt.year, dt.month, dt.day, tzinfo=timezone.utc)
+            elif dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+        else:
+            # Handle strings
+            s = str(resolution_date).strip()
+            if not s:
+                return 365.0
+            # Some APIs return '2025-12-31' or ISO8601
+            try:
+                dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+            except ValueError:
+                # Try simple date parse YYYY-MM-DD
+                parts = s.split("T")[0].split("-")
+                if len(parts) == 3:
+                    dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc)
+                else:
+                    return 365.0
+
+        now = datetime.now(timezone.utc)
+        diff = (dt - now).total_seconds() / 86400.0
+        return max(0.01, diff)
+
+    except (ValueError, TypeError, AttributeError, IndexError):
+        return 365.0
+
 
 def _kalshi_fee_rate_for_ticker(ticker: str) -> float:
     """Return the Kalshi taker fee rate for a given ticker.
@@ -127,28 +161,6 @@ def _require_poly_fee_rate(rate: Any, label: str) -> float:
     if rate is None:
         raise FeeRateError(f"{label}: missing Polymarket fee rate (cannot calculate fees)")
     return float(rate)
-    try:
-        from datetime import date
-        if isinstance(resolution_date, datetime):
-            delta = resolution_date.replace(tzinfo=timezone.utc) - datetime.now(timezone.utc)
-            return max(1.0, delta.total_seconds() / 86400)
-        if isinstance(resolution_date, date):
-            from datetime import date as date_type
-            delta = resolution_date - date_type.today()
-            return max(1.0, float(delta.days))
-        s = str(resolution_date).strip()
-        if "T" in s or " " in s:
-            dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
-            delta = dt - datetime.now(timezone.utc)
-        else:
-            from datetime import date as date_type
-            d = date_type.fromisoformat(s[:10])
-            from datetime import date as date_type2
-            delta_days = (d - date_type2.today()).days
-            return max(1.0, float(delta_days))
-        return max(1.0, delta.total_seconds() / 86400)
-    except Exception:
-        return 365.0
 
 
 def _normalize_levels(raw: list[Any], descending: bool = False) -> list[dict[str, Any]]:
