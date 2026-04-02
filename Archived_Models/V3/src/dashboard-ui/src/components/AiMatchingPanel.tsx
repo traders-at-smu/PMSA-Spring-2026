@@ -25,6 +25,8 @@ interface AiMatchRow {
 
 interface MatchStatus {
   aiVerifier: "kimi-k2.5" | "openai-embeddings" | "none";
+  fundsDepleted: boolean;
+  fundsDepletedEvaluated: number;
   kimiStats: {
     totalCalls: number;
     cacheHits: number;
@@ -421,6 +423,25 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
           </div>
         </div>
       </div>
+
+      {/* ── Funds Depleted Banner ── */}
+      {status?.fundsDepleted && !status.scanning && (
+        <div className="glass-card rounded-xl p-4 border border-red-500/40 bg-red-500/5">
+          <div className="flex items-start gap-3">
+            <span className="text-red-400 text-lg shrink-0">⛔</span>
+            <div>
+              <p className="text-[13px] font-semibold text-red-400">Kimi API funds depleted</p>
+              <p className="text-[11px] text-zinc-400 mt-1">
+                The scan stopped after evaluating <span className="text-zinc-200 font-semibold">{status.fundsDepletedEvaluated.toLocaleString()}</span> pairs.
+                All results so far have been saved to the cache — unevaluated pairs will be picked up automatically on the next scan.
+              </p>
+              <p className="text-[11px] text-zinc-500 mt-1.5">
+                Top up your Kimi balance at <span className="text-zinc-400">platform.moonshot.cn</span>, then click <span className="text-zinc-300 font-semibold">Force Rescan</span> to resume.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Progress Bar (visible during scan) ── */}
       {status?.scanning && status.scanProgress?.total > 0 && (() => {

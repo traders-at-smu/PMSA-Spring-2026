@@ -408,6 +408,8 @@ export function startServer(deps: ServerDeps): void {
         scanning: screenerStatus.scanning,
         scanProgress: screenerStatus.scanProgress,
         lastScanDurationMs: screenerStatus.lastScanDurationMs,
+        fundsDepleted: screenerStatus.fundsDepleted,
+        fundsDepletedEvaluated: screenerStatus.fundsDepletedEvaluated,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

@@ -57,6 +57,30 @@ export interface TrainingExample {
   notes?: string;
 }
 
+// ---- Funds-depleted error ----
+
+/** Thrown when the Kimi API rejects requests due to insufficient account balance. */
+export class KimiFundsDepletedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "KimiFundsDepletedError";
+  }
+}
+
+function isFundsDepleted(msg: string, statusCode?: number): boolean {
+  if (statusCode === 402) return true;
+  const lower = msg.toLowerCase();
+  return (
+    lower.includes("insufficient") ||
+    lower.includes("balance") ||
+    lower.includes("credit") ||
+    lower.includes("billing") ||
+    lower.includes("payment required") ||
+    lower.includes("quota exceeded") ||
+    lower.includes("funds")
+  );
+}
+
 // ---- Constants ----
 
 const DEFAULT_BASE_URL = "https://api.moonshot.ai/v1";
@@ -105,6 +129,9 @@ export class KimiMatchingService {
   private cache = new Map<string, CacheEntry>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private dirty = false;
+
+  /** Set if the last judgePairs() call was interrupted by a funds-depleted error. */
+  public lastError: KimiFundsDepletedError | null = null;
 
   // Few-shot
   private aiMatchingConfig: AiMatchingConfig;
@@ -242,8 +269,15 @@ export class KimiMatchingService {
 
       } catch (err: any) {
         const latencyMs = Date.now() - start;
+        const statusCode = err?.response?.status as number | undefined;
         const msg = err?.response?.data?.error?.message || err?.message || "Unknown error";
         lastErr = msg;
+
+        // Funds depleted — throw immediately. Do NOT cache a false negative.
+        if (isFundsDepleted(msg, statusCode)) {
+          throw new KimiFundsDepletedError(`Kimi API funds depleted: ${msg}`);
+        }
+
         const isRetryable = msg.includes("overloaded") || msg.includes("timeout") || msg.includes("429") || msg.includes("503") || msg.includes("ECONNRESET");
 
         if (isRetryable && attempt < MAX_RETRIES) {
@@ -359,7 +393,17 @@ export class KimiMatchingService {
         return batchResults;
 
       } catch (err: any) {
+        // Funds depleted — propagate immediately, no fallback
+        if (err instanceof KimiFundsDepletedError) throw err;
+
+        const statusCode = err?.response?.status as number | undefined;
         const msg = err?.response?.data?.error?.message || err?.message || "Unknown error";
+
+        // Also check in the batch-level catch in case axios wraps it differently
+        if (isFundsDepleted(msg, statusCode)) {
+          throw new KimiFundsDepletedError(`Kimi API funds depleted: ${msg}`);
+        }
+
         const isRetryable = msg.includes("overloaded") || msg.includes("timeout") || msg.includes("429");
         if (isRetryable && attempt < MAX_RETRIES) {
           const delay = 3000 * (2 ** attempt);
@@ -367,7 +411,8 @@ export class KimiMatchingService {
           await new Promise(r => setTimeout(r, delay));
           continue;
         }
-        // Fall back to individual calls on permanent error
+        // Fall back to individual calls on other permanent errors
+        // (KimiFundsDepletedError from individual calls will propagate naturally)
         console.warn(`[KimiMatch] Batch failed: ${msg}, falling back to individual calls`);
         const fallbackResults: KimiMatchResult[] = [];
         for (const c of batch) {
@@ -386,6 +431,7 @@ export class KimiMatchingService {
     isAborted?: () => boolean,
     onProgress?: (done: number, total: number, result: { key: string; result: KimiMatchResult; polyTitle: string; kalshiTitle: string }) => void,
   ): Promise<Map<string, KimiMatchResult>> {
+    this.lastError = null; // clear from any previous run
     const results = new Map<string, KimiMatchResult>();
     let completed = 0;
     const total = candidates.length;
@@ -471,7 +517,18 @@ export class KimiMatchingService {
         }
       });
 
-      await Promise.allSettled(tasks);
+      const taskResults = await Promise.allSettled(tasks);
+
+      // Check if any task was rejected due to funds depletion
+      const fundsErr = taskResults.find(
+        (r): r is PromiseRejectedResult =>
+          r.status === "rejected" && r.reason instanceof KimiFundsDepletedError
+      );
+      if (fundsErr) {
+        this.lastError = fundsErr.reason as KimiFundsDepletedError;
+        console.warn(`[KimiMatch] ⛔ Funds depleted — flushing cache with ${results.size} evaluated results so far`);
+        this.flushSync(); // save immediately, don't wait for debounce
+      }
     }
 
     return results;

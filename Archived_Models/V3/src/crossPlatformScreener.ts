@@ -750,6 +750,8 @@ export class CrossPlatformScreener {
   private _lastScanDurationMs = 0;
   private _abortRequested = false;
   private _scanProgress = { done: 0, total: 0 };
+  private _fundsDepleted = false;
+  private _fundsDepletedEvaluated = 0;
 
   // Incremental scan state — persists between scans
   private _prevPolyIds = new Set<string>();
@@ -870,6 +872,8 @@ export class CrossPlatformScreener {
     matchedPairs: number;
     arbCount: number;
     scanProgress: { done: number; total: number };
+    fundsDepleted: boolean;
+    fundsDepletedEvaluated: number;
   } {
     return {
       lastScanAt: this._lastScanAt,
@@ -883,6 +887,8 @@ export class CrossPlatformScreener {
       kimiStats: this.kimiService ? (this.kimiService.getCacheStats() as unknown as Record<string, unknown>) : null,
       matchedPairs: this.cachedResults?.matchedPairs ?? 0,
       arbCount: this.cachedResults?.arbs.length ?? 0,
+      fundsDepleted: this._fundsDepleted,
+      fundsDepletedEvaluated: this._fundsDepletedEvaluated,
     };
   }
 
@@ -1002,7 +1008,9 @@ export class CrossPlatformScreener {
   private async computeResults(incremental: boolean): Promise<CrossPlatformResults> {
     this._scanning = true;
     this._abortRequested = false;
-    this._scanProgress = { done: 0, total: 0 };   // reset so UI shows 0/0 during text phase, not stale values
+    this._scanProgress = { done: 0, total: 0 };
+    this._fundsDepleted = false;
+    this._fundsDepletedEvaluated = 0;
     const scanStart = Date.now();
     this._log("step", "Scan started — fetching markets from both venues...");
 
@@ -1496,6 +1504,14 @@ export class CrossPlatformScreener {
         };
 
         const kimiResults = await this.kimiService.judgePairs(kimiCandidates, () => this._abortRequested, onProgress);
+
+        // Check if funds ran out mid-scan
+        if (this.kimiService.lastError) {
+          this._fundsDepleted = true;
+          this._fundsDepletedEvaluated = kimiResults.size;
+          this._log("error", `⛔ Kimi API funds depleted — ${kimiResults.size} pairs evaluated before stopping. Cache saved. Top up your Kimi balance, then Force Rescan to resume.`);
+        }
+
         const stats = this.kimiService.getCacheStats();
         this._log("info", `Kimi done: ${stats.cacheMisses} API calls, ${stats.cacheSize} cached, ${(stats.hitRate * 100).toFixed(0)}% hit rate`);
 
