@@ -1018,6 +1018,14 @@ export class CrossPlatformScreener {
       }),
     ]);
 
+    // Bail out immediately if Stop was pressed during the market fetch
+    if (this._abortRequested) {
+      this._scanning = false;
+      this._log("warn", "Scan aborted after market fetch.");
+      if (this.cachedResults) return this.cachedResults;
+      return { arbs: [], diffs: [], volumes: [], pairs: [], matchedPairs: 0, polymarketsScanned: 0, kalshiMarketsScanned: 0, timestamp: new Date().toISOString() };
+    }
+
     // Pre-filter: only keep Kalshi markets with actual price data
     const kalshiWithPrices = kalshiMarkets.filter(
       (m) => (m.yes_bid_dollars || 0) > 0 || (m.yes_ask_dollars || 0) > 0
