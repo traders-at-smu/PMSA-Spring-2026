@@ -910,19 +910,17 @@ def evaluate_pair(
             edge_dollar = c * exit_target - walk["kp_cost"] - est_exit_fee
 
             # Sanity check: a genuine two-sided hedge always costs close to $1 per
-            # contract (arb edge is typically 2-15%).  If cost-per-contract is far
-            # below that (< $0.60), both legs are almost certainly betting the SAME
-            # underlying outcome (inverted / same-side pair).  Such an opportunity
-            # is not a hedge — it's a leveraged directional bet.  Skip it and warn.
-            cost_per_contract = walk["kp_cost"] / c
-            if cost_per_contract < 0.85:
+            # contract. If the top-of-book sum is far below $1, both legs are almost
+            # certainly betting the SAME underlying outcome (mismatched/same-side pair).
+            top_of_book_sum = walk["k_price"] + walk["p_price"]
+            if top_of_book_sum < 0.80:
                 print(
                     f"  [WARN] {pair['pair_id']} {strat['strategy']}: "
-                    f"cost/contract={cost_per_contract:.3f} < 0.85 — "
-                    f"likely inverted (same-side) pair, skipping",
+                    f"top_of_book={top_of_book_sum:.3f} < 0.80 — "
+                    f"likely mismatched (same-side) pair, skipping",
                     file=sys.stderr,
                 )
-                return [{"_bad_pair": True, "strategy": strat["strategy"], "cost_per_contract": cost_per_contract}]
+                return [{"_bad_pair": True, "strategy": strat["strategy"], "cost_per_contract": walk["kp_cost"] / c}]
 
             if edge_dollar <= 0:
                 continue
