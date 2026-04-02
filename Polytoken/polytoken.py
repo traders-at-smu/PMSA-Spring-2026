@@ -382,6 +382,39 @@ def _poly_contract_match_text(market):
     return _normalize_match_text(" ".join(pieces))
 
 
+def _extract_category(poly_market: dict) -> str:
+    """Return a category string from Polymarket event tags, or 'default'.
+
+    Tags live on the event object, not the market. We pull the event slug
+    from market.events[0] and do one extra GET /events?slug= to retrieve them.
+    """
+    events = poly_market.get("events") or []
+    event_slug = ""
+    if isinstance(events, list) and events and isinstance(events[0], dict):
+        event_slug = str(events[0].get("slug") or "").strip()
+    if not event_slug:
+        return "default"
+    try:
+        res = requests.get(
+            f"{POLY_GAMMA_BASE}/events",
+            params={"slug": event_slug},
+            timeout=HTTP_TIMEOUT_SEC,
+        )
+        res.raise_for_status()
+        event_data = res.json()
+        if isinstance(event_data, list) and event_data:
+            event_data = event_data[0]
+        tags = event_data.get("tags") or [] if isinstance(event_data, dict) else []
+        for tag in tags:
+            if isinstance(tag, dict):
+                label = str(tag.get("label") or tag.get("slug") or "").strip().lower()
+                if label:
+                    return label
+    except Exception:
+        pass
+    return "default"
+
+
 def _build_mapping_row(poly_market, poly_market_slug, kalshi_submarket):
     pair_id = get_next_pair_id()
     # Extract expiry from Polymarket (Gamma API returns endDate or end_date_iso)
@@ -412,7 +445,7 @@ def _build_mapping_row(poly_market, poly_market_slug, kalshi_submarket):
     return {
         "pair_id": pair_id,
         "title_clean": poly_market.get("question", "N/A"),
-        "category_tag": "default",
+        "category_tag": _extract_category(poly_market),
         "similarity_score": "1.0",
         "poly_market_id": poly_market.get("conditionId", "N/A"),
         "poly_slug": poly_market_slug,
@@ -604,21 +637,41 @@ def build_output_rows(raw_poly_url, kalshi_url, context_label=""):
         return auto_rows
 
     # Fallback behavior: interactive selection when no automatic contains-match found.
+    # Loop so the user can pick multiple subcontracts one at a time.
+    # Each pick removes that option from the list. Enter '#' or leave blank to stop.
     prefix = f"{context_label} " if context_label else ""
     poly_data = resolve_polymarket_market(poly_slug, context_label=context_label)
     poly_market_slug = str(poly_data.get("slug", "")).strip() or poly_slug
 
-    prefix = f"{context_label} " if context_label else ""
-    print(f"\n{prefix}Which subcontract do you want to pick?")
-    for i, m in enumerate(submarkets, 1):
-        print(f"{i}) {m.get('display_name', subcontract_display_name(m))}")
+    remaining = list(submarkets)
+    manual_rows = []
 
-    choice = int(input(f"\n{prefix}Enter choice number: ")) - 1
-    if choice < 0 or choice >= len(submarkets):
-        raise RuntimeError("Choice out of range")
-    selected = submarkets[choice]
+    while remaining:
+        print(f"\n{prefix}Which subcontract do you want to pair? (# or blank to finish)")
+        for i, m in enumerate(remaining, 1):
+            print(f"{i}) {m.get('display_name', subcontract_display_name(m))}")
 
-    return [_build_mapping_row(poly_data, poly_market_slug, selected)]
+        raw = input(f"\n{prefix}Enter choice number: ").strip()
+        if not raw or raw == "#":
+            break
+
+        try:
+            choice = int(raw) - 1
+        except ValueError:
+            print(f"  Invalid input '{raw}', enter a number or # to stop.")
+            continue
+
+        if choice < 0 or choice >= len(remaining):
+            print(f"  Choice out of range (1–{len(remaining)}), try again.")
+            continue
+
+        selected = remaining.pop(choice)
+        manual_rows.append(_build_mapping_row(poly_data, poly_market_slug, selected))
+
+    if not manual_rows:
+        raise RuntimeError("No subcontracts selected")
+
+    return manual_rows
 
 
 # ---------------------------------------------------------------------------
