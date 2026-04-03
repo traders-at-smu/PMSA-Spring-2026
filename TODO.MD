@@ -1,4 +1,4 @@
-- [ ] Pairs generation is broken on Ties for Football Games - AI Ignore this
+- [ ] Pairs generation is broken on Ties for Football Games - AI Ignore thi
 - [ ] Add script to find and fix failed pairs in V4 - AI Ignore 
 - [X] add script to polytoken to check for same information already exisiting 
 - [ ] increased data validation on contracts
