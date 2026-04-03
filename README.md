@@ -1,5 +1,5 @@
 # Polymarket × Kalshi Arbitrage Bot
-test - davis
+
 Cross-venue prediction market arbitrage tooling for [Polymarket](https://polymarket.com) and [Kalshi](https://kalshi.com).
 
 **Active codebase: `V5/`** — Python CLI arbitrage engine.
