@@ -588,12 +588,8 @@ def _walk_depth(
         # Record slippage: one entry per distinct price-level combination.
         # If prices unchanged from the last entry, update it in-place so each
         # entry reflects the cumulative state at the END of that price level.
-        # Estimate exit fees at current position for slippage tracking
-        _avg_k = k_spend / contracts if contracts > 0 else 0.0
-        _avg_p = p_spend / contracts if contracts > 0 else 0.0
-        _exit_kf = apply_fee(kalshi_fee_fn, _avg_k, contracts, kalshi_round_up)
-        _exit_pf = apply_fee(poly_fee_fn, _avg_p, contracts, False, round_decimals=5)
-        edge_d = contracts * exit_target - cur_kp - _exit_kf - _exit_pf
+        # No exit fees — V6 holds to expiry, settlement pays $1/contract automatically.
+        edge_d = contracts * exit_target - cur_kp
         arr_now = (edge_d / cur_kp * 365.0 / days) if cur_kp > 0 and days > 0 else 0.0
         if slippage and slippage[-1]["k_price"] == nk and slippage[-1]["p_price"] == np_:
             slippage[-1]["contracts"] = contracts
@@ -615,18 +611,10 @@ def _walk_depth(
 
     final_kp = cur_kp
 
-    # Estimate exit fees: when selling back, fees are charged on the sell price.
-    # Use the average entry prices as a conservative proxy for exit sell prices.
-    est_exit_kf = 0.0
-    est_exit_pf = 0.0
-    if contracts > 0:
-        avg_k_sell = k_spend / contracts
-        avg_p_sell = p_spend / contracts
-        est_exit_kf = apply_fee(kalshi_fee_fn, avg_k_sell, contracts, kalshi_round_up)
-        est_exit_pf = apply_fee(poly_fee_fn, avg_p_sell, contracts, False, round_decimals=5)
-    total_exit_fees = est_exit_kf + est_exit_pf
+    # No exit fees — V6 holds to expiry, settlement pays $1/contract automatically.
+    total_exit_fees = 0.0
 
-    final_edge_pct = (contracts * exit_target - final_kp - total_exit_fees) / final_kp if final_kp > 0 else 0.0
+    final_edge_pct = (contracts * exit_target - final_kp) / final_kp if final_kp > 0 else 0.0
     final_arr = (final_edge_pct * 365.0) / days if days > 0 else 0.0
 
     # After hitting max_contracts, count profitable contracts still available in the book.
@@ -925,12 +913,9 @@ def evaluate_pair(
         )
 
         if walk["contracts"] > 0:
-            # Estimate exit fees for edge calculation (using avg entry prices as proxy)
+            # No exit fees — V6 holds to expiry, payout is $1/contract at settlement.
             c = walk["contracts"]
-            avg_k_exit = walk["k_spend"] / c if c > 0 else 0.0
-            avg_p_exit = walk["p_spend"] / c if c > 0 else 0.0
-            est_exit_fee = apply_fee(k_fee_fn, avg_k_exit, c, k_round_up) + apply_fee(p_fee_fn, avg_p_exit, c, False, round_decimals=5)
-            edge_dollar = c * exit_target - walk["kp_cost"] - est_exit_fee
+            edge_dollar = c * exit_target - walk["kp_cost"]
 
             # Sanity check: a genuine two-sided hedge always costs close to $1 per
             # contract. If the top-of-book sum is far below $1, both legs are almost
@@ -1474,139 +1459,7 @@ def _process_exit_positions(
             print(f"  {Fore.YELLOW}Exit Poly fetch failed for {pair_id}: {exc}{Style.RESET_ALL}")
             continue
 
-        if position["strategy"] == "BUY_KY_BUY_PN":
-            k_bid = kq["yes_bid"]
-            k_levels = kq.get("depth", {}).get("sell_yes", [])
-            k_side = "yes"
-            p_side = "no"
-        else:
-            k_bid = kq["no_bid"]
-            k_levels = kq.get("depth", {}).get("sell_no", [])
-            k_side = "no"
-            p_side = "yes"
-
-        target_hit = (k_bid + p_bid) >= target_sum
-        if not (target_hit or shutdown):
-            continue
-
-        # For shutdown, accept any bid. For convergence exits, require target_sum.
-        forced = shutdown
-        walk = _walk_depth_bids(k_levels, p_levels, position["contracts"], 0.0 if forced else target_sum)
-
-        # For convergence exits: if no contracts meet the target in the book, skip.
-        # For forced exits: sell the full position at best available bids.
-        if not forced and walk["contracts"] == 0:
-            continue
-
-        exit_contracts = walk["contracts"] if walk["contracts"] > 0 else position["contracts"]
-        exit_k_price = walk.get("k_price", k_bid)
-        exit_p_price = walk.get("p_price", p_bid)
-
-        # Execute the exit leg(s)
-        order_failed = False
-        if mode == "live":
-            try:
-                kalshi.place_order(
-                    ticker=position["kalshi_ticker"],
-                    side=k_side,
-                    contracts=exit_contracts,
-                    price=exit_k_price,
-                    client_order_id=f"EXIT:{pair_id}:{position.get('entry_trade_number', '')}:k",
-                    action="sell",
-                )
-            except Exception as exc:
-                order_failed = True
-                print(f"  {Fore.RED}Kalshi exit failed for {pair_id}: {exc}{Style.RESET_ALL}")
-            try:
-                if p_token_ids:
-                    leg_prices = walk.get("p_leg_prices", [])
-                    if not leg_prices:
-                        leg_prices = [exit_p_price for _ in p_token_ids]
-                    if len(leg_prices) < len(p_token_ids):
-                        leg_prices += [exit_p_price for _ in range(len(p_token_ids) - len(leg_prices))]
-                    for token_id, price in zip(p_token_ids, leg_prices):
-                        poly.place_order(
-                            token_id=token_id,
-                            side="sell",
-                            size=exit_contracts,
-                            price=price,
-                        )
-                else:
-                    poly.place_order(
-                        token_id=position.get("p_token_id", ""),
-                        side="sell",
-                        size=exit_contracts,
-                        price=exit_p_price,
-                    )
-            except Exception as exc:
-                order_failed = True
-                print(f"  {Fore.RED}Polymarket exit failed for {pair_id}: {exc}{Style.RESET_ALL}")
-
-        fee_cfg = cfg["fees"]
-        k_rup = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
-        k_rate = _kalshi_fee_rate_for_ticker(position.get("kalshi_ticker", ""))
-        k_fee_fn = _kalshi_fee_fn_for_rate(k_rate)
-        pos_poly_rate = position.get("poly_fee_rate")
-        if pos_poly_rate is None:
-            try:
-                token_ids = position.get("p_token_ids") or [position.get("p_token_id", "")]
-                pos_poly_rate = _resolve_poly_fee_rate(poly, token_ids)
-                position["poly_fee_rate"] = pos_poly_rate
-            except Exception as exc:
-                failed_log = cfg.get("failed_log", "failed_pairs.json")
-                _log_failed_pair(
-                    {
-                        "pair_id": position.get("pair_id", ""),
-                        "kalshi_ticker": position.get("kalshi_ticker", ""),
-                        "title": position.get("title", ""),
-                    },
-                    f"exit fee error: {exc}",
-                    failed_log,
-                )
-                print(
-                    f"  {Fore.YELLOW}! {position.get('pair_id', '')}: {exc}  "
-                    f"â†’ logged to failed pairs{Style.RESET_ALL}",
-                    file=sys.stderr,
-                )
-                continue
-        p_fee_fn = _poly_fee_fn_for_rate(float(pos_poly_rate))
-        # Use blended average exit prices for fee calculation, not just the last fill price
-        exit_k_spend_val = walk.get("k_spend", exit_k_price * exit_contracts)
-        exit_p_spend_val = walk.get("p_spend", exit_p_price * exit_contracts)
-        exit_k_avg = exit_k_spend_val / exit_contracts if exit_contracts else exit_k_price
-        exit_p_avg = exit_p_spend_val / exit_contracts if exit_contracts else exit_p_price
-        exit_fee = apply_fee(k_fee_fn, exit_k_avg, exit_contracts, k_rup) + apply_fee(p_fee_fn, exit_p_avg, exit_contracts, False, round_decimals=5)
-
-        trade_number = _next_trade_number(log_path)
-        exit_log = _build_exit_log_entry(
-            position=position,
-            exit_walk=walk,
-            exit_contracts=exit_contracts,
-            exit_fee=exit_fee,
-            timeout=False,
-            shutdown=shutdown,
-            mode=mode,
-            trade_number=trade_number,
-        )
-        _write_trade_log(exit_log, log_path)
-
-        remaining = position["contracts"] - exit_contracts
-        if order_failed:
-            print(f"  {Fore.YELLOW}PARTIAL exit for {pair_id} ({exit_contracts}/{position['contracts']}c){Style.RESET_ALL}")
-        elif remaining > 0:
-            print(f"  {Fore.GREEN}EXIT {exit_contracts}c of {position['contracts']}c for {pair_id} — {remaining}c remain (bids below target){Style.RESET_ALL}")
-        else:
-            print(f"  {Fore.GREEN}EXIT {exit_contracts}c for {pair_id} — fully closed K{exit_k_price:.4f}/P{exit_p_price:.4f}{Style.RESET_ALL}")
-
-        if remaining > 0 and not forced:
-            # Partial convergence exit — update position contract count and scale
-            # entry_kp_cost proportionally so the next exit log computes correct P&L
-            original_contracts = positions[pair_id]["contracts"]
-            old_kp_cost = positions[pair_id].get("entry_kp_cost", 0.0)
-            positions[pair_id]["contracts"] = remaining
-            positions[pair_id]["entry_kp_cost"] = old_kp_cost * remaining / original_contracts if original_contracts else 0.0
-        else:
-            exit_candidates.append(pair_id)
+        # V6: no convergence exit — positions are held to expiry for $1/contract payout.
 
     for pair_id in exit_candidates:
         pos = positions.pop(pair_id, None)
@@ -2193,7 +2046,7 @@ def run_loop(
     in memory across cycles — they are never fetched again within this session.
     """
     interval = max(1, int(cfg.get("scan_interval_seconds", 5)))
-    pairs_per_cycle = int(cfg.get("pairs_per_cycle", len(pairs)))
+    pairs_per_cycle = int(cfg.get("pairs_per_cycle", 50))
     pair_offset = 0
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")
@@ -2245,8 +2098,8 @@ def run_loop(
         cooldown_seconds = int(cfg.get("entry_cooldown_seconds", 3600))
         _record_open_position(positions, opp, trade, position_file, cooldown_seconds=cooldown_seconds)
 
-    EXIT_INTERVAL = 10   # seconds between exit checks
-    SCAN_INTERVAL = 5    # seconds between new-pair scans
+    EXIT_INTERVAL = 5    # seconds between exit checks
+    SCAN_INTERVAL = 2    # seconds between new-pair scans
 
     last_exit_check = 0.0  # epoch seconds; 0 forces immediate check on first cycle
 
@@ -2312,19 +2165,8 @@ def run_loop(
             )
             time.sleep(SCAN_INTERVAL)
         except KeyboardInterrupt:
-            print(f"\n{Fore.YELLOW}Shutdown requested — closing positions on bids...{Style.RESET_ALL}")
-            if cfg.get("exit_enabled", True):
-                positions = _process_exit_positions(
-                    positions=positions,
-                    kalshi=kalshi,
-                    poly=poly,
-                    cfg=cfg,
-                    mode=_resolve_execution_mode(cfg),
-                    log_path=cfg.get("exit_log", "exit_trades.json"),
-                    position_file=position_file,
-                    cooldowns=cooldowns,
-                    shutdown=True,
-                )
-                _save_cooldowns(cooldown_file, cooldowns)
+            print(f"\n{Fore.YELLOW}Shutdown requested — leaving positions open to settle at expiry.{Style.RESET_ALL}")
+            _save_open_positions(position_file, positions)
+            _save_cooldowns(cooldown_file, cooldowns)
             print(f"{Fore.YELLOW}Stopped.{Style.RESET_ALL}")
             break
