@@ -172,6 +172,8 @@ def _resolve_poly_fee_rate(poly, token_ids: list[str], market: dict | None = Non
     try:
         rates = [float(poly.get_fee_rate(tid)) for tid in token_ids]
     except Exception as exc:
+        if _is_transient_error(exc):
+            raise
         raise FeeRateError(f"fee-rate lookup failed: {exc}") from exc
     base = rates[0]
     for r in rates[1:]:
