@@ -1,1 +1,399 @@
-{}
+{
+  "pair-0270": {
+    "pair_id": "pair-0270",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXMLBGAME-26APR031945MILKC-MIL",
+    "p_token_id": "17960374439355496271516405018908893144700745878117386222169799952410915079892",
+    "p_token_ids": [
+      "17960374439355496271516405018908893144700745878117386222169799952410915079892"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "17960374439355496271516405018908893144700745878117386222169799952410915079892",
+    "no_token_id": "",
+    "title": "Milwaukee Brewers vs. Kansas City Royals",
+    "contracts": 18,
+    "entry_k_price": 0.52,
+    "entry_p_price": 0.4,
+    "entry_kp_cost": 17.230359999999997,
+    "entry_fills": [
+      {
+        "k_price": 0.52,
+        "p_price": 0.39,
+        "contracts": 8
+      },
+      {
+        "k_price": 0.52,
+        "p_price": 0.4,
+        "contracts": 10
+      }
+    ],
+    "entry_fee": 0.75036,
+    "entry_edge_dollar": 0.5896,
+    "entry_arr": 7.872277184178122,
+    "entry_edge_pct": 0.03422099131997259,
+    "entry_timestamp": "2026-04-04T23:55:12.199027+00:00",
+    "entry_trade_number": "T00003",
+    "poly_fee_rate": 0.1,
+    "resolution_date": "2026-04-06T14:00:00Z"
+  },
+  "pair-0271": {
+    "pair_id": "pair-0271",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXMLBGAME-26APR031945MILKC-KC",
+    "p_token_id": "17960374439355496271516405018908893144700745878117386222169799952410915079892",
+    "p_token_ids": [
+      "17960374439355496271516405018908893144700745878117386222169799952410915079892"
+    ],
+    "p_leg_prices": [
+      0.395556
+    ],
+    "p_leg_spend": [
+      7.120000000000003
+    ],
+    "yes_token_id": "80389557553664115756725687419643989089479946673428412925117512575714036886848",
+    "no_token_id": "",
+    "title": "Milwaukee Brewers vs. Kansas City Royals",
+    "contracts": 18,
+    "entry_k_price": 0.53,
+    "entry_p_price": 0.4,
+    "entry_kp_cost": 17.410360000000004,
+    "entry_fills": [
+      {
+        "k_price": 0.53,
+        "p_price": 0.39,
+        "contracts": 8,
+        "p_leg_prices": [
+          0.39
+        ]
+      },
+      {
+        "k_price": 0.53,
+        "p_price": 0.4,
+        "contracts": 10,
+        "p_leg_prices": [
+          0.4
+        ]
+      }
+    ],
+    "entry_fee": 0.75036,
+    "entry_edge_dollar": 0.4096,
+    "entry_arr": 5.412556038091446,
+    "entry_edge_pct": 0.023528519800853968,
+    "entry_timestamp": "2026-04-04T23:55:12.201213+00:00",
+    "entry_trade_number": "T00004",
+    "poly_fee_rate": 0.1,
+    "resolution_date": "2026-04-06T14:00:00Z"
+  },
+  "pair-0279": {
+    "pair_id": "pair-0279",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXNHLGAME-26APR04MTLNJ-NJ",
+    "p_token_id": "114575356895347429676381648632701045746947799777755502314257668259157596707696",
+    "p_token_ids": [
+      "114575356895347429676381648632701045746947799777755502314257668259157596707696"
+    ],
+    "p_leg_prices": [
+      0.95038
+    ],
+    "p_leg_spend": [
+      950.3800000000133
+    ],
+    "yes_token_id": "14722127284570028939582440202922590331264632790626530428372860739717119253525",
+    "no_token_id": "",
+    "title": "Canadiens vs. Devils",
+    "contracts": 1000,
+    "entry_k_price": 0.01,
+    "entry_p_price": 0.96,
+    "entry_kp_cost": 961.0800000000132,
+    "entry_fills": [
+      {
+        "k_price": 0.01,
+        "p_price": 0.68,
+        "contracts": 5,
+        "p_leg_prices": [
+          0.68
+        ]
+      },
+      {
+        "k_price": 0.01,
+        "p_price": 0.93,
+        "contracts": 50,
+        "p_leg_prices": [
+          0.93
+        ]
+      },
+      {
+        "k_price": 0.01,
+        "p_price": 0.94,
+        "contracts": 51,
+        "p_leg_prices": [
+          0.94
+        ]
+      },
+      {
+        "k_price": 0.01,
+        "p_price": 0.95,
+        "contracts": 570,
+        "p_leg_prices": [
+          0.95
+        ]
+      },
+      {
+        "k_price": 0.01,
+        "p_price": 0.96,
+        "contracts": 324,
+        "p_leg_prices": [
+          0.96
+        ]
+      }
+    ],
+    "entry_fee": 0.7,
+    "entry_edge_dollar": 28.92,
+    "entry_arr": 0.7913482073455155,
+    "entry_edge_pct": 0.030091147459094324,
+    "entry_timestamp": "2026-04-05T01:53:58.350772+00:00",
+    "entry_trade_number": "T00031",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-18T23:00:00Z"
+  },
+  "pair-0280": {
+    "pair_id": "pair-0280",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXNHLGAME-26APR04MTLNJ-MTL",
+    "p_token_id": "114575356895347429676381648632701045746947799777755502314257668259157596707696",
+    "p_token_ids": [
+      "114575356895347429676381648632701045746947799777755502314257668259157596707696"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "114575356895347429676381648632701045746947799777755502314257668259157596707696",
+    "no_token_id": "",
+    "title": "Canadiens vs. Devils",
+    "contracts": 1000,
+    "entry_k_price": 0.01,
+    "entry_p_price": 0.96,
+    "entry_kp_cost": 961.0800000000132,
+    "entry_fills": [
+      {
+        "k_price": 0.01,
+        "p_price": 0.68,
+        "contracts": 5
+      },
+      {
+        "k_price": 0.01,
+        "p_price": 0.93,
+        "contracts": 50
+      },
+      {
+        "k_price": 0.01,
+        "p_price": 0.94,
+        "contracts": 51
+      },
+      {
+        "k_price": 0.01,
+        "p_price": 0.95,
+        "contracts": 570
+      },
+      {
+        "k_price": 0.01,
+        "p_price": 0.96,
+        "contracts": 324
+      }
+    ],
+    "entry_fee": 0.7,
+    "entry_edge_dollar": 28.92,
+    "entry_arr": 0.7913482117313297,
+    "entry_edge_pct": 0.030091147459094324,
+    "entry_timestamp": "2026-04-05T01:53:58.356040+00:00",
+    "entry_trade_number": "T00032",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-18T23:00:00Z"
+  },
+  "pair-0281": {
+    "pair_id": "pair-0281",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXNHLGAME-26APR04NYICAR-CAR",
+    "p_token_id": "17725026647446456255980017688045577766948064027760221748212868440202307310778",
+    "p_token_ids": [
+      "17725026647446456255980017688045577766948064027760221748212868440202307310778"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "17725026647446456255980017688045577766948064027760221748212868440202307310778",
+    "no_token_id": "",
+    "title": "Islanders vs. Hurricanes",
+    "contracts": 122,
+    "entry_k_price": 0.34,
+    "entry_p_price": 0.62,
+    "entry_kp_cost": 119.04000000000006,
+    "entry_fills": [
+      {
+        "k_price": 0.34,
+        "p_price": 0.62,
+        "contracts": 122
+      }
+    ],
+    "entry_fee": 1.92,
+    "entry_edge_dollar": 1.74,
+    "entry_arr": 0.3829076750048411,
+    "entry_edge_pct": 0.01461693548387044,
+    "entry_timestamp": "2026-04-05T00:35:59.739483+00:00",
+    "entry_trade_number": "T00012",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-18T23:00:00Z"
+  },
+  "pair-0282": {
+    "pair_id": "pair-0282",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXNHLGAME-26APR04NYICAR-NYI",
+    "p_token_id": "17725026647446456255980017688045577766948064027760221748212868440202307310778",
+    "p_token_ids": [
+      "17725026647446456255980017688045577766948064027760221748212868440202307310778"
+    ],
+    "p_leg_prices": [
+      0.62
+    ],
+    "p_leg_spend": [
+      75.63999999999997
+    ],
+    "yes_token_id": "44430858997903765074843397235668094065042956813422129958295756055494749885467",
+    "no_token_id": "",
+    "title": "Islanders vs. Hurricanes",
+    "contracts": 122,
+    "entry_k_price": 0.34,
+    "entry_p_price": 0.62,
+    "entry_kp_cost": 117.40000000000003,
+    "entry_fills": [
+      {
+        "k_price": 0.32,
+        "p_price": 0.62,
+        "contracts": 73,
+        "p_leg_prices": [
+          0.62
+        ]
+      },
+      {
+        "k_price": 0.33,
+        "p_price": 0.62,
+        "contracts": 14,
+        "p_leg_prices": [
+          0.62
+        ]
+      },
+      {
+        "k_price": 0.34,
+        "p_price": 0.62,
+        "contracts": 35,
+        "p_leg_prices": [
+          0.62
+        ]
+      }
+    ],
+    "entry_fee": 1.88,
+    "entry_edge_dollar": 3.38,
+    "entry_arr": 0.7541996857973888,
+    "entry_edge_pct": 0.02879045996592816,
+    "entry_timestamp": "2026-04-05T00:35:59.742199+00:00",
+    "entry_trade_number": "T00013",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-18T23:00:00Z"
+  },
+  "pair-0276": {
+    "pair_id": "pair-0276",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXNHLGAME-26APR04WPGCBJ-CBJ",
+    "p_token_id": "61436406413051866509175245229755986708494919177163915706220047097535833391825",
+    "p_token_ids": [
+      "61436406413051866509175245229755986708494919177163915706220047097535833391825"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "61436406413051866509175245229755986708494919177163915706220047097535833391825",
+    "no_token_id": "",
+    "title": "Jets vs. Blue Jackets",
+    "contracts": 32,
+    "entry_k_price": 0.76,
+    "entry_p_price": 0.19,
+    "entry_kp_cost": 30.110000000000017,
+    "entry_fills": [
+      {
+        "k_price": 0.63,
+        "p_price": 0.19,
+        "contracts": 5
+      },
+      {
+        "k_price": 0.72,
+        "p_price": 0.19,
+        "contracts": 2
+      },
+      {
+        "k_price": 0.76,
+        "p_price": 0.19,
+        "contracts": 25
+      }
+    ],
+    "entry_fee": 0.44,
+    "entry_edge_dollar": 1.57,
+    "entry_arr": 1.3684684205401358,
+    "entry_edge_pct": 0.05214214546662178,
+    "entry_timestamp": "2026-04-05T01:13:17.777973+00:00",
+    "entry_trade_number": "T00016",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-18T23:00:00Z"
+  },
+  "pair-0023": {
+    "pair_id": "pair-0023",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXEFLCHAMPIONSHIPGAME-26APR06BRCSHU-BRC",
+    "p_token_id": "114109658915470191780327077211622202494976306332498485932339489723404253866196",
+    "p_token_ids": [
+      "114109658915470191780327077211622202494976306332498485932339489723404253866196"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "114109658915470191780327077211622202494976306332498485932339489723404253866196",
+    "no_token_id": "44569478219106482310684242550406185499366686894751987370104545172639987842590",
+    "title": "bristol city fc sheffield united fc draw",
+    "contracts": 1000,
+    "entry_k_price": 0.67,
+    "entry_p_price": 0.29,
+    "entry_kp_cost": 974.4699999999943,
+    "entry_fills": [
+      {
+        "k_price": 0.67,
+        "p_price": 0.28,
+        "contracts": 101
+      },
+      {
+        "k_price": 0.67,
+        "p_price": 0.29,
+        "contracts": 899
+      }
+    ],
+    "entry_fee": 15.48,
+    "entry_edge_dollar": 15.53,
+    "entry_arr": 0.01593686824633467,
+    "entry_edge_pct": 0.01593686824633467,
+    "entry_timestamp": "2026-04-05T20:56:34.947371+00:00",
+    "entry_trade_number": "T00032",
+    "poly_fee_rate": 0.0,
+    "resolution_date": ""
+  }
+}
