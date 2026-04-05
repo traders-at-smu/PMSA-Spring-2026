@@ -454,9 +454,10 @@ export class KimiMatchingService {
     }
 
     // Process uncached in batches of BATCH_SIZE with concurrency limiter.
-    // 20 pairs per request halves total API call count vs 10 and fits comfortably
-    // in Kimi's 128k context; parse errors fall back to individual calls.
-    const BATCH_SIZE = 20;
+    // NOTE: 20 was tried and is MUCH slower — Kimi's reasoning model scales
+    // non-linearly with batch size (20 pairs took ~100-180s per call vs ~15-30s
+    // for 10). Stick with 10 until we have a cheaper non-reasoning model.
+    const BATCH_SIZE = 10;
     if (uncached.length > 0) {
       // Chunk uncached into batches
       const batches: KimiCandidate[][] = [];
