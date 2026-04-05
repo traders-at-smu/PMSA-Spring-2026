@@ -649,24 +649,191 @@ function enhancedSimilarity(
   return betTypeMismatch ? rawScore * 0.6 : rawScore;
 }
 
+// Category keyword lists — ordered by specificity. First match wins.
+// These align loosely with Polymarket's official top-level categories:
+// crypto, sports, politics, tech, economics, finance, geopolitics, weather, culture, mentions.
+const CATEGORY_KEYWORDS: Array<[string, string[]]> = [
+  // Crypto: very specific tickers/names rarely appear outside crypto contexts
+  ["crypto", [
+    "bitcoin", "btc", "eth", "ether", "crypto", "solana", "ethereum", "dogecoin", "doge",
+    "xrp", "cardano", "ada", "polkadot", "dot", "avalanche", "avax", "chainlink", "link",
+    "litecoin", "ltc", "bnb", "binance coin", "shiba", "shib", "memecoin", "meme coin",
+    "nft", "defi", "dao", "stablecoin", "usdc", "usdt", "tether", "dai",
+    "sui", "aptos", "apt", "near protocol", "cosmos", "atom", "toncoin", "stellar", "xlm",
+    "tezos", "xtz", "monero", "xmr", "zcash", "filecoin", "fil", "tron", "trx",
+    "arbitrum", "arb", "optimism", "op", "polygon", "matic", "fantom", "ftm",
+    "uniswap", "uni", "pancakeswap", "lido", "jito", "pepe", "wif", "bonk", "floki",
+    "hyperliquid", "hype", "sei", "celestia", "tia", "jupiter", "jup", "rune", "thorchain",
+    "worldcoin", "wld", "pyth", "immutable", "imx", "injective", "inj",
+    "halving", "all-time high", "ath", "moon", "hodl", "satoshi", "vitalik",
+    "coinbase", "ftx", "bybit", "okx", "kraken", "gemini exchange", "bitstamp",
+    "blockchain", "web3", "layer 1", "layer 2", "l1 ", "l2 ", "rollup", "staking",
+  ]],
+
+  // Sports: hugely expanded — leagues, tournaments, stats, awards, positions
+  ["sports", [
+    // Leagues
+    "nba", "nfl", "mlb", "nhl", "mls", "wnba", "nwsl", "g league", "xfl", "usfl",
+    "premier league", "serie a", "la liga", "bundesliga", "ligue 1", "eredivisie", "primeira liga",
+    "mls cup", "supercoppa", "copa del rey", "dfb-pokal", "fa cup", "efl", "carabao cup",
+    "ucl", "champions league", "europa league", "conference league", "uefa super cup",
+    "copa america", "copa libertadores", "copa sudamericana", "afcon", "concacaf",
+    "euros ", "european championship",
+    "ncaa", "ncaaf", "ncaab", "march madness", "big 12", "big ten", "sec ", "acc ",
+    "pac-12", "pac-10", "big east", "conference usa", "mac ", "ovc", "sun belt",
+    "ipl", "t20", "odi", "ashes", "cricket world cup", "bbl cricket",
+    "formula 1", "formula one", "f1", "grand prix", "nascar", "indycar", "le mans",
+    "ufc", "mma", "boxing", "heavyweight", "welterweight", "lightweight", "flyweight",
+    // Events / tournaments
+    "world cup", "super bowl", "world series", "stanley cup", "nba finals", "nba draft", "nfl draft", "mlb draft",
+    "all-star game", "pro bowl", "home run derby", "skills challenge", "dunk contest",
+    "pga", "liv golf", "masters tournament", "the masters", "us open", "pga championship", "the open championship",
+    "wgc", "players championship", "presidents cup", "ryder cup", "solheim cup",
+    "atp", "wta", "grand slam", "wimbledon", "french open", "australian open",
+    "olympics", "olympic", "paralympic", "winter games", "summer games",
+    // Stats / actions
+    "mvp", "dpoy", "rookie of the year", "coach of the year", "sixth man", "finals mvp",
+    "trophy", "champion", "playoff", "playoffs", "regular season", "postseason",
+    "relegat", "promoted", "win the league", "win the title", "golden boot", "golden glove", "golden ball",
+    "home run", "touchdown", "strikeout", "interception", "sack ", "field goal", "tackles",
+    "rebound", "assists", "points scored", "yards", "passing yards", "rushing yards", "receiving yards",
+    "double-double", "triple-double", "hat trick", "clean sheet", "shutout", "no-hitter",
+    "over/under", "spread", "moneyline", "parlay", "prop bet",
+    // Teams (partial list — helps catch team-specific markets)
+    "lakers", "celtics", "warriors", "heat", "knicks", "nets ", "bulls", "bucks",
+    "cowboys", "patriots", "eagles", "chiefs", "ravens", "packers", "steelers",
+    "yankees", "dodgers", "red sox", "mets ", "cubs ", "braves", "astros",
+    "arsenal", "chelsea", "liverpool", "manchester united", "manchester city", "tottenham",
+    "real madrid", "barcelona", "atletico madrid", "bayern munich", "dortmund",
+    "psg", "paris saint-germain", "juventus", "inter milan", "ac milan",
+  ]],
+
+  // Tech: AI, companies, products — check before politics to avoid "trump tech" false matches
+  ["tech", [
+    "artificial intelligence", "ai model", "chatgpt", "gpt-4", "gpt-5", "openai", "anthropic",
+    "claude model", "gemini model", "llama model", "mistral", "deepseek", "grok",
+    "large language model", "llm", "a.i.", "agi ", "transformer model", "reasoning model",
+    "tesla", "spacex", "starship", "falcon 9", "neuralink", "waymo", "cruise robotaxi",
+    "nvidia", "amd ", "intel ", "tsmc", "arm holdings", "qualcomm", "broadcom", "gpu",
+    "semiconductor", "chip shortage", "moore's law",
+    "elon musk", "sam altman", "mark zuckerberg", "sundar pichai", "tim cook", "satya nadella",
+    "google", "alphabet", "meta ", "apple inc", "microsoft", "amazon ", "aws ", "azure", "gcp",
+    "iphone", "android", "ios ", "macos", "windows 12", "vision pro", "app store",
+    "cybersecurity", "data breach", "hack ", "ransomware", "ddos", "zero-day",
+    "startup ipo", "tech ipo", "unicorn", "acquisition", "merger",
+    "quantum computing", "qubit", "fusion reactor", "commercial fusion",
+  ]],
+
+  // Geopolitics: wars, countries, leaders — distinct from US domestic politics
+  ["geopolitics", [
+    "war in", "invasion", "invades", "invaded", "ceasefire", "peace deal", "peace talks", "armistice",
+    "nato", "eu summit", "brexit", "european union",
+    "ukraine", "russia", "russian", "putin", "zelensky", "kyiv", "moscow", "donbas", "crimea",
+    "china", "chinese", "taiwan", "hong kong", "xi jinping", "beijing", "ccp ",
+    "israel", "gaza", "hamas", "hezbollah", "west bank", "palestine", "palestinian", "netanyahu", "idf ",
+    "iran", "iranian", "tehran", "ayatollah", "khamenei",
+    "north korea", "kim jong un", "dprk",
+    "south korea", "seoul",
+    "syria", "assad", "damascus", "iraq", "baghdad", "afghanistan", "taliban", "kabul",
+    "yemen", "houthi", "saudi arabia", "uae ", "qatar", "turkey", "erdogan",
+    "venezuela", "maduro", "cuba ", "nicaragua",
+    "sanctions on", "trade war", "tariff on", "embargo",
+    "un security council", "unsc", "g7 summit", "g20 summit", "davos", "world economic forum",
+    "coup ", "regime change", "military intervention", "proxy war",
+  ]],
+
+  // US politics: elections, officials, policy
+  ["politics", [
+    "president", "presidential", "election", "re-election", "senate", "senator", "house race", "congressional",
+    "governor", "mayor", "attorney general", "secretary of", "ambassador to", "speaker of the house",
+    "trump", "biden", "harris", "obama", "clinton", "desantis", "newsom", "ramaswamy",
+    "congress", "party", "nominee", "nomination", "primary", "caucus", "vote", "ballot",
+    "parliament", "prime minister", "chancellor", "minister of",
+    "political", "democrat", "republican", "libertarian", "green party",
+    "midterm", "electoral", "electoral college", "swing state", "battleground",
+    "impeach", "impeachment", "indictment", "indicted", "convict", "cabinet",
+    "supreme court", "scotus", "chief justice", "scotus pick",
+    "executive order", "filibuster", "cloture", "confirmation hearing", "confirmed by senate",
+    "approval rating", "poll", "polling average", "538", "nate silver",
+    "referendum", "candidate", "debate", "incumbent", "term limit",
+    "redistrict", "gerrymander", "voter turnout",
+    "doge ", "department of government efficiency",
+  ]],
+
+  // Finance: stock markets, equities, earnings — distinct from macro
+  ["finance", [
+    "s&p 500", "s&p500", "dow jones", "nasdaq", "russell 2000", "vix ", "vix index",
+    "stock market", "stock price", "equity", "share price", "market cap", "valuation",
+    "ipo ", "earnings", "quarterly report", "revenue", "profit margin", "ebitda",
+    "hedge fund", "pension fund", "mutual fund", "etf ", "index fund", "401k", "ira ",
+    "warren buffett", "berkshire", "jim cramer", "jpmorgan", "goldman sachs", "morgan stanley",
+    "bank of america", "wells fargo", "citigroup", "blackrock", "vanguard group",
+    "short squeeze", "gamestop", "amc stock", "meme stock",
+    "housing market", "mortgage rate", "home prices", "real estate", "reit",
+    "private equity", "venture capital", "vc ", "family office",
+  ]],
+
+  // Macro / economics: Fed policy, inflation, macro indicators
+  ["macro", [
+    "fed ", "federal reserve", "fomc", "jerome powell", "fed chair", "rate cut", "rate hike",
+    "inflation", "disinflation", "deflation", "stagflation", "cpi ", "core cpi", "pce ", "core pce",
+    "gdp ", "gdp growth", "recession", "soft landing", "hard landing",
+    "unemployment", "jobs report", "non-farm payroll", "nfp ", "initial claims",
+    "tariff", "interest rate", "rate decision", "dot plot", "hawkish", "dovish",
+    "treasury yield", "10-year", "2-year", "yield curve", "inverted yield",
+    "bond market", "dollar index", "dxy ", "strong dollar", "weak dollar",
+    "eurozone", "ecb ", "bank of england", "boe ", "bank of japan", "boj ", "pboc ",
+    "quantitative easing", "quantitative tightening", "qe ", "qt ",
+    "stimulus package", "debt ceiling", "government shutdown", "fiscal cliff",
+  ]],
+
+  // Weather / natural disasters
+  ["weather", [
+    "weather", "hurricane", "tropical storm", "cyclone", "typhoon", "tornado", "twister",
+    "earthquake", "magnitude 7", "magnitude 8", "magnitude 9", "aftershock",
+    "temperature", "heatwave", "heat wave", "cold snap", "polar vortex", "frost",
+    "rainfall", "snowfall", "snowstorm", "blizzard", "hailstorm",
+    "wildfire", "forest fire", "flash flood", "mudslide", "landslide",
+    "drought", "sea level", "ice melt", "glacier", "polar ice",
+    "el nino", "la nina", "climate change", "global warming",
+    "category 4", "category 5", "cat 4 ", "cat 5 ", "named storm",
+  ]],
+
+  // Entertainment: awards, celebs, music, film
+  ["entertainment", [
+    "oscar", "academy award", "grammy", "emmy", "golden globe", "tony award", "mtv vma",
+    "box office", "opening weekend", "film ", "movie ", "cinema", "blockbuster",
+    "album", "song ", "single ", "ep release", "music video", "concert tour", "world tour",
+    "spotify", "apple music", "billboard", "rotten tomato", "imdb", "metacritic",
+    "taylor swift", "beyonce", "drake ", "kanye", "kendrick lamar", "rihanna", "bad bunny",
+    "netflix", "hulu", "disney+", "prime video", "hbo ", "hbo max", "paramount+", "peacock", "apple tv+",
+    "streaming", "binge", "season finale", "series premiere", "pilot episode",
+    "cannes", "sundance", "tribeca", "venice film", "toronto film",
+    "celebrity", "divorce", "engaged", "wedding", "breakup", "dating",
+  ]],
+
+  // Social media: creators, platforms, followers
+  ["social_media", [
+    "subscriber", "subscribers", "follower", "followers", "views count", "subs ",
+    "youtube", "youtuber", "twitch", "twitch streamer", "kick streamer",
+    "tiktok", "instagram", "reels", "twitter", "x.com ", "threads app", "bluesky",
+    "snapchat", "discord server", "reddit post", "onlyfans", "patreon",
+    "mrbeast", "pewdiepie", "kai cenat", "ishowspeed", "adin ross",
+    "influencer", "creator economy", "viral tweet", "trending hashtag", "meme ",
+  ]],
+
+  // Awards — specific awards not tied to entertainment
+  ["awards", [
+    "eurovision", "nobel prize", "nobel peace", "nobel literature", "nobel physics",
+    "pulitzer", "webby", "peabody",
+  ]],
+];
+
 function categoryTag(title: string): string {
   const t = title.toLowerCase();
-  if (["president", "election", "senate", "house", "governor", "trump", "biden", "congress", "party", "nominee", "nomination", "primary", "caucus", "vote", "ballot", "parliament", "minister", "political", "democrat", "republican", "midterm", "electoral"].some((k) => t.includes(k)))
-    return "politics";
-  if (["fed", "inflation", "gdp", "unemployment", "cpi", "rates", "recession", "tariff", "interest rate", "jobs report", "payroll", "treasury", "bond", "yield", "fomc"].some((k) => t.includes(k)))
-    return "macro";
-  if (["nba", "nfl", "mlb", "nhl", "mls", "soccer", "mvp", "world cup", "super bowl", "trophy", "champion", "playoff", "premier league", "serie a", "la liga", "bundesliga", "ligue 1", "fa cup", "relegat", "regular season", "win the", "golden boot", "golden glove", "pga", "atp", "wta", "grand slam", "masters tournament", "wimbledon", "us open", "french open", "australian open", "euros ", "copa america", "ucl", "europa league", "conference league", "ovc", "big 12", "big ten", "sec ", "acc ", "pac-", "march madness", "ncaa", "stanley cup", "home run", "touchdown", "strikeout", "assists", "rebound", "yards"].some((k) => t.includes(k)))
-    return "sports";
-  if (["bitcoin", "btc", "eth", "crypto", "solana", "ethereum", "dogecoin", "xrp", "cardano", "polkadot", "avalanche", "chainlink", "litecoin", "bnb", "shiba"].some((k) => t.includes(k)))
-    return "crypto";
-  if (["oscar", "grammy", "emmy", "golden globe", "academy award", "box office", "film", "movie", "album", "song", "spotify", "billboard", "rotten tomato"].some((k) => t.includes(k)))
-    return "entertainment";
-  if (["subscriber", "youtube", "twitch", "tiktok", "instagram", "twitter", "follower", "views"].some((k) => t.includes(k)))
-    return "social_media";
-  if (["weather", "hurricane", "tornado", "earthquake", "temperature", "rainfall", "snow", "wildfire"].some((k) => t.includes(k)))
-    return "weather";
-  if (["eurovision", "nobel", "pulitzer"].some((k) => t.includes(k)))
-    return "awards";
+  for (const [category, keywords] of CATEGORY_KEYWORDS) {
+    if (keywords.some((k) => t.includes(k))) return category;
+  }
   return "other";
 }
 
