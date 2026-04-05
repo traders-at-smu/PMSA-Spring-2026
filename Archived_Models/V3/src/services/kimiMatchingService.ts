@@ -325,7 +325,7 @@ export class KimiMatchingService {
               { role: "user", content: batchPrompt },
             ],
             temperature: 1,
-            max_tokens: 8192,
+            max_tokens: 16384,  // room for Kimi's <think> + 20-pair JSON array
           },
           {
             headers: {
@@ -453,8 +453,10 @@ export class KimiMatchingService {
       }
     }
 
-    // Process uncached in batches of BATCH_SIZE with concurrency limiter
-    const BATCH_SIZE = 10;
+    // Process uncached in batches of BATCH_SIZE with concurrency limiter.
+    // 20 pairs per request halves total API call count vs 10 and fits comfortably
+    // in Kimi's 128k context; parse errors fall back to individual calls.
+    const BATCH_SIZE = 20;
     if (uncached.length > 0) {
       // Chunk uncached into batches
       const batches: KimiCandidate[][] = [];
