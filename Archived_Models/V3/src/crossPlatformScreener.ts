@@ -1444,18 +1444,33 @@ export class CrossPlatformScreener {
     // Build IDF map from both corpora for TF-IDF weighting
     buildIdfMap([...polyMarkets, ...kalshiMarkets]);
 
-    // Build inverted index: token -> kalshi markets containing that token
-    const kalshiIndex = new Map<string, NormalizedMarket[]>();
+    // Build per-category inverted indices: category -> (token -> kalshi markets)
+    // This lets us scope candidate lookups to same-category (+ "other") Kalshi markets,
+    // dramatically reducing the comparison space vs a single global index.
+    const kalshiByCategory = new Map<string, Map<string, NormalizedMarket[]>>();
+    const polyCategoryCount = new Map<string, number>();
+    const kalshiCategoryCount = new Map<string, number>();
     for (const km of kalshiMarkets) {
+      kalshiCategoryCount.set(km.category, (kalshiCategoryCount.get(km.category) ?? 0) + 1);
+      let idx = kalshiByCategory.get(km.category);
+      if (!idx) { idx = new Map(); kalshiByCategory.set(km.category, idx); }
       for (const token of km.tokens) {
-        let list = kalshiIndex.get(token);
-        if (!list) {
-          list = [];
-          kalshiIndex.set(token, list);
-        }
+        let list = idx.get(token);
+        if (!list) { list = []; idx.set(token, list); }
         list.push(km);
       }
     }
+    for (const pm of polyMarkets) {
+      polyCategoryCount.set(pm.category, (polyCategoryCount.get(pm.category) ?? 0) + 1);
+    }
+    // "other" index is used as a fallback for every Poly market (catches miscategorized Kalshi markets)
+    const otherKalshiIndex = kalshiByCategory.get("other") ?? new Map<string, NormalizedMarket[]>();
+
+    // Log category distribution so the user can see bucket sizes
+    const fmtDist = (m: Map<string, number>) =>
+      [...m.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}:${v}`).join(" ");
+    this._log("info", `Poly categories: ${fmtDist(polyCategoryCount)}`);
+    this._log("info", `Kalshi categories: ${fmtDist(kalshiCategoryCount)}`);
 
     const pairs: MatchedPair[] = [];
     const usedKalshi = new Set<string>(incrementalOpts?.usedKalshi);
@@ -1488,13 +1503,25 @@ export class CrossPlatformScreener {
         }
       }
 
-      // Gather candidate kalshi markets that share at least one token
+      // Determine which category indices to search:
+      //  - pm.category === "other": search ALL indices (uncategorized could match anything)
+      //  - otherwise: search pm's category index + the "other" index (catches miscategorized Kalshi)
+      const indicesToSearch: Map<string, NormalizedMarket[]>[] =
+        pm.category === "other"
+          ? [...kalshiByCategory.values()]
+          : [kalshiByCategory.get(pm.category), otherKalshiIndex].filter(
+              (x): x is Map<string, NormalizedMarket[]> => !!x,
+            );
+
+      // Gather candidate kalshi markets (share ≥1 token) from the selected indices only
       const candidateMap = new Map<string, NormalizedMarket>();
-      for (const token of pm.tokens) {
-        const matches = kalshiIndex.get(token);
-        if (matches) {
-          for (const km of matches) {
-            if (!usedKalshi.has(km.id)) candidateMap.set(km.id, km);
+      for (const idx of indicesToSearch) {
+        for (const token of pm.tokens) {
+          const matches = idx.get(token);
+          if (matches) {
+            for (const km of matches) {
+              if (!usedKalshi.has(km.id)) candidateMap.set(km.id, km);
+            }
           }
         }
       }
@@ -1506,6 +1533,9 @@ export class CrossPlatformScreener {
       const topMatches: Array<{ km: NormalizedMarket; score: number }> = [];
 
       for (const km of candidateMap.values()) {
+        // Same-category pairs (or either side "other") get full score;
+        // a small penalty is applied only when we matched across truly different categories
+        // (which can happen for "other" Poly markets that searched all indices).
         const catMatch = pm.category === km.category || pm.category === "other" || km.category === "other";
         const catMultiplier = catMatch ? 1.0 : 0.85;
 
@@ -1791,12 +1821,22 @@ export class CrossPlatformScreener {
       for (const pm of polyMarkets) {
         if (pm.tokens.size === 0 || matchedPoly.has(pm.id)) continue;
 
+        // Same category-partition rule as the primary pass
+        const fbIndices: Map<string, NormalizedMarket[]>[] =
+          pm.category === "other"
+            ? [...kalshiByCategory.values()]
+            : [kalshiByCategory.get(pm.category), otherKalshiIndex].filter(
+                (x): x is Map<string, NormalizedMarket[]> => !!x,
+              );
+
         const candidateMap = new Map<string, NormalizedMarket>();
-        for (const token of pm.tokens) {
-          const matches = kalshiIndex.get(token);
-          if (matches) {
-            for (const km of matches) {
-              if (!usedKalshi.has(km.id)) candidateMap.set(km.id, km);
+        for (const idx of fbIndices) {
+          for (const token of pm.tokens) {
+            const matches = idx.get(token);
+            if (matches) {
+              for (const km of matches) {
+                if (!usedKalshi.has(km.id)) candidateMap.set(km.id, km);
+              }
             }
           }
         }
