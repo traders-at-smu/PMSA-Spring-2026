@@ -102,9 +102,12 @@ def _days_to_resolution(resolution_date: Any) -> float:
                 # Try simple date parse YYYY-MM-DD
                 parts = s.split("T")[0].split("-")
                 if len(parts) == 3:
-                    dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc)
+                    dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc) + timedelta(days=1)
                 else:
                     return 365.0
+
+        if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
+            dt = dt + timedelta(days=1)
 
         now = datetime.now(timezone.utc)
         diff = (dt - now).total_seconds() / 86400.0
@@ -129,9 +132,11 @@ def _resolution_has_passed(resolution_date: Any) -> bool:
         except ValueError:
             parts = s.split("T")[0].split("-")
             if len(parts) == 3:
-                dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc)
+                dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc) + timedelta(days=1)
             else:
                 return False
+        if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
+            dt = dt + timedelta(days=1)
         return datetime.now(timezone.utc) >= dt
     except Exception:
         return False
