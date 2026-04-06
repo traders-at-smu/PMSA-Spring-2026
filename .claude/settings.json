@@ -8,7 +8,10 @@
       "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); print\\(f''''Pairs: {len\\(data\\)}''''\\); [print\\(f\"\"  {p[''''kalshi_ticker'''']} / {p[''''poly_slug'''']}\"\"\\) for p in data[:5]]\")",
       "Bash(npm run:*)",
       "Bash(echo \"Exit: $?\")",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(python -c \"import json; d=json.load\\(open\\('d:/GitHub/PMSA/V6 CSV/data/open_positions.json'\\)\\); print\\(len\\(d\\)\\)\")",
+      "Bash(python -c ':*)",
+      "Bash(python -c \"import json; c=json.load\\(open\\('d:/GitHub/PMSA/V6 CSV/config.json'\\)\\); print\\(json.dumps\\({k:v for k,v in c.items\\(\\) if 'log' in k.lower\\(\\) or 'path' in k.lower\\(\\) or 'json' in k.lower\\(\\)}, indent=2\\)\\)\")"
     ]
   }
 }
