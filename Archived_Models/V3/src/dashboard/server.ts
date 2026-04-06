@@ -128,7 +128,7 @@ export function startServer(deps: ServerDeps): void {
   function applyScanMode(mode: "fast" | "deep"): void {
     if (mode === "deep") {
       runtime.aiMatching.maxAiCandidates = 0;
-      runtime.aiMatching.textScoreAiZone = [0.25, 0.99];
+      runtime.aiMatching.textScoreAiZone = [0.40, 0.99];
       runtime.aiMatching.maxMatchesPerPoly = 5;
     } else {
       runtime.aiMatching.maxAiCandidates = 500;
