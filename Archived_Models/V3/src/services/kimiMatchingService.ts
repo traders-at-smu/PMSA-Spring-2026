@@ -501,11 +501,15 @@ export class KimiMatchingService {
         if (next) next();
       };
 
-      const tasks = batches.map(async (batch) => {
-        if (isAborted?.()) return;
+      let batchesCompleted = 0;
+      let batchesFailed = 0;
+      let batchesAborted = 0;
+
+      const tasks = batches.map(async (batch, batchIdx) => {
+        if (isAborted?.()) { batchesAborted++; return; }
         await acquire();
         try {
-          if (isAborted?.()) return;
+          if (isAborted?.()) { batchesAborted++; return; }
           const batchResults = await this.judgeBatch(batch);
           for (let i = 0; i < batch.length; i++) {
             const c = batch[i];
@@ -515,12 +519,27 @@ export class KimiMatchingService {
             completed++;
             onProgress?.(completed, total, { key: resultKey, result, polyTitle: c.polyTitle, kalshiTitle: c.kalshiTitle });
           }
+          batchesCompleted++;
+        } catch (err) {
+          // Funds depletion must propagate so the scan stops and saves cache
+          if (err instanceof KimiFundsDepletedError) throw err;
+          // All other errors: log and continue. The pairs will be retried on next scan
+          // (not cached, so they'll be treated as uncached next time).
+          batchesFailed++;
+          console.warn(`[KimiMatch] Batch ${batchIdx + 1}/${batches.length} failed (${batch.length} pairs): ${(err as Error).message}`);
         } finally {
           release();
         }
       });
 
       const taskResults = await Promise.allSettled(tasks);
+
+      // Log batch summary so we can diagnose partial completions
+      const rejected = taskResults.filter(r => r.status === "rejected").length;
+      console.log(`[KimiMatch] Batch summary: ${batchesCompleted} OK, ${batchesFailed} failed, ${batchesAborted} aborted, ${rejected} rejected (of ${batches.length} total batches)`);
+      if (rejected > 0 || batchesFailed > 0) {
+        console.warn(`[KimiMatch] ${results.size} results collected out of ${candidates.length} candidates`);
+      }
 
       // Check if any task was rejected due to funds depletion
       const fundsErr = taskResults.find(
