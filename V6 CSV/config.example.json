@@ -47,7 +47,7 @@
   "input_files_dir": "input_files",
 
   "_doc_pairs_file": "Path to the Excel (.xlsx) or CSV pairs file. Required columns: pair_id, kalshi_ticker, polymarket_market_slug, resolution_date, category. Optional: polymarket_yes_token_id, polymarket_no_token_id, poly_outcomes_json, poly_token_ids_json, poly_primary_outcome, poly_event_url, active.",
-  "pairs_file": "input_files/Pairs_for_Kalshi_and_Polymarket.xlsx",
+  "pairs_file": "input_files/output-MM-DD-YY.csv",
 
   "_doc_entry_log": "File where entry trades are logged (one JSON object per line, appended). Created automatically if it does not exist.",
   "entry_log": "data/entry_trades.json",
@@ -56,6 +56,9 @@
 
   "_doc_opportunities_log": "File where every detected arbitrage opportunity is logged (one JSON object per line, appended), including Kalshi and Polymarket market URLs and the full slippage breakdown. Written on every scan cycle regardless of whether a trade is executed.",
   "opportunities_log": "data/opportunities.json",
+
+  "_doc_expired_log": "File where pairs past their resolution_date are permanently logged (one JSON object per line). Expired pairs are detected at startup and each scan cycle; once logged they are never fetched again unless removed from this file.",
+  "expired_log": "data/expired_pairs.json",
 
   "_doc_failed_log": "File where pairs that fail to fetch are permanently logged (one JSON object per line). On each run, this file is read at startup and those pairs are skipped for the entire session — they will never be fetched again unless you remove them from this file.",
   "failed_log": "data/failed_pairs.json",
