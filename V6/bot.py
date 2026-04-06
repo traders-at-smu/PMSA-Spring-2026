@@ -2034,7 +2034,7 @@ def run_loop(
     in memory across cycles — they are never fetched again within this session.
     """
     interval = max(1, int(cfg.get("scan_interval_seconds", 2)))
-    pairs_per_cycle = int(cfg.get("pairs_per_cycle", 50))
+    pairs_per_cycle = int(cfg.get("pairs_per_cycle", 25))
     pair_offset = 0
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")
@@ -2078,6 +2078,7 @@ def run_loop(
     SCAN_INTERVAL = 2    # seconds between new-pair scans
 
     last_exit_check = 0.0  # epoch seconds; 0 forces immediate check on first cycle
+    next_cycle_ids: set[str] = set()
 
     print(f"\n{Fore.CYAN}Bot running — press Ctrl+C to stop.{Style.RESET_ALL}")
     while True:
@@ -2096,10 +2097,13 @@ def run_loop(
                 )
                 last_exit_check = time.time()
 
-            # Rotate through all pairs evenly
-            rotated = pairs[pair_offset:] + pairs[:pair_offset]
-            scan_pairs = rotated[:pairs_per_cycle]
-            pair_offset = (pair_offset + pairs_per_cycle) % max(len(pairs), 1)
+            # Priority pairs from last cycle's entries, then round-robin fill
+            priority_pairs = [p for p in pairs if p["pair_id"] in next_cycle_ids]
+            remaining_pairs = [p for p in pairs if p["pair_id"] not in next_cycle_ids]
+            rotated = remaining_pairs[pair_offset:] + remaining_pairs[:pair_offset]
+            fill_slots = max(pairs_per_cycle - len(priority_pairs), 0)
+            scan_pairs = priority_pairs + rotated[:fill_slots]
+            pair_offset = (pair_offset + fill_slots) % max(len(remaining_pairs), 1)
 
             opps = run_scan(
                 scan_pairs,
@@ -2112,6 +2116,7 @@ def run_loop(
                 bad_ids=bad_ids,
                 on_new_position=_on_new_position,
             )
+            next_cycle_ids = {opp["pair_id"] for opp in opps}
             traded = len(opps)
             print(
                 f"  {Style.DIM}{traded} new entry trade(s) this cycle  "
