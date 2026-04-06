@@ -10,7 +10,6 @@ edge_pct = (c - KP(c)) / KP(c)
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -34,18 +33,24 @@ class FeeRateError(RuntimeError):
 # ── Sound notifications ────────────────────────────────────────────────────────
 
 _SRC_DIR = Path(__file__).parent
+_sounds_enabled: bool = True
+
 
 def _play_sound(filename: str) -> None:
-    """Play a .wav from the src/ directory non-blocking. Silently no-ops if missing."""
+    """Play a .wav from the src/ directory non-blocking. Silently no-ops if missing or disabled."""
+    if not _sounds_enabled:
+        return
+    import threading
     path = _SRC_DIR / filename
     if not path.exists():
         return
     try:
-        subprocess.Popen(
-            ["cmd", "/c", "start", "", str(path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+        import winsound
+        threading.Thread(
+            target=winsound.PlaySound,
+            args=(str(path), winsound.SND_FILENAME),
+            daemon=True,
+        ).start()
     except Exception:
         pass
 
@@ -150,9 +155,16 @@ def _resolution_has_passed(resolution_date: Any) -> bool:
         except ValueError:
             parts = s.split("T")[0].split("-")
             if len(parts) == 3:
-                dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc)
+                # Date-only: treat as expiring at end of that calendar day (midnight next day UTC)
+                # so a resolution_date of "2026-04-06" doesn't fire at 00:00 UTC on April 6
+                # when the market/game hasn't resolved yet.
+                dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc) + timedelta(days=1)
             else:
                 return False
+        # Also handle datetime strings with no time component (time == 00:00:00)
+        # parsed via fromisoformat — push them to end-of-day as well.
+        if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
+            dt = dt + timedelta(days=1)
         return datetime.now(timezone.utc) >= dt
     except Exception:
         return False
@@ -1837,6 +1849,9 @@ def run_scan(
     If execute=False (scan command), opportunities are displayed but not traded.
     If execute=True (run command), each opportunity is executed immediately.
     """
+    global _sounds_enabled
+    _sounds_enabled = bool(cfg.get("play_sounds", True))
+
     if failed_ids is None:
         failed_ids = set()
     if expired_ids is None:
@@ -2104,6 +2119,9 @@ def run_loop(
     Failed pairs are loaded from the failed-pairs log at startup and accumulated
     in memory across cycles — they are never fetched again within this session.
     """
+    global _sounds_enabled
+    _sounds_enabled = bool(cfg.get("play_sounds", True))
+
     interval = max(1, int(cfg.get("scan_interval_seconds", 2)))
     pairs_per_cycle = int(cfg.get("pairs_per_cycle", 50))
     pair_offset = 0

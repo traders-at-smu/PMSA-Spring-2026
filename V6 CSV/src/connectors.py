@@ -414,6 +414,11 @@ class PolymarketConnector:
                 tid = futures[fut]
                 try:
                     books[tid] = fut.result()
+                except requests.HTTPError as exc:
+                    if getattr(exc.response, "status_code", None) == 404:
+                        # Market is closed — re-raise so the caller can mark the pair as expired
+                        raise
+                    print(f"  [WARN] Polymarket book fetch failed for token …{tid[-8:]}: {exc}")
                 except Exception as exc:
                     print(f"  [WARN] Polymarket book fetch failed for token …{tid[-8:]}: {exc}")
         return books
