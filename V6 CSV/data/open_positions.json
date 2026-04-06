@@ -299,5 +299,110 @@
     "entry_trade_number": "T00006",
     "poly_fee_rate": 0.1,
     "resolution_date": "2026-04-07"
+  },
+  "14": {
+    "pair_id": "14",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXSERIEA1H-26APR06UDICOM-COM",
+    "p_token_id": "78353039474387201614390299370582628872870442037985456693333566638992959621962",
+    "p_token_ids": [
+      "78353039474387201614390299370582628872870442037985456693333566638992959621962"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "115485925255854673090086443042454274803022429501446457307897012584505067476383",
+    "no_token_id": "78353039474387201614390299370582628872870442037985456693333566638992959621962",
+    "title": "udinese calcio como 1907 teams score",
+    "contracts": 38,
+    "entry_k_price": 0.42,
+    "entry_p_price": 0.52,
+    "entry_kp_cost": 37.318479999999994,
+    "entry_fills": [
+      {
+        "k_price": 0.42,
+        "p_price": 0.52,
+        "contracts": 38
+      }
+    ],
+    "entry_fee": 1.59848,
+    "entry_edge_dollar": 0.3015,
+    "entry_arr": 294.90697370311256,
+    "entry_edge_pct": 0.00807964311515377,
+    "entry_timestamp": "2026-04-06T06:53:32.539581+00:00",
+    "entry_trade_number": "T00001",
+    "poly_fee_rate": 0.1,
+    "resolution_date": "2026-04-06"
+  },
+  "4": {
+    "pair_id": "4",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXNHLGAME-26APR07TBOTT-OTT",
+    "p_token_id": "111151518511319776541690015623626804508565205760654425247241482609810639205265",
+    "p_token_ids": [
+      "111151518511319776541690015623626804508565205760654425247241482609810639205265"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "111151518511319776541690015623626804508565205760654425247241482609810639205265",
+    "no_token_id": "",
+    "title": "lightning senators lightning",
+    "contracts": 150,
+    "entry_k_price": 0.49,
+    "entry_p_price": 0.47,
+    "entry_kp_cost": 146.62999999999985,
+    "entry_fills": [
+      {
+        "k_price": 0.49,
+        "p_price": 0.47,
+        "contracts": 150
+      }
+    ],
+    "entry_fee": 2.63,
+    "entry_edge_dollar": 1.87,
+    "entry_arr": 7.971050189166564,
+    "entry_edge_pct": 0.012753188297075281,
+    "entry_timestamp": "2026-04-06T09:59:04.348530+00:00",
+    "entry_trade_number": "T00002",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-07"
+  },
+  "2": {
+    "pair_id": "2",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXNHLGAME-26APR06TBBUF-BUF",
+    "p_token_id": "77996795055249744377148813185738925676146894330254720019493173933356608197722",
+    "p_token_ids": [
+      "77996795055249744377148813185738925676146894330254720019493173933356608197722"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "11593084589442847433294403991536933286655492685350021834293959588664884812735",
+    "no_token_id": "",
+    "title": "lightning sabres lightning",
+    "contracts": 1000,
+    "entry_k_price": 0.49,
+    "entry_p_price": 0.47,
+    "entry_kp_cost": 977.500000000018,
+    "entry_fills": [
+      {
+        "k_price": 0.49,
+        "p_price": 0.47,
+        "contracts": 1000
+      }
+    ],
+    "entry_fee": 17.5,
+    "entry_edge_dollar": 12.5,
+    "entry_arr": 466.7519181578885,
+    "entry_edge_pct": 0.01278772378514763,
+    "entry_timestamp": "2026-04-06T12:15:45.408438+00:00",
+    "entry_trade_number": "T00003",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-06"
   }
 }
