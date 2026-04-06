@@ -1,0 +1,9 @@
+requests
+colorama
+openpyxl
+pandas
+XlsxWriter
+pycryptodome
+eth-account
+web3
+python-dotenv

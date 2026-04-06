@@ -1,0 +1,163 @@
+{
+  "3": {
+    "pair_id": "3",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXNHLGAME-26APR07FLAMTL-FLA",
+    "p_token_id": "56184262093389636438560272061591113733380765549736118665447561271411814052628",
+    "p_token_ids": [
+      "56184262093389636438560272061591113733380765549736118665447561271411814052628"
+    ],
+    "p_leg_prices": [
+      0.39987
+    ],
+    "p_leg_spend": [
+      399.87000000000694
+    ],
+    "yes_token_id": "20053341509244210449214676077375401443071593239984667896595965278826081191540",
+    "no_token_id": "",
+    "title": "panthers canadiens canadiens",
+    "contracts": 1000,
+    "entry_k_price": 0.42,
+    "entry_p_price": 0.41,
+    "entry_kp_cost": 835.3000000000092,
+    "entry_fills": [
+      {
+        "k_price": 0.41,
+        "p_price": 0.39,
+        "contracts": 161,
+        "p_leg_prices": [
+          0.39
+        ]
+      },
+      {
+        "k_price": 0.42,
+        "p_price": 0.39,
+        "contracts": 314,
+        "p_leg_prices": [
+          0.39
+        ]
+      },
+      {
+        "k_price": 0.42,
+        "p_price": 0.4,
+        "contracts": 63,
+        "p_leg_prices": [
+          0.4
+        ]
+      },
+      {
+        "k_price": 0.42,
+        "p_price": 0.41,
+        "contracts": 462,
+        "p_leg_prices": [
+          0.41
+        ]
+      }
+    ],
+    "entry_fee": 17.04,
+    "entry_edge_dollar": 154.7,
+    "entry_arr": 76.61012446147792,
+    "entry_edge_pct": 0.1852029211061764,
+    "entry_timestamp": "2026-04-06T02:49:22.571974+00:00",
+    "entry_trade_number": "T00106",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-07"
+  },
+  "7": {
+    "pair_id": "7",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXUCL1H-26APR07SPOARS-ARS",
+    "p_token_id": "45948896637962620830514131276326949115451385424652486323941267582438176584478",
+    "p_token_ids": [
+      "45948896637962620830514131276326949115451385424652486323941267582438176584478"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "44149737625574959248547430781387915190339069023387334312881498446696555632881",
+    "no_token_id": "45948896637962620830514131276326949115451385424652486323941267582438176584478",
+    "title": "sporting cp arsenal fc teams score",
+    "contracts": 1000,
+    "entry_k_price": 0.42,
+    "entry_p_price": 0.5,
+    "entry_kp_cost": 960.4597800000028,
+    "entry_fills": [
+      {
+        "k_price": 0.41,
+        "p_price": 0.49,
+        "contracts": 13
+      },
+      {
+        "k_price": 0.42,
+        "p_price": 0.49,
+        "contracts": 134
+      },
+      {
+        "k_price": 0.42,
+        "p_price": 0.5,
+        "contracts": 853
+      }
+    ],
+    "entry_fee": 42.05978,
+    "entry_edge_dollar": 29.5402,
+    "entry_arr": 12.722513444708152,
+    "entry_edge_pct": 0.03075633213917314,
+    "entry_timestamp": "2026-04-06T02:49:22.577973+00:00",
+    "entry_trade_number": "T00107",
+    "poly_fee_rate": 0.1,
+    "resolution_date": "2026-04-07"
+  },
+  "14": {
+    "pair_id": "14",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXNHLGAME-26APR07SEAMIN-MIN",
+    "p_token_id": "15974059619651639136985675552304956698616459897077368689418854884573958609608",
+    "p_token_ids": [
+      "15974059619651639136985675552304956698616459897077368689418854884573958609608"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "15974059619651639136985675552304956698616459897077368689418854884573958609608",
+    "no_token_id": "",
+    "title": "kraken wild kraken",
+    "contracts": 616,
+    "entry_k_price": 0.5,
+    "entry_p_price": 0.36,
+    "entry_kp_cost": 453.7299999999994,
+    "entry_fills": [
+      {
+        "k_price": 0.36,
+        "p_price": 0.35,
+        "contracts": 257
+      },
+      {
+        "k_price": 0.37,
+        "p_price": 0.35,
+        "contracts": 339
+      },
+      {
+        "k_price": 0.5,
+        "p_price": 0.35,
+        "contracts": 8
+      },
+      {
+        "k_price": 0.5,
+        "p_price": 0.36,
+        "contracts": 12
+      }
+    ],
+    "entry_fee": 10.06,
+    "entry_edge_dollar": 156.11,
+    "entry_arr": 66.71436497197458,
+    "entry_edge_pct": 0.3440592422806534,
+    "entry_timestamp": "2026-04-06T02:49:22.582972+00:00",
+    "entry_trade_number": "T00108",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-08"
+  }
+}
