@@ -415,7 +415,14 @@ class PolymarketConnector:
                 try:
                     books[tid] = fut.result()
                 except Exception as exc:
-                    print(f"  [WARN] Polymarket book fetch failed for token …{tid[-8:]}: {exc}")
+                    print(f"  [WARN] Polymarket book fetch failed for token …{tid[-8:]}: {exc} — retrying once")
+                    try:
+                        books[tid] = self._fetch_book(tid)
+                    except Exception as exc2:
+                        import requests as _req
+                        if isinstance(exc2, _req.HTTPError) and getattr(exc2.response, "status_code", None) == 404:
+                            raise  # re-raise 404 so run_scan logs it to expired_pairs
+                        print(f"  [WARN] Polymarket book fetch failed again for token …{tid[-8:]}: {exc2}")
         return books
 
     @staticmethod
@@ -668,7 +675,7 @@ def load_pairs(path: str) -> list[dict[str, Any]]:
             if active in {"false", "0", "no"}:
                 continue
 
-        pair_id = _pick(row, "pair_id")
+        pair_id = _pick(row, "pair_id", "poly_market_id")
         # Accept both "kalshi_market_id" (actual file) and "kalshi_ticker" (generic)
         kalshi_ticker = _pick(row, "kalshi_market_id", "kalshi_ticker")
         if not pair_id or not kalshi_ticker:
@@ -676,7 +683,7 @@ def load_pairs(path: str) -> list[dict[str, Any]]:
 
         pairs.append({
             "pair_id": pair_id,
-            "title": _pick(row, "title_clean", "title", default=pair_id),
+            "title": _pick(row, "title_clean", "title", "poly_title", "kalshi_title", default=pair_id),
             "kalshi_ticker": kalshi_ticker,
             # Token IDs are optional — if absent they are resolved via slug at scan time
             "polymarket_yes_token_id": _pick(row, "polymarket_yes_token_id"),
@@ -685,7 +692,7 @@ def load_pairs(path: str) -> list[dict[str, Any]]:
             "polymarket_market_slug": _pick(row, "poly_slug", "polymarket_market_slug"),
             "poly_outcomes": _parse_json_list(_pick(row, "poly_outcomes_json", "poly_outcomes")),
             "poly_token_ids": _parse_json_list(_pick(row, "poly_token_ids_json", "poly_token_ids")),
-            "poly_primary_outcome": _pick(row, "poly_primary_outcome"),
+            "poly_primary_outcome": _pick(row, "poly_primary_outcome", "poly_outcome"),
             "poly_event_url": _pick(row, "poly_event_url"),
             "polymarket_url": _pick(row, "poly_url", "polymarket_url"),
             "kalshi_url": _pick(row, "kalshi_url"),
@@ -695,6 +702,7 @@ def load_pairs(path: str) -> list[dict[str, Any]]:
                 "time to expiration (2 months out)",
                 "resolution_time_utc",
                 "resolution_date",
+                "resolution_time",
             ),
             # Accept both "category_tag" (actual file) and "category" (generic)
             "category": _pick(row, "category_tag", "category", default="default"),
