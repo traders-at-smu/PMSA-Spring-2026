@@ -339,7 +339,7 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
                 Model: <span className="text-zinc-400 font-medium">{verifierLabel}</span>
                 {scanModeLoaded && (
                   <> &middot; Mode: <span className={scanMode === "deep" ? "text-violet-400 font-semibold" : "text-blue-400 font-semibold"}>
-                    {scanMode === "deep" ? "🔬 Deep (no cap, threshold 0.25, top-5/market)" : "⚡ Fast (~30m, 500 candidates)"}
+                    {scanMode === "deep" ? "🔬 Deep (no cap, threshold 0.40, top-5/market)" : "⚡ Fast (~30m, 500 candidates)"}
                   </span></>
                 )}
                 {status?.lastScanAt && (
