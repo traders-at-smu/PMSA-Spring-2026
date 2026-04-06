@@ -241,5 +241,63 @@
     "entry_trade_number": "T00005",
     "poly_fee_rate": 0.0,
     "resolution_date": "2026-04-08"
+  },
+  "17": {
+    "pair_id": "17",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXNBAGAME-26APR07MILBKN-BKN",
+    "p_token_id": "24075484028023309464832318293775939879498249291614665099119379908857537744994",
+    "p_token_ids": [
+      "24075484028023309464832318293775939879498249291614665099119379908857537744994"
+    ],
+    "p_leg_prices": [
+      0.453444
+    ],
+    "p_leg_spend": [
+      68.47000000000003
+    ],
+    "yes_token_id": "93072992077554393278405727794696069000725842181173500464232671377232327287819",
+    "no_token_id": "",
+    "title": "bucks nets bucks",
+    "contracts": 151,
+    "entry_k_price": 0.48,
+    "entry_p_price": 0.47,
+    "entry_kp_cost": 147.33226999999988,
+    "entry_fills": [
+      {
+        "k_price": 0.48,
+        "p_price": 0.45,
+        "contracts": 100,
+        "p_leg_prices": [
+          0.45
+        ]
+      },
+      {
+        "k_price": 0.48,
+        "p_price": 0.46,
+        "contracts": 50,
+        "p_leg_prices": [
+          0.46
+        ]
+      },
+      {
+        "k_price": 0.48,
+        "p_price": 0.47,
+        "contracts": 1,
+        "p_leg_prices": [
+          0.47
+        ]
+      }
+    ],
+    "entry_fee": 6.38227,
+    "entry_edge_dollar": 2.1577,
+    "entry_arr": 6.658218142882183,
+    "entry_edge_pct": 0.01464533194255495,
+    "entry_timestamp": "2026-04-06T04:43:53.828771+00:00",
+    "entry_trade_number": "T00006",
+    "poly_fee_rate": 0.1,
+    "resolution_date": "2026-04-07"
   }
 }

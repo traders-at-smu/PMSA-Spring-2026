@@ -21,7 +21,7 @@ from typing import Any
 import requests
 from colorama import Fore, Style
 
-from fees import apply_fee, parse_formula
+from Archived_Models.V5.fees import apply_fee, parse_formula
 
 
 # Fee-rate failures must be treated as permanent so the pair is logged/skipped.

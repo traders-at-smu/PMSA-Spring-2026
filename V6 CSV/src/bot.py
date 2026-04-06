@@ -878,7 +878,10 @@ def evaluate_pair(
             for token_id in complement_token_ids
             if token_id in tokens
         ]
-        combined_complement_levels = _combine_leg_levels(complement_levels)
+        combined_complement_levels = (
+            complement_levels[0] if len(complement_levels) == 1
+            else _combine_leg_levels(complement_levels)
+        )
         complement_leg_price_hints = [tokens[token_id]["best_ask"] for token_id in complement_token_ids]
 
         strategies = [

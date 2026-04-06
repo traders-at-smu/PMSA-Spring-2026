@@ -25,9 +25,9 @@ from pathlib import Path
 
 from colorama import Fore, Style, init as colorama_init
 
-from connectors import KalshiConnector, PolymarketConnector, load_pairs
-from fees import parse_formula, validate_formula
-from bot import run_scan, run_loop, _resolve_poly_fee_rate
+from Archived_Models.V5.connectors import KalshiConnector, PolymarketConnector, load_pairs
+from Archived_Models.V5.fees import parse_formula, validate_formula
+from Archived_Models.V5.bot import run_scan, run_loop, _resolve_poly_fee_rate
 
 _SCRIPT_DIR = Path(__file__).parent
 
