@@ -650,8 +650,16 @@ def _walk_depth(
 
     final_kp = cur_kp
 
-    # V6: no exit fees — positions are held to expiry, settlement pays $1/contract automatically.
-    final_edge_pct = (contracts * exit_target - final_kp) / final_kp if final_kp > 0 else 0.0
+    # Compute exit fees using average entry prices (same logic as per-level slippage tracking).
+    # Even if holding to expiry, accounting for exit fees gives a conservative edge estimate
+    # and correctly handles the exit_target=0.99 (sell early) scenario.
+    _final_avg_k = k_spend / contracts if contracts > 0 else 0.0
+    _final_avg_p = p_spend / contracts if contracts > 0 else 0.0
+    _final_exit_kf = apply_fee(kalshi_fee_fn, _final_avg_k, contracts, kalshi_round_up) if contracts > 0 else 0.0
+    _final_exit_pf = apply_fee(poly_fee_fn, _final_avg_p, contracts, False, round_decimals=5) if contracts > 0 else 0.0
+    _final_exit_fees = _final_exit_kf + _final_exit_pf
+
+    final_edge_pct = (contracts * exit_target - final_kp - _final_exit_fees) / final_kp if final_kp > 0 else 0.0
     final_arr = (final_edge_pct * 365.0) / days if days > 0 else 0.0
 
     # After hitting max_contracts, count profitable contracts still available in the book.
@@ -703,7 +711,7 @@ def _walk_depth(
         "arr": final_arr,
         "edge_pct": final_edge_pct,
         "total_fee": cur_kf + cur_pf,
-        "exit_fee_estimate": 0.0,
+        "exit_fee_estimate": _final_exit_fees,
         "stop_reason": stop_reason,
         "slippage": slippage,
         "remaining": remaining,
@@ -956,9 +964,8 @@ def evaluate_pair(
         )
 
         if walk["contracts"] > 0:
-            # V6: no exit fees — settlement pays $1/contract at expiry automatically.
             c = walk["contracts"]
-            edge_dollar = c * exit_target - walk["kp_cost"]
+            edge_dollar = c * exit_target - walk["kp_cost"] - walk["exit_fee_estimate"]
 
             # Sanity check: a genuine two-sided hedge always costs close to $1 per
             # contract. If the top-of-book sum is far below $1, both legs are almost
