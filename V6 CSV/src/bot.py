@@ -905,6 +905,8 @@ def evaluate_pair(
         ]
 
     results: list[dict[str, Any]] = []
+    best_walk: dict[str, Any] | None = None  # track best walk for max-return debug line
+    best_walk_edge: float = float("-inf")
     for strat in strategies:
         k_levels = strat["k_levels"]
         p_levels = strat["p_levels"]
@@ -935,6 +937,11 @@ def evaluate_pair(
                     file=sys.stderr,
                 )
                 return [{"_bad_pair": True, "strategy": strat["strategy"], "cost_per_contract": walk["kp_cost"] / c}]
+
+            # Track the best walk across strategies for the max-return debug line.
+            if edge_dollar > best_walk_edge:
+                best_walk_edge = edge_dollar
+                best_walk = {**walk, "strategy": strat["strategy"], "edge_dollar": edge_dollar, "c": c}
 
             if edge_dollar <= 0 or walk["edge_pct"] < min_edge_pct:
                 continue
@@ -973,6 +980,44 @@ def evaluate_pair(
                 "poly_fee_rate": pair.get("poly_fee_rate"),
                 "resolution_date": str(pair.get("resolution_date", "")),
             })
+        else:
+            # walk["contracts"] == 0: compute 1-contract top-of-book estimate for debug line.
+            if k_levels and p_levels:
+                nk = float(k_levels[0]["price"])
+                np_ = float(p_levels[0]["price"])
+                kf1 = apply_fee(k_fee_fn, nk, 1, k_round_up)
+                pf1 = apply_fee(p_fee_fn, np_, 1, False, round_decimals=5)
+                cost1 = nk + np_
+                edge1 = exit_target - cost1 - kf1 - pf1
+                edge_pct1 = (edge1 / cost1) if cost1 > 0 else 0.0
+                candidate = {
+                    "strategy": strat["strategy"],
+                    "k_price": nk, "p_price": np_,
+                    "c": 1, "edge_dollar": edge1,
+                    "edge_pct": edge_pct1,
+                    "total_fee": round(kf1 + pf1, 5),
+                    "kp_cost": cost1,
+                }
+                if edge1 > best_walk_edge:
+                    best_walk_edge = edge1
+                    best_walk = candidate
+
+    # Print one dim line per pair showing the max-return walk, even if not taken.
+    if best_walk is not None:
+        bw = best_walk
+        taken = any(
+            r["strategy"] == bw["strategy"] for r in results
+        )
+        tag = "" if taken else f"  {Style.DIM}(not taken){Style.RESET_ALL}"
+        edge_color = Fore.GREEN if bw["edge_dollar"] > 0 else Fore.RED
+        print(
+            f"  {Style.DIM}{pair['pair_id']:<20} {bw['strategy']:<16}{Style.RESET_ALL}"
+            f"  {bw['c']}c  K={bw['k_price']:.4f}/P={bw['p_price']:.4f}"
+            f"  net edge {edge_color}{bw['edge_pct'] * 100:+.2f}%{Style.RESET_ALL}"
+            f"  fees ${bw['total_fee']:.4f}"
+            f"  profit {edge_color}${bw['edge_dollar']:.4f}{Style.RESET_ALL}"
+            + tag
+        )
 
     return results
 
