@@ -10,6 +10,7 @@ edge_pct = (c - KP(c)) / KP(c)
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -28,6 +29,25 @@ from src.connectors import load_pairs, get_latest_pairs_file
 # Fee-rate failures must be treated as permanent so the pair is logged/skipped.
 class FeeRateError(RuntimeError):
     pass
+
+
+# ── Sound notifications ────────────────────────────────────────────────────────
+
+_SRC_DIR = Path(__file__).parent
+
+def _play_sound(filename: str) -> None:
+    """Play a .wav from the src/ directory non-blocking. Silently no-ops if missing."""
+    path = _SRC_DIR / filename
+    if not path.exists():
+        return
+    try:
+        subprocess.Popen(
+            ["cmd", "/c", "start", "", str(path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
 
 
 # ── Error classification ───────────────────────────────────────────────────────
@@ -1159,6 +1179,7 @@ def execute_paper(opp: dict[str, Any], log_path: str) -> dict[str, Any]:
     trade_num = _next_trade_number(log_path)
     entry = _build_log_entry(opp, "paper", trade_number=trade_num)
     _write_trade_log(entry, log_path)
+    _play_sound("enter.wav")
     return entry
 
 
@@ -1213,6 +1234,7 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
         partial_fill=partial,
     )
     _write_trade_log(entry, log_path)
+    _play_sound("enter.wav")
     return entry
 
 
@@ -1370,6 +1392,7 @@ def _process_exit_positions(
                 "trade_number": trade_number,
             }
             _write_trade_log(exit_log, log_path)
+            _play_sound("exit.wav")
             print(
                 f"  {Fore.CYAN}EXPIRED {pair_id} — {contracts}c settled at $1/contract, "
                 f"profit ${realized_pnl:.4f}{Style.RESET_ALL}"
@@ -1426,6 +1449,7 @@ def _process_exit_positions(
                         "trade_number": trade_number,
                     }
                     _write_trade_log(exit_log, log_path)
+                    _play_sound("exit.wav")
                     resolved_404.append(pair_id)
                     break
                 elif shutdown:
@@ -1498,6 +1522,7 @@ def _process_exit_positions(
                     "trade_number": trade_number,
                 }
                 _write_trade_log(exit_log, log_path)
+                _play_sound("exit.wav")
                 resolved_404.append(pair_id)
                 continue
 
