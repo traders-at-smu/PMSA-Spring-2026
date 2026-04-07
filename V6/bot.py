@@ -2028,7 +2028,7 @@ def run_loop(
     in memory across cycles — they are never fetched again within this session.
     """
     interval = max(1, int(cfg.get("scan_interval_seconds", 2)))
-    pairs_per_cycle = int(cfg.get("pairs_per_cycle", 25))
+    pairs_per_cycle = int(cfg.get("pairs_per_cycle", 10))
     pair_offset = 0
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")
