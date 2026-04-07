@@ -807,7 +807,7 @@ def evaluate_pair(
     max_contracts = int(cfg["max_contracts"])
     days = _days_to_resolution(pair.get("resolution_date", ""))
     exit_target = 1.0  # V6 holds to expiry — settlement always pays $1/contract
-    min_edge_pct = float(cfg.get("min_edge_pct", 0.0))
+    min_edge_pct = float(cfg.get("min_edge_pct", 0.001))
 
     fee_cfg = cfg["fees"]
     k_round_up = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
@@ -1780,7 +1780,7 @@ def run_scan(
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")
     bad_log = cfg.get("bad_log", "bad_pairs.json")
-    max_workers = int(cfg.get("max_workers", 30))
+    max_workers = int(cfg.get("max_workers", 6))
     ts = datetime.now().strftime("%H:%M:%S")
     t0 = time.monotonic()
 
@@ -1918,7 +1918,7 @@ def run_scan(
             continue
 
         # Optional per-pair market status line (enabled via print_market_status in config).
-        if cfg.get("print_market_status", False):
+        if cfg.get("print_market_status", True):
             k_yes_ask = float(kq["yes_ask"])
             k_no_ask  = float(kq["no_ask"])
             if pq.get("type") == "multi":
