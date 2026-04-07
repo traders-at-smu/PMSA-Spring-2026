@@ -10,7 +10,6 @@ config/settings.local.json
 .DS_Store
 *.zip
 .next/
-*.csv
 !Polytoken/pairs/**/pairs.csv
 logs/
 
