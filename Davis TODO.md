@@ -1,5 +1,0 @@
-- [X] Update v6 to match v6csv in functionality
-     - [X] Exit fees from v6 need to stay the same
-- [X] Add csv functionality to v5, same logic as v6 csv
-- [ ] Automatic generation on v6 - ai ignore
-- [X] Make v6 match directory style shown in v6csv
