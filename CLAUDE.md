@@ -1,12 +1,13 @@
 # CLAUDE.md
 
 ## Project Overview
-Monorepo for cross-venue prediction market arbitrage (Polymarket ↔ Kalshi). **V5 is the active codebase.** V1–V4 and arb-scanner are archived under `Archived_Models/`.
+Monorepo for cross-venue prediction market arbitrage (Polymarket ↔ Kalshi). **V5 and V6 are both active codebases.** V1–V4 and arb-scanner are archived under `Archived_Models/`.
 
 ## Repository Structure
 ```
 .
-├── V5/                  # Active bot — Python CLI arb engine
+├── V5/                  # Active bot — convergence exit strategy
+├── V6/                  # Active bot — hold-to-expiry strategy
 ├── Polytoken/           # Pair generation pipeline (polytoken + helper scripts)
 ├── Archived_Models/     # Legacy versions (V1–V4, arb-scanner) — read-only reference
 ├── Information/         # Trade rules, fee docs, design notes

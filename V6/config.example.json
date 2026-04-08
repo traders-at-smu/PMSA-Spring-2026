@@ -29,7 +29,7 @@
   "max_workers": 6,
 
   "_doc_pairs_file": "Path to the Excel (.xlsx) or CSV pairs file. Required columns: pair_id, kalshi_ticker, polymarket_market_slug, resolution_date, category. Optional: polymarket_yes_token_id, polymarket_no_token_id, poly_outcomes_json, poly_token_ids_json, poly_primary_outcome, poly_event_url, active.",
-  "pairs_file": "Pairs_for_Kalshi_and_Polymarket.xlsx",
+  "pairs_file": "matched_sports_pairs.csv",
 
   "_doc_entry_log": "File where entry trades are logged (one JSON object per line, appended). Created automatically if it does not exist.",
   "entry_log": "entry_trades.json",
