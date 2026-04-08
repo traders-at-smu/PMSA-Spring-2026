@@ -10,7 +10,6 @@ config/settings.local.json
 .DS_Store
 *.zip
 .next/
-*.csv
 !Polytoken/pairs/**/pairs.csv
 logs/
 
@@ -30,3 +29,6 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+markets.db
+markets.db-shm
+markets.db-wal

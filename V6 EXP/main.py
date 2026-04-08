@@ -30,6 +30,7 @@ sys.path.append(str(Path(__file__).parent / "src"))
 from src.connectors import KalshiConnector, PolymarketConnector, load_pairs, get_latest_pairs_file
 from src.fees import parse_formula, validate_formula
 from src.bot import run_scan, run_loop, _resolve_poly_fee_rate
+from src.scheduler import start_daily_scheduler
 
 _SCRIPT_DIR = Path(__file__).parent
 _SRC_DIR = _SCRIPT_DIR / "src"
@@ -344,6 +345,9 @@ def cmd_run(args) -> int:
         for e in errors:
             print(f"  {Fore.RED}✗{Style.RESET_ALL} {e}", file=sys.stderr)
         return 1
+
+    # Start the background 3 AM updater
+    start_daily_scheduler(cfg)
 
     # Override pairs_file with the latest CSV from input_files if present
     latest = get_latest_pairs_file(cfg.get("input_files_dir", "input_files"))

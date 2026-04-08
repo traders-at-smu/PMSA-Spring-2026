@@ -1,0 +1,111 @@
+cpi
+core cpi
+inflation
+core inflation
+pce
+ppi
+gdp
+gross domestic product
+unemployment
+jobless
+jobs report
+nonfarm payroll
+labor market
+wage
+wages
+interest rate
+federal reserve
+fed
+fomc
+rate hike
+rate cut
+quantitative easing
+quantitative tightening
+balance sheet
+money supply
+m2
+recession
+stagflation
+deflation
+yield curve
+inversion
+spread
+basis points
+treasury
+10 year
+2 year
+30 year
+debt ceiling
+deficit
+surplus
+trade balance
+current account
+fiscal
+monetary
+stimulus
+austerity
+taper
+oecd
+imf
+world bank
+gdp growth
+economic growth
+contraction
+expansion
+output gap
+productivity
+manufacturing
+services pmi
+pmi
+purchasing managers
+industrial production
+retail sales
+housing starts
+consumer confidence
+sentiment
+durable goods
+business investment
+# Additional
+trade deficit
+trade surplus
+tariff
+import
+export
+sanctions
+embargo
+wto
+free trade
+nafta
+usmca
+china trade
+supply chain
+reshoring
+nearshoring
+dollar index
+dxy
+reserve currency
+petrodollar
+sovereign debt
+credit rating
+aaa
+junk bond
+default
+restructuring
+bailout
+bank run
+deposit
+fdic
+bank failure
+regional bank
+commercial real estate
+housing market
+home prices
+case shiller
+mortgage rate
+refinance
+consumer spending
+personal income
+savings rate
+credit card
+delinquency
+charge off

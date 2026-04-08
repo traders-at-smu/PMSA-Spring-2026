@@ -2,7 +2,11 @@
 
 Cross-venue prediction market arbitrage tooling for [Polymarket](https://polymarket.com) and [Kalshi](https://kalshi.com).
 
-**Active codebase: `V5/`** — Python CLI arbitrage engine.
+**Active codebases:**
+- **`V6/`** — Current active bot, **Sports focus**.
+- **`V5/`** — Current active bot, **General focus**.
+- **`V6 EXP/`** — **Experimental branch** for new features and testing.
+
 Legacy versions (V1–V4) and the arb-scanner web app are preserved under `Archived_Models/` for reference.
 
 ---
@@ -11,9 +15,12 @@ Legacy versions (V1–V4) and the arb-scanner web app are preserved under `Archi
 
 ```
 .
-├── V5/              # Active bot (Python CLI, paper + live trading)
-├── Polytoken/       # Pair generation pipeline
-├── Archived_Models/ # Legacy: V1 (TS), V2 (Python+Streamlit), V3 (TS), V4 (Python), arb-scanner (Next.js)
+├── V6/              # Active bot (Sports focus)
+├── V5/              # Active bot (General focus)
+├── V6 EXP/          # Experimental branch
+├── Pairs Generator V3/ # New pair generation & matching logic
+├── Polytoken/       # Legacy pair generation pipeline
+├── Archived_Models/ # Legacy: V1-V4, V6 CSV, arb-scanner
 ├── Information/     # Fee docs, trade rules, design notes
 └── api/             # Vercel serverless endpoints (legacy)
 ```

@@ -1,0 +1,135 @@
+{
+  "_doc": "Kalshi × Polymarket Arb Bot v4 — Configuration. Copy to config.json and fill in your values. Keys starting with _ are documentation only and are ignored by the bot.",
+
+  "_doc_mode": "Trading mode. 'paper' = simulate trades, fetch live prices but never place real orders (default, no credentials needed). 'live' = place real orders. If mode is 'live' but credentials are missing the bot automatically falls back to paper.",
+  "mode": "paper",
+
+  "_doc_min_arr": "Minimum annualised return (ARR) required to trigger a trade. 0.10 = 10% ARR. Raise this to be more selective; lower it to trade more frequently. ARR = (edge% × 365) / days_to_resolution.",
+  "min_arr": 0.03,
+
+  "_doc_max_contracts": "Maximum number of contracts to accumulate in a single arbitrage trade. The depth-walk stops as soon as adding one more contract would exceed this cap. E.g. 100 means the bot will buy at most 100 YES + 100 NO contracts per opportunity.",
+  "max_contracts": 1000,
+
+  "_doc_scan_interval_seconds": "Seconds between full scan cycles when running in 'run' mode.",
+  "scan_interval_seconds": 3,
+
+  "_doc_print_market_status": "Print a one-line market snapshot for every pair on each scan cycle, even when no arb is found. Shows Kalshi and Polymarket mid-prices, days to expiry, net-of-fees marginal edge%, and net-of-fees ARR for the better direction (1-contract). Useful for monitoring market conditions without needing to find a trade. Set to false (default) to suppress this output.",
+  "print_market_status": false,
+
+  "_doc_play_sounds": "Play audio notifications on trade entry and exit. Requires entry.wav and exit.wav in the src/ directory. Set to false to silence all sounds.",
+  "play_sounds": false,
+
+  "_doc_skip_multi_outcome": "When true, pairs with 3 or more Polymarket outcomes (e.g. soccer Home/Draw/Away) are silently skipped each scan cycle rather than evaluated. They are NOT added to failed/bad logs — they resume being evaluated if this flag is set back to false.",
+  "skip_multi_outcome": false,
+
+  "_doc_exit_enabled": "Enable exit/close logic for open positions. When true, open positions are monitored and sold at bids when the exit rule is met or max hold expires.",
+  "exit_enabled": true,
+
+  "_doc_exit_target_total_price": "Target combined bid-quote total for YES+NO to trigger exit, e.g. 0.99 means sell when yes_bid + no_bid >= 0.99.",
+  "exit_target_total_price": 0.99,
+
+  "_doc_exit_max_hold_seconds": "Maximum time in seconds to hold an open position before forcing an exit (default 1800s = 30 min).",
+  "exit_max_hold_seconds": 1800,
+
+  "_doc_entry_cooldown_seconds": "Minimum time after entry during which the same pair cannot be reopened (default 3600s = 1h).",
+  "entry_cooldown_seconds": 3600,
+
+  "_doc_position_file": "JSON file that stores currently open positions across restarts.",
+  "position_file": "data/open_positions.json",
+
+  "_doc_pairs_per_cycle": "Max pairs to scan per cycle. Pairs with open positions are always scanned first, then the rest rotate so every pair gets checked evenly over time. Set to total pairs count to scan all each cycle (default behavior).",
+  "pairs_per_cycle": 200,
+
+  "_doc_max_workers": "Number of parallel threads used to fetch orderbook data. Higher = faster scans, but too high will trigger 429 rate-limit errors from Kalshi. 10 is a safe default; raise to 20-30 if scans are too slow and you are not seeing rate-limit warnings.",
+  "max_workers": 6,
+
+  "_doc_input_files_dir": "Directory where daily CSV pairs files are dropped. The bot will automatically use the newest .csv in this folder.",
+  "input_files_dir": "input_files",
+
+  "_doc_pairs_file": "Path to the Excel (.xlsx) or CSV pairs file. Required columns: pair_id, kalshi_ticker, polymarket_market_slug, resolution_date, category. Optional: polymarket_yes_token_id, polymarket_no_token_id, poly_outcomes_json, poly_token_ids_json, poly_primary_outcome, poly_event_url, active.",
+  "pairs_file": "input_files/output-MM-DD-YY.csv",
+
+  "_doc_entry_log": "File where entry trades are logged (one JSON object per line, appended). Created automatically if it does not exist.",
+  "entry_log": "data/entry_trades.json",
+  "_doc_exit_log": "File where exit trades are logged (one JSON object per line, appended). Created automatically if it does not exist.",
+  "exit_log": "data/exit_trades.json",
+
+  "_doc_opportunities_log": "File where every detected arbitrage opportunity is logged (one JSON object per line, appended), including Kalshi and Polymarket market URLs and the full slippage breakdown. Written on every scan cycle regardless of whether a trade is executed.",
+  "opportunities_log": "data/opportunities.json",
+
+  "_doc_expired_log": "File where pairs past their resolution_date are permanently logged (one JSON object per line). Expired pairs are detected at startup and each scan cycle; once logged they are never fetched again unless removed from this file.",
+  "expired_log": "data/expired_pairs.json",
+
+  "_doc_failed_log": "File where pairs that fail to fetch are permanently logged (one JSON object per line). On each run, this file is read at startup and those pairs are skipped for the entire session — they will never be fetched again unless you remove them from this file.",
+  "failed_log": "data/failed_pairs.json",
+
+  "_doc_bad_log": "File where same-side/inverted pairs are permanently logged (one JSON object per line). Pairs are added here when their combined entry cost per contract is below the same-side threshold (0.85), indicating both legs likely bet the same underlying outcome. Remove a pair from this file to retry it.",
+  "bad_log": "data/bad_pairs.json",
+
+  "_doc_user_pairs_dirs": "One path or a list of paths to Polytoken per-user pairs directories. Each directory is scanned for {username}/pairs.csv files at startup; new rows are merged into pairs_file (deduped by poly_market_id + kalshi_market_id) and each CSV is cleared afterward. Relative paths are resolved from the pairs_file directory.",
+  "user_pairs_dirs": ["../Polytoken/pairs"],
+
+  "_doc_fees": "Fee formulas as math expressions. Available variables: p = contract price/probability (0–1), q = 1−p (complement), c = number of contracts. Operators: + − * / ** ( ). No function calls allowed.",
+  "_doc_fees_examples": "Common formulas — Kalshi standard: 'p * (1 - p) * 0.07 * c'  |  Flat fee: '0.02 * c'  |  Using q shorthand: 'p * q * 0.07 * c'",
+  "_doc_fees_polymarket": "Polymarket taker fee formula is 'p * (1 - p) * rate * c' where rate is fetched dynamically via the fee-rate endpoint for the market's token ID. Markets with feesEnabled=false use rate=0. If the fee rate cannot be fetched, the pair is skipped and logged.",
+  "fees": {
+    "kalshi": {
+      "_doc": "Kalshi taker fee. round_up_to_cent=true matches Kalshi's actual billing (rounds fee up to the nearest cent).",
+      "formula": "p * (1 - p) * 0.07 * c",
+      "round_up_to_cent": true
+    },
+    "polymarket": {
+      "_doc": "Polymarket taker fee. Formula is required for validation only; runtime uses live fee-rate and skips/logs pairs if it cannot be resolved.",
+      "formula": "p * (1 - p) * 0 * c"
+    }
+  },
+
+  "_doc_holdings": "Optional holdings checks for live trading. When enabled, the bot fetches available cash per exchange and skips trades if insufficient. If mode=auto and endpoints are missing, the bot falls back to paper mode.",
+  "holdings": {
+    "mode": "auto",
+    "fallback_to_paper": true,
+    "kalshi": {
+      "url": "",
+      "method": "GET",
+      "headers": {},
+      "params": {},
+      "body": {},
+      "json_path": "available_cash",
+      "timeout_seconds": 10
+    },
+    "polymarket": {
+      "url": "",
+      "method": "GET",
+      "headers": {},
+      "params": {},
+      "body": {},
+      "json_path": "available_cash",
+      "timeout_seconds": 10
+    }
+  },
+
+  "_doc_api": "Public API base URLs. These are the live production endpoints — no changes needed for normal use. Orderbook data from both APIs is publicly accessible without authentication, so paper trading works with the defaults below and empty credentials.",
+  "api": {
+    "kalshi_base_url": "https://api.elections.kalshi.com/trade-api/v2",
+    "polymarket_clob_url": "https://clob.polymarket.com",
+    "polymarket_gamma_url": "https://gamma-api.polymarket.com"
+  },
+
+  "_doc_kalshi": "Kalshi API credentials. Leave blank for paper trading — market data is publicly accessible without a key.",
+  "kalshi": {
+    "_doc_api_key": "Your Kalshi API key ID (from Kalshi account → Settings → API).",
+    "api_key": "",
+    "_doc_private_key_base64": "RSA private key in base64-encoded PEM format. Encode with:  base64 -w0 your_private_key.pem  (Linux/Mac)  or  [Convert]::ToBase64String([IO.File]::ReadAllBytes('key.pem'))  (PowerShell).",
+    "private_key_base64": ""
+  },
+
+  "_doc_polymarket": "Polymarket CLOB credentials. Leave blank for paper trading — orderbook data is publicly accessible without a key.",
+  "polymarket": {
+    "_doc_private_key": "Ethereum wallet private key (starts with 0x). Used for signing orders.",
+    "private_key": "",
+    "_doc_clob_creds": "CLOB API credentials — generate at clob.polymarket.com after connecting your wallet.",
+    "api_key": "",
+    "api_secret": "",
+    "api_passphrase": ""
+  }
+}

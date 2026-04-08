@@ -1,0 +1,348 @@
+election
+vote
+nominee
+nomination
+primary
+candidate
+ballot
+democratic
+republican
+democrat
+gop
+senate
+senator
+house
+congress
+congressional
+representative
+president
+presidential
+governor
+mayor
+minister
+parliament
+cabinet
+legislation
+bill
+law
+policy
+administration
+white house
+oval office
+executive
+judicial
+supreme court
+impeach
+veto
+filibuster
+treaty
+sanctions
+diplomat
+ambassador
+foreign policy
+nato
+united nations
+g7
+g20
+war
+military
+troops
+referendum
+polling
+approval rating
+majority
+minority
+speaker
+majority leader
+minority leader
+vice president
+secretary of state
+attorney general
+cia
+fbi
+doj
+dhs
+party
+coalition
+incumbent
+runoff
+electoral
+general election
+midterm
+swing state
+debate
+campaign
+fundraising
+pac
+super pac
+# US specific
+house race
+senate race
+special election
+redistricting
+gerrymander
+electoral college
+popular vote
+inauguration
+executive order
+impeachment
+articles of impeachment
+recall
+ballot measure
+proposition
+amendment
+constitution
+filibuster
+cloture
+recess appointment
+# International
+prime minister
+chancellor
+parliament
+coalition
+snap election
+no confidence
+brexit
+european union
+eu
+nato
+un security council
+foreign minister
+head of state
+head of government
+election day
+polling day
+exit poll
+recount
+concede
+transition
+lame duck
+
+# ── US Senators ─────────────────────────────────────────────────────────────────
+Chuck Grassley
+John Thune
+John Barrasso
+Tom Cotton
+Shelley Moore Capito
+James Lankford
+Tim Scott
+Rick Scott
+Mike Crapo
+Chuck Schumer
+Dick Durbin
+Amy Klobuchar
+Cory Booker
+Mark Warner
+Elizabeth Warren
+Bernie Sanders
+Tammy Baldwin
+Kirsten Gillibrand
+Catherine Cortez Masto
+Chris Murphy
+Brian Schatz
+Patty Murray
+Tommy Tuberville
+Katie Britt
+Lisa Murkowski
+Dan Sullivan
+Mark Kelly
+Ruben Gallego
+John Boozman
+Alex Padilla
+Adam Schiff
+Michael Bennet
+John Hickenlooper
+Richard Blumenthal
+Chris Coons
+Lisa Blunt Rochester
+Ashley Moody
+Jon Ossoff
+Raphael Warnock
+Mazie Hirono
+Jim Risch
+Tammy Duckworth
+Todd Young
+Jim Banks
+Joni Ernst
+Jerry Moran
+Roger Marshall
+Mitch McConnell
+Rand Paul
+Bill Cassidy
+John Kennedy
+Susan Collins
+Angus King
+Chris Van Hollen
+Angela Alsobrooks
+Ed Markey
+Gary Peters
+Elissa Slotkin
+Tina Smith
+Roger Wicker
+Cindy Hyde-Smith
+Josh Hawley
+Eric Schmitt
+Steve Daines
+Tim Sheehy
+Deb Fischer
+Pete Ricketts
+Jacky Rosen
+Jeanne Shaheen
+Maggie Hassan
+Andy Kim
+Martin Heinrich
+Ben Ray Lujan
+Thom Tillis
+Ted Budd
+John Hoeven
+Kevin Cramer
+Bernie Moreno
+Jon Husted
+Alan Armstrong
+Ron Wyden
+Jeff Merkley
+John Fetterman
+Dave McCormick
+Jack Reed
+Sheldon Whitehouse
+Lindsey Graham
+Mike Rounds
+Marsha Blackburn
+Bill Hagerty
+John Cornyn
+Ted Cruz
+Mike Lee
+John Curtis
+Peter Welch
+Tim Kaine
+Maria Cantwell
+Jim Justice
+Ron Johnson
+Cynthia Lummis
+
+# ── Key House members ────────────────────────────────────────────────────────────
+Nancy Pelosi
+Hakeem Jeffries
+Alexandria Ocasio-Cortez
+AOC
+Jim Jordan
+Elise Stefanik
+Mike Johnson
+Steve Scalise
+Katherine Clark
+Pete Aguilar
+Rashida Tlaib
+Ilhan Omar
+Lauren Boebert
+Marjorie Taylor Greene
+Matt Gaetz
+George Santos
+Kevin McCarthy
+Paul Ryan
+Eric Cantor
+Steny Hoyer
+James Clyburn
+Maxine Waters
+Adam Kinzinger
+Liz Cheney
+Chip Roy
+Thomas Massie
+Andy Biggs
+Barry Moore
+French Hill
+Rick Crawford
+Bruce Westerman
+
+# ── Cabinet and senior officials ────────────────────────────────────────────────
+Donald Trump
+JD Vance
+Marco Rubio
+Scott Bessent
+Pete Hegseth
+Pam Bondi
+Doug Burgum
+Brooke Rollins
+Howard Lutnick
+Lori Chavez-DeRemer
+Robert F. Kennedy Jr.
+RFK Jr.
+Scott Turner
+Sean Duffy
+Chris Wright
+Linda McMahon
+Doug Collins
+Markwayne Mullin
+Susie Wiles
+Lee Zeldin
+Russell Vought
+Tulsi Gabbard
+John Ratcliffe
+Jamieson Greer
+Kelly Loeffler
+Kristi Noem
+Todd Blanche
+Elon Musk
+DOGE
+Vivek Ramaswamy
+
+# ── Former US officials still in news ───────────────────────────────────────────
+Barack Obama
+Joe Biden
+George W. Bush
+Bill Clinton
+Mike Pence
+Kamala Harris
+Al Gore
+Dick Cheney
+Hillary Clinton
+Mitt Romney
+John Kerry
+Mike Pompeo
+Liz Cheney
+John Bolton
+Michael Flynn
+Rudy Giuliani
+William Barr
+Jeff Sessions
+Robert Mueller
+Jim Comey
+Jared Kushner
+Gavin Newsom
+Ron DeSantis
+Nikki Haley
+Pete Buttigieg
+Andrew Cuomo
+Stacy Abrams
+Beto O'Rourke
+Michael Bloomberg
+Eric Adams
+Steve Bannon
+Anthony Fauci
+
+# ── World heads of state ─────────────────────────────────────────────────────────
+Keir Starmer
+Mark Carney
+Emmanuel Macron
+Friedrich Merz
+Narendra Modi
+Xi Jinping
+Vladimir Putin
+Lula
+Luiz Inacio Lula da Silva
+Claudia Sheinbaum
+Benjamin Netanyahu
+Volodymyr Zelenskyy
+Zelensky
+Recep Tayyip Erdogan
+Erdogan
+Mohammed bin Salman
+MBS
+Masoud Pezeshkian
+Giorgia Meloni
+Javier Milei
+Prabowo Subianto
+Cyril Ramaphosa
+Ursula von der Leyen
+Kim Jong Un
+Anthony Albanese
+Lee Jae Myung
