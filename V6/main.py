@@ -43,21 +43,29 @@ def _strip_comments(text: str) -> str:
 
 
 def load_config(path: str) -> dict:
+    example = _SCRIPT_DIR / "config.example.json"
     p = Path(path)
-    if not p.exists():
-        # Fall back to the bundled example config
-        example = _SCRIPT_DIR / "config.example.json"
-        if example.exists():
-            p = example
-        else:
-            print(f"{Fore.RED}Config not found:{Style.RESET_ALL} {path}", file=sys.stderr)
-            sys.exit(1)
 
-    try:
-        text = p.read_text(encoding="utf-8")
-        cfg = json.loads(_strip_comments(text))
-    except json.JSONDecodeError as exc:
-        print(f"{Fore.RED}Config parse error in {p}:{Style.RESET_ALL} {exc}", file=sys.stderr)
+    # Start from config.example.json as the canonical defaults
+    if example.exists():
+        try:
+            cfg = json.loads(_strip_comments(example.read_text(encoding="utf-8")))
+        except json.JSONDecodeError as exc:
+            print(f"{Fore.RED}Config parse error in {example}:{Style.RESET_ALL} {exc}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        cfg = {}
+
+    # Overlay user config.json on top (if it exists)
+    if p.exists():
+        try:
+            user_cfg = json.loads(_strip_comments(p.read_text(encoding="utf-8")))
+        except json.JSONDecodeError as exc:
+            print(f"{Fore.RED}Config parse error in {p}:{Style.RESET_ALL} {exc}", file=sys.stderr)
+            sys.exit(1)
+        cfg.update(user_cfg)
+    elif not example.exists():
+        print(f"{Fore.RED}Config not found:{Style.RESET_ALL} {path}", file=sys.stderr)
         sys.exit(1)
 
     # Remove documentation keys (any key starting with _) at all levels

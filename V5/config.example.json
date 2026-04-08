@@ -11,7 +11,7 @@
   "max_contracts": 1000,
 
   "_doc_scan_interval_seconds": "Seconds between full scan cycles when running in 'run' mode.",
-  "scan_interval_seconds": 3,
+  "scan_interval_seconds": 5,
 
   "_doc_print_market_status": "Print a one-line market snapshot for every pair on each scan cycle, even when no arb is found. Shows Kalshi and Polymarket mid-prices, days to expiry, net-of-fees marginal edge%, and net-of-fees ARR for the better direction (1-contract). Useful for monitoring market conditions without needing to find a trade. Set to false (default) to suppress this output.",
   "print_market_status": false,
@@ -35,10 +35,10 @@
   "position_file": "open_positions.json",
 
   "_doc_pairs_per_cycle": "Max pairs to scan per cycle. Pairs with open positions are always scanned first, then the rest rotate so every pair gets checked evenly over time. Set to total pairs count to scan all each cycle (default behavior).",
-  "pairs_per_cycle": 200,
+  "pairs_per_cycle": 9999,
 
   "_doc_max_workers": "Number of parallel threads used to fetch orderbook data. Higher = faster scans, but too high will trigger 429 rate-limit errors from Kalshi. 10 is a safe default; raise to 20-30 if scans are too slow and you are not seeing rate-limit warnings.",
-  "max_workers": 6,
+  "max_workers": 30,
 
   "_doc_pairs_file": "Path to the Excel (.xlsx) or CSV pairs file. Required columns: pair_id, kalshi_ticker, polymarket_market_slug, resolution_date, category. Optional: polymarket_yes_token_id, polymarket_no_token_id, poly_outcomes_json, poly_token_ids_json, poly_primary_outcome, poly_event_url, active.",
   "pairs_file": "Pairs_for_Kalshi_and_Polymarket.xlsx",
