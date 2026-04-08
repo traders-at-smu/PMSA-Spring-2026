@@ -1,0 +1,146 @@
+ai
+artificial intelligence
+machine learning
+llm
+gpt
+chatgpt
+openai
+anthropic
+gemini
+deepmind
+nvidia
+gpu
+semiconductor
+chip
+chips
+apple
+google
+microsoft
+meta
+amazon
+tesla
+spacex
+rocket
+launch
+satellite
+autonomous
+self driving
+electric vehicle
+ev
+iphone
+android
+software
+hardware
+cloud
+aws
+azure
+data center
+cyber
+hack
+breach
+security
+privacy
+regulation
+antitrust
+ftc
+ipo
+startup
+venture
+funding
+unicorn
+valuation
+headcount
+layoff
+hiring
+product launch
+feature
+update
+model
+benchmark
+agi
+robotics
+automation
+drone
+quantum
+biotech
+genomics
+crispr
+pharmaceutical
+drug
+fda
+fda approval
+clinical trial
+vaccine
+# Additional
+deepseek
+llama
+claude
+mistral
+grok
+perplexity
+cursor
+copilot
+o1
+o3
+reasoning model
+multimodal
+vision model
+fine tuning
+inference
+training run
+data center
+power consumption
+energy
+nuclear
+smr
+hyperscaler
+compute
+token
+context window
+agent
+agentic
+mcp
+memory
+benchmark
+mmlu
+humaneval
+swe bench
+arc
+evals
+open source
+closed source
+weights
+parameter
+billion parameter
+self hosted
+on premise
+edge computing
+mobile
+wearable
+vr
+ar
+mixed reality
+spatial computing
+apple vision
+quest
+neuralink
+brain computer interface
+dna
+rna
+mrna
+gene editing
+cell therapy
+cancer
+alzheimer
+weight loss drug
+glp1
+ozempic
+wegovy
+zepbound
+fda approval
+phase 3
+clinical trial
+trial results
+drug approval
+biosimilar
+patent cliff

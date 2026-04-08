@@ -1,0 +1,141 @@
+song
+album
+artist
+music
+chart
+billboard
+spotify
+streaming
+grammy
+oscar
+emmy
+tony award
+golden globe
+bafta
+box office
+movie
+film
+series
+show
+tv
+television
+netflix
+hbo
+disney
+amazon prime
+apple tv
+celebrity
+actor
+actress
+director
+producer
+award
+nomination
+best picture
+best actor
+best actress
+record
+platinum
+gold
+chart
+number 1
+top 10
+top 40
+hip hop
+pop
+rap
+rock
+country
+rnb
+genre
+debut
+release
+single
+tour
+ticket sales
+broadcast
+ratings
+viewership
+subscriber
+follower
+viral
+social media
+tiktok
+instagram
+youtube
+# Additional
+streamed
+streams
+weekly streams
+monthly listeners
+wrapped
+most streamed
+top artist
+top song
+debut album
+sophomore album
+collaboration
+collab
+feature
+remix
+sample
+sample clearance
+tour gross
+ticket
+sold out
+arena
+stadium
+festival
+coachella
+grammy award
+grammy winner
+grammy nomination
+vma
+ama
+billboard music award
+iheartradio
+bet awards
+brit awards
+mercury prize
+booker prize
+pulitzer
+literary
+bestseller
+book
+novel
+author
+adaptation
+sequel
+reboot
+franchise
+universe
+cinematic universe
+marvel
+dc
+disney
+pixar
+dreamworks
+a24
+rotten tomatoes
+metacritic
+imdb
+opening weekend
+domestic gross
+worldwide gross
+streaming premiere
+wide release
+limited release
+awards season
+oscar campaign
+screen actors guild
+sag awards
+dga
+wga
+strike
+residuals
+reality tv
+game show
+late night
+talk show
+podcast
+number one podcast

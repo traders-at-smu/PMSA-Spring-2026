@@ -1,0 +1,1050 @@
+# Ã¢ÂÂÃ¢ÂÂ Stat / action tokens (catch player props after colon is stripped) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+points scored
+points
+assists
+rebounds
+goals scored
+goals
+runs scored
+strikeouts
+strikeout
+home runs
+home run
+hits
+threes
+three pointers
+blocks
+steals
+turnovers
+yards
+touchdowns
+passing yards
+rushing yards
+receiving yards
+field goal
+free throw
+batting average
+era
+innings pitched
+saves
+total bases
+rbi
+rbis
+slugging
+ops
+wins
+losses
+shutout
+clean sheet
+yellow card
+red card
+corners
+offsides
+tackles
+interceptions
+sacks
+fumbles
+penalty
+penalty kicks
+serve
+ace
+double fault
+set
+match
+bout
+round
+knockout
+submission
+decision
+weight class
+par
+birdie
+eagle
+bogey
+stroke
+cut
+leaderboard
+podium
+lap
+pit stop
+race
+qualifying
+pole position
+
+# Ã¢ÂÂÃ¢ÂÂ Leagues / sports Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+nfl
+nba
+mlb
+nhl
+nba
+mls
+ufc
+mma
+pga
+lpga
+atp
+wta
+ncaa
+college basketball
+college football
+march madness
+world cup
+champions league
+premier league
+la liga
+bundesliga
+serie a
+ligue 1
+super bowl
+playoffs
+championship
+world series
+stanley cup
+nba finals
+pro bowl
+draft
+nfl draft
+nba draft
+mlb draft
+combine
+rookie
+free agent
+trade deadline
+salary cap
+roster
+
+# Ã¢ÂÂÃ¢ÂÂ Generic game context Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+winner
+winning
+win
+lose
+loss
+draw
+tie
+halftime
+overtime
+ot
+extra time
+first half
+second half
+final score
+spread
+moneyline
+handicap
+over
+under
+total
+score
+season
+regular season
+playoff
+bracket
+series
+sweep
+upset
+underdog
+favorite
+odds
+prop
+projection
+game
+match
+tournament
+open
+championship
+invitational
+classic
+cup
+bowl
+grand slam
+major
+minor league
+starter
+bench
+coach
+manager
+head coach
+roster
+injury
+suspension
+ejection
+mvp
+all star
+all-star
+hall of fame
+cy young
+batting title
+scoring title
+assist leader
+rebounding leader
+
+# Ã¢ÂÂÃ¢ÂÂ Team names (full + short) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+# NHL missing nicknames
+Lightning
+Maple Leafs
+Canucks
+Capitals
+Senators
+Flyers
+Penguins
+Blues
+Sharks
+Kraken
+Golden Knights
+Tampa Bay Lightning
+Toronto Maple Leafs
+Vancouver Canucks
+Washington Capitals
+Ottawa Senators
+Philadelphia Flyers
+Pittsburgh Penguins
+St. Louis Blues
+San Jose Sharks
+Seattle Kraken
+Vegas Golden Knights
+# NBA missing nicknames
+76ers
+Jazz
+Raptors
+Spurs
+Suns
+Trail Blazers
+Wizards
+Philadelphia 76ers
+Utah Jazz
+Toronto Raptors
+San Antonio Spurs
+Phoenix Suns
+Portland Trail Blazers
+Washington Wizards
+# MLB missing nicknames
+Phillies
+Pirates
+Padres
+Nationals
+Mariners
+Blue Jays
+Rays
+Philadelphia Phillies
+Pittsburgh Pirates
+San Diego Padres
+Washington Nationals
+Seattle Mariners
+Toronto Blue Jays
+Tampa Bay Rays
+San Francisco Giants
+# NFL missing nicknames
+49ers
+Seahawks
+Buccaneers
+Titans
+Commanders
+San Francisco 49ers
+Seattle Seahawks
+Tampa Bay Buccaneers
+Tennessee Titans
+Washington Commanders
+Ducks
+Cardinals
+Diamondbacks
+Athletics
+Braves
+Falcons
+Hawks
+United FC
+FC
+Orioles
+Ravens
+Lions
+Bruins
+Celtics
+Red Sox
+Nets
+Bills
+Sabres
+Flames
+Stampeders
+Hurricanes
+Panthers
+Hornets
+Bears
+Blackhawks
+Bulls
+Cubs
+Fire FC
+White Sox
+Bengals
+Reds
+Browns
+Cavaliers
+Guardians
+Avalanche
+Rapids
+Rockies
+Blue Jackets
+Crew SC
+Cowboys
+Mavericks
+Stars
+Broncos
+Nuggets
+Pistons
+Red Wings
+Tigers
+Elks
+Oilers
+Warriors
+Packers
+Tiger-Cats
+Astros
+Dynamo FC
+Rockets
+Texans
+Pacers
+Colts
+Jaguars
+Chiefs
+Royals
+Sporting Kansas City
+Galaxy
+Raiders
+Angels
+Chargers
+Clippers
+Dodgers
+Kings
+Lakers
+Rams
+Grizzlies
+Dolphins
+Heat
+Inter Miami CF
+Marlins
+Brewers
+Bucks
+Timberwolves
+Twins
+United FC
+Vikings
+Wild
+Alouettes
+Canadiens
+CF MontrÃÂ©al
+Predators
+Patriots
+Revolution
+Devils
+Pelicans
+Saints
+City FC
+Giants
+Islanders
+Jets
+Knicks
+Mets
+Rangers
+Red Bulls
+Yankees
+Thunder
+Magic
+Redblacks
+Anaheim Ducks
+Arizona Cardinals
+Arizona Diamondbacks
+Atlanta Braves
+Atlanta Falcons
+Atlanta Hawks
+Atlanta United FC
+Austin FC
+Baltimore Orioles
+Baltimore Ravens
+BC Lions
+Boston Bruins
+Boston Celtics
+Boston Red Sox
+Brooklyn Nets
+Buffalo Bills
+Buffalo Sabres
+Calgary Flames
+Calgary Stampeders
+Carolina Hurricanes
+Carolina Panthers
+Charlotte FC
+Charlotte Hornets
+Chicago Bears
+Chicago Blackhawks
+Chicago Bulls
+Chicago Cubs
+Chicago Fire FC
+Chicago White Sox
+Cincinnati Bengals
+FC Cincinnati
+Cincinnati Reds
+Cleveland Browns
+Cleveland Cavaliers
+Cleveland Guardians
+Colorado Avalanche
+Colorado Rapids
+Colorado Rockies
+Columbus Blue Jackets
+Columbus Crew SC
+Dallas Cowboys
+FC Dallas
+Dallas Mavericks
+Dallas Stars
+D.C. United
+Denver Broncos
+Denver Nuggets
+Detroit Lions
+Detroit Pistons
+Detroit Red Wings
+Detroit Tigers
+Edmonton Elks
+Edmonton Oilers
+Florida Panthers
+Golden State Warriors
+Green Bay Packers
+Hamilton Tiger-Cats
+Houston Astros
+Houston Dynamo FC
+Houston Rockets
+Houston Texans
+Indiana Pacers
+Indianapolis Colts
+Jacksonville Jaguars
+Kansas City Chiefs
+Kansas City Royals
+LA Galaxy
+Las Vegas Raiders
+Los Angeles Angels
+Los Angeles Chargers
+Los Angeles Clippers
+Los Angeles Dodgers
+Los Angeles FC
+Los Angeles Kings
+Los Angeles Lakers
+Los Angeles Rams
+Memphis Grizzlies
+Miami Dolphins
+Miami Heat
+Miami Marlins
+Milwaukee Brewers
+Milwaukee Bucks
+Minnesota Timberwolves
+Minnesota Twins
+Minnesota United FC
+Minnesota Vikings
+Minnesota Wild
+Montreal Alouettes
+Montreal Canadiens
+Nashville Predators
+Nashville SC
+New England Patriots
+New England Revolution
+New Jersey Devils
+New Orleans Pelicans
+New Orleans Saints
+New York City FC
+New York Giants
+New York Islanders
+New York Jets
+New York Knicks
+New York Mets
+New York Rangers
+New York Red Bulls
+New York Yankees
+Oklahoma City Thunder
+Orlando City SC
+Orlando Magic
+Ottawa Redblacks
+Arsenal
+Aston Villa
+Bournemouth
+Brentford
+Brighton
+Chelsea
+Crystal Palace
+Everton
+Fulham
+Ipswich Town
+Leicester City
+Liverpool
+Manchester City
+Manchester United
+Newcastle United
+Nottingham Forest
+Southampton
+Tottenham Hotspur
+West Ham United
+Wolverhampton
+AlavÃÂ©s
+Athletic Bilbao
+AtlÃÂ©tico Madrid
+Barcelona
+Celta Vigo
+Espanyol
+Getafe
+Girona
+Las Palmas
+LeganÃÂ©s
+Mallorca
+Osasuna
+Rayo Vallecano
+Vallecano
+Real Betis
+Real Madrid
+Real Sociedad
+Real Valladolid
+Sevilla
+Valencia
+Villarreal
+Augsburg
+Bayer Leverkusen
+Leverkusen
+Bayern Munich
+Bayern Munchen
+Bayern MÃÂ¼nchen
+Bochum
+Borussia Dortmund
+Borussia MÃÂ¶nchengladbach
+Eintracht Frankfurt
+Freiburg
+Heidenheim
+Hoffenheim
+Holstein Kiel
+Mainz
+RB Leipzig
+St. Pauli
+Stuttgart
+Union Berlin
+Werder Bremen
+Wolfsburg
+Atalanta
+Bologna
+Cagliari
+Como
+Empoli
+Fiorentina
+Genoa
+Inter Milan
+Juventus
+Lazio
+Lecce
+Milan
+Monza
+Napoli
+Parma
+Roma
+Torino
+Udinese
+Venezia
+Verona
+Auxerre
+Brest
+Le Havre
+Lens
+Lille
+Lyon
+Marseille
+Monaco
+Montpellier
+Nantes
+Nice
+Paris Saint-Germain
+PSG
+Reims
+Rennes
+Saint-ÃÂtienne
+Strasbourg
+Toulouse
+Angers
+# NHL missing nicknames
+Lightning
+Maple Leafs
+Canucks
+Capitals
+Senators
+Flyers
+Penguins
+Blues
+Sharks
+Kraken
+Golden Knights
+Tampa Bay Lightning
+Toronto Maple Leafs
+Vancouver Canucks
+Washington Capitals
+Ottawa Senators
+Philadelphia Flyers
+Pittsburgh Penguins
+St. Louis Blues
+San Jose Sharks
+Seattle Kraken
+Vegas Golden Knights
+# NBA missing nicknames
+76ers
+Jazz
+Raptors
+Spurs
+Suns
+Trail Blazers
+Wizards
+Philadelphia 76ers
+Utah Jazz
+Toronto Raptors
+San Antonio Spurs
+Phoenix Suns
+Portland Trail Blazers
+Washington Wizards
+# MLB missing nicknames
+Phillies
+Pirates
+Padres
+Nationals
+Mariners
+Blue Jays
+Rays
+Philadelphia Phillies
+Pittsburgh Pirates
+San Diego Padres
+Washington Nationals
+Seattle Mariners
+Toronto Blue Jays
+Tampa Bay Rays
+San Francisco Giants
+# NFL missing nicknames
+49ers
+Seahawks
+Buccaneers
+Titans
+Commanders
+San Francisco 49ers
+Seattle Seahawks
+Tampa Bay Buccaneers
+Tennessee Titans
+Washington Commanders
+# Bayern Munich variants (DB unicode corruption)
+Bayern Munchen
+Bayern MÃÂ¼nchen
+
+# Ã¢ÂÂÃ¢ÂÂ MLS (additions / missing from standard list) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+Nashville SC
+Philadelphia Union
+Portland Timbers
+Real Salt Lake
+San Diego FC
+San Jose Earthquakes
+Seattle Sounders FC
+St. Louis City SC
+Toronto FC
+Vancouver Whitecaps FC
+Vancouver Whitecaps
+Columbus Crew
+Colorado Rapids
+Los Angeles Galaxy
+Houston Dynamo
+Austin FC
+New England Revolution
+Inter Miami CF
+CF MontrÃÂ©al
+CF Montreal
+Charlotte FC
+New York City FC
+New York Red Bulls
+FC Cincinnati
+FC Dallas
+Minnesota United FC
+Minnesota United
+Orlando City SC
+Sporting Kansas City
+DC United
+D.C. United
+Atlanta United FC
+Chicago Fire FC
+Chicago Fire
+LA Galaxy
+Los Angeles FC
+
+# Ã¢ÂÂÃ¢ÂÂ KBO Ã¢ÂÂ Korean Baseball League Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+Hanwha Eagles
+Doosan Bears
+Kia Tigers
+LG Twins
+Kiwoom Heroes
+SSG Landers
+KT Wiz
+Lotte Giants
+NC Dinos
+Samsung Lions
+
+# Ã¢ÂÂÃ¢ÂÂ K League (South Korea) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+FC Anyang
+FC Seoul
+Seoul
+Daejeon Hana Citizen FC
+Gangwon FC
+Incheon United
+Incheon Utd
+Gimcheon Sangmu
+Jeju United
+Ulsan HD
+Jeonbuk Hyundai Motors
+Pohang Steelers
+Daegu FC
+Suwon FC
+
+# Ã¢ÂÂÃ¢ÂÂ A-League (Australia) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+Melbourne Victory FC
+Melbourne Victory
+Wellington Phoenix FC
+Wellington Phoenix
+Wellington
+Auckland FC
+Central Coast Mariners
+Brisbane Roar FC
+Brisbane Roar
+Western Sydney Wanderers
+Sydney FC
+Macarthur FC
+Melbourne City FC
+Western United FC
+Adelaide United
+Perth Glory
+
+# Ã¢ÂÂÃ¢ÂÂ Liga MX Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+Cruz Azul
+Pachuca
+Club AmÃÂ©rica
+Atlas FC
+Atlas
+LeÃÂ³n
+Monterrey
+Santos Laguna
+QuerÃÂ©taro FC
+Toluca
+Pumas UNAM
+CD Guadalajara
+Tigres UANL
+Tigres
+Necaxa
+Club Tijuana
+Tijuana
+MazatlÃÂ¡n FC
+MazatlÃÂ¡n
+JuÃÂ¡rez FC
+Puebla FC
+Puebla
+Xolos
+Chivas
+
+# Ã¢ÂÂÃ¢ÂÂ BrasileirÃÂ£o Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+AtlÃÂ©tico Mineiro
+CA Mineiro
+Athletico Paranaense
+CA Paranaense
+Bahia
+Palmeiras
+Botafogo
+Vasco da Gama
+Vasco
+Flamengo
+Corinthians
+SÃÂ£o Paulo
+GrÃÂªmio
+Internacional
+Fortaleza
+Fluminense
+Santos FC
+Santos
+Cruzeiro
+Coritiba
+Red Bull Bragantino
+Bragantino
+Juventude
+CuiabÃÂ¡
+CearÃÂ¡
+Mirassol FC
+
+# Ã¢ÂÂÃ¢ÂÂ Chilean Primera DivisiÃÂ³n Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+Colo-Colo
+Universidad de Chile
+Deportes ConcepciÃÂ³n
+Union La Calera
+Deportes Limache
+Nublense
+Deportes La Serena
+Cobresal
+ÃÂublense
+Audax Italiano
+Palestino
+CuricÃÂ³ Unido
+Magallanes
+Cobreloa
+
+# Ã¢ÂÂÃ¢ÂÂ LoL (League of Legends) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+Cloud9
+Sentinels
+Disguised
+Team Liquid
+FlyQuest
+Shopify Rebellion
+Dignitas
+DN SOOPers
+Nongshim Red Force
+BNK FEARX
+Bilibili Gaming
+JD Gaming
+Top Esports
+Anyone's Legend
+CTBC Flying Oyster
+GAM Esports
+Leviatan Esports
+SK Gaming
+G2 Esports
+Fnatic
+FURIA Esports
+Vivo Keyd Stars
+MVK Esports
+Deep Cross Gaming
+GIANTX
+Team Secret Whales
+Fukuoka SoftBank Hawks Gaming
+NRG Esports
+FlyQuest
+
+# Ã¢ÂÂÃ¢ÂÂ UCL / extra European teams Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+Sporting CP
+Sporting Lisbon
+Inter Milan
+Internazionale
+Atletico Madrid
+
+# Ã¢ÂÂÃ¢ÂÂ NWSL (Women's Soccer) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+Bay FC
+Seattle Reign FC
+Seattle Reign
+Portland Thorns FC
+Portland Thorns
+North Carolina Courage
+Kansas City Current
+Houston Dash
+Orlando Pride
+Washington Spirit
+San Diego Wave FC
+Angel City FC
+Chicago Red Stars
+Utah Royals FC
+Racing Louisville FC
+NJ NY Gotham FC
+Gotham FC
+
+# Ã¢ÂÂÃ¢ÂÂ IPL (Cricket) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+Royal Challengers Bengaluru
+Chennai Super Kings
+Delhi Capitals
+Gujarat Titans
+Kolkata Knight Riders
+Lucknow Super Giants
+Mumbai Indians
+Punjab Kings
+Rajasthan Royals
+Sunrisers Hyderabad
+
+# Ã¢ÂÂÃ¢ÂÂ AHL (American Hockey League) Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+Providence Bruins
+Rochester Americans
+Belleville Senators
+Utica Comets
+Hershey Bears
+Hartford Wolf Pack
+Lehigh Valley Phantoms
+Wilkes-Barre/Scranton Penguins
+Chicago Wolves
+Texas Stars
+Iowa Wild
+Rockford IceHogs
+Coachella Valley Firebirds
+Abbotsford Canucks
+
+# Ã¢ÂÂÃ¢ÂÂ Turkish SÃÂ¼per Lig Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+FenerbahÃÂ§e SK
+Fenerbahce
+Galatasaray
+BeÃÂiktaÃÂ
+Besiktas
+Trabzonspor
+Antalyaspor
+GÃÂ¶ztepe SK
+Goztepe
+Samsunspor
+Fatih KaragÃÂ¼mrÃÂ¼k SK
+Fatih Karagumruk
+Kocaelispor
+KasÃÂ±mpaÃÂa
+Kayserispor
+Sivasspor
+BaÃÂakÃÂehir
+Basaksehir
+Alanyaspor
+Rizespor
+Hatayspor
+
+# Ã¢ÂÂÃ¢ÂÂ Other European leagues Ã¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂÃ¢ÂÂ
+# English Championship / League 1 / League 2
+Leeds United
+Sunderland
+Sheffield United
+Middlesbrough
+Preston North End
+Burnley
+Coventry City
+Millwall
+Watford
+Derby County
+Oxford United
+Luton Town
+Swansea City
+Bristol City
+West Bromwich Albion
+Cardiff City
+QPR
+Plymouth Argyle
+Stoke City
+Norwich City
+Portsmouth FC
+Barnsley FC
+Bolton Wanderers FC
+Exeter City FC
+Peterborough United FC
+Wycombe Wanderers FC
+Reading FC
+Leyton Orient FC
+Mansfield Town FC
+Northampton Town FC
+Port Vale FC
+Stevenage FC
+AFC Wimbledon
+# League 2
+Barrow AFC
+Bromley FC
+Cheltenham Town FC
+Crawley Town FC
+Crewe Alexandra FC
+Fleetwood Town FC
+Gillingham FC
+Harrogate Town AFC
+Notts County FC
+Oldham Athletic AFC
+Swindon Town FC
+Tranmere Rovers FC
+# Colombian Liga
+AtlÃÂ©tico Nacional
+Millonarios
+AmÃÂ©rica de Cali
+Deportivo Cali
+Junior FC
+Once Caldas
+# Slovak Super Liga
+FC Spartak Trnava
+# Eredivisie (Dutch)
+Ajax
+PSV
+Feyenoord
+AZ Alkmaar
+FC Utrecht
+Go Ahead Eagles
+FC Groningen
+Twente
+# Saudi Pro League (additions)
+Al-Hilal
+Al-Nassr
+Al-Ittihad
+Al-Ahli
+Al-Qadsiah
+Al-Okhdood SC
+
+# %% MLB City Names %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Arizona
+Atlanta
+Baltimore
+Boston
+Chicago
+Cincinnati
+Cleveland
+Colorado
+Detroit
+Houston
+Kansas City
+Los Angeles
+Miami
+Milwaukee
+Minnesota
+New York
+Oakland
+Philadelphia
+Pittsburgh
+San Diego
+San Francisco
+Seattle
+St. Louis
+Tampa Bay
+Texas
+Toronto
+Washington
+
+# %% South American Soccer (Argentine, etc.) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Argentinos Juniors
+Banfield
+Instituto CÃ³rdoba
+Instituto Cordoba
+Defensa y Justicia
+Racing Club
+River Plate
+Boca Juniors
+VÃ©lez Sarsfield
+San Lorenzo
+Independiente
+Talleres
+Estudiantes
+Gimnasia LP
+Newell's Old Boys
+Rosario Central
+LanÃºs
+Belgrano
+HuracÃ¡n
+
+# %% European Soccer (Missing) %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Casa Pia
+Benfica
+Girona
+Villarreal
+Napoli
+Milan
+AC Milan
+FC Porto
+Porto
+Sporting CP
+Ajax
+PSV Eindhoven
+Feyenoord
+AZ Alkmaar
+Utrecht
+Twente
+
+
+# %% More Soccer Variants %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Instituto AC Córdoba
+CSyD Defensa y Justicia
+AA Argentinos Juniors
+CA Banfield
+SL Benfica
+Sport Lisboa e Benfica
+Casa Pia AC
+Girona FC
+Villarreal CF
+SSC Napoli
+AC Milan
+FC Internazionale Milano
+Internazionale
+Real Madrid CF
+

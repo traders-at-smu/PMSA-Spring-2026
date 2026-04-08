@@ -1,0 +1,744 @@
+=== 1. CURRENT US SENATORS (119th Congress, 100 members) ===
+Chuck Grassley
+John Thune
+John Barrasso
+Tom Cotton
+Shelley Moore Capito
+James Lankford
+Tim Scott
+Rick Scott
+Mike Crapo
+Chuck Schumer
+Dick Durbin
+Amy Klobuchar
+Cory Booker
+Mark Warner
+Elizabeth Warren
+Bernie Sanders
+Tammy Baldwin
+Kirsten Gillibrand
+Catherine Cortez Masto
+Chris Murphy
+Brian Schatz
+Patty Murray
+Tommy Tuberville
+Katie Britt
+Lisa Murkowski
+Dan Sullivan
+Mark Kelly
+Ruben Gallego
+John Boozman
+Alex Padilla
+Adam Schiff
+Michael Bennet
+John Hickenlooper
+Richard Blumenthal
+Chris Coons
+Lisa Blunt Rochester
+Ashley Moody
+Jon Ossoff
+Raphael Warnock
+Mazie Hirono
+Jim Risch
+Tammy Duckworth
+Todd Young
+Jim Banks
+Joni Ernst
+Jerry Moran
+Roger Marshall
+Mitch McConnell
+Rand Paul
+Bill Cassidy
+John Kennedy
+Susan Collins
+Angus King
+Chris Van Hollen
+Angela Alsobrooks
+Ed Markey
+Gary Peters
+Elissa Slotkin
+Tina Smith
+Roger Wicker
+Cindy Hyde-Smith
+Josh Hawley
+Eric Schmitt
+Steve Daines
+Tim Sheehy
+Deb Fischer
+Pete Ricketts
+Jacky Rosen
+Jeanne Shaheen
+Maggie Hassan
+Andy Kim
+Martin Heinrich
+Ben Ray Lujan
+Thom Tillis
+Ted Budd
+John Hoeven
+Kevin Cramer
+Bernie Moreno
+Jon Husted
+Alan Armstrong
+Ron Wyden
+Jeff Merkley
+John Fetterman
+Dave McCormick
+Jack Reed
+Sheldon Whitehouse
+Lindsey Graham
+Mike Rounds
+Marsha Blackburn
+Bill Hagerty
+John Cornyn
+Ted Cruz
+Mike Lee
+John Curtis
+Peter Welch
+Tim Kaine
+Maria Cantwell
+Jim Justice
+Ron Johnson
+Cynthia Lummis
+
+=== 2. CURRENT US HOUSE REPRESENTATIVES (119th Congress) ===
+Barry Moore
+Shomari Figures
+Mike Rogers
+Robert Aderholt
+Dale Strong
+Gary Palmer
+Terri Sewell
+Nick Begich
+David Schweikert
+Eli Crane
+Yassamin Ansari
+Greg Stanton
+Andy Biggs
+Juan Ciscomani
+Adelita Grijalva
+Abraham Hamadeh
+Paul Gosar
+Rick Crawford
+French Hill
+Steve Womack
+Bruce Westerman
+Jared Huffman
+Kevin Kiley
+Mike Thompson
+Tom McClintock
+Ami Bera
+Doris Matsui
+John Garamendi
+Josh Harder
+Mark DeSaulnier
+Nancy Pelosi
+Lateefah Simon
+Adam Gray
+Eric Swalwell
+Kevin Mullin
+Sam Liccardo
+Ro Khanna
+Zoe Lofgren
+Jimmy Panetta
+Vince Fong
+Jim Costa
+David Valadao
+Jay Obernolte
+Salud Carbajal
+Raul Ruiz
+Julia Brownley
+George Whitesides
+Judy Chu
+Luz Rivas
+Laura Friedman
+Gil Cisneros
+Brad Sherman
+Pete Aguilar
+Jimmy Gomez
+Norma Torres
+Ted Lieu
+Sydney Kamlager-Dove
+Linda Sanchez
+Mark Takano
+Young Kim
+Ken Calvert
+Robert Garcia
+Maxine Waters
+Nanette Barragan
+Derek Tran
+Lou Correa
+Dave Min
+Darrell Issa
+Mike Levin
+Scott Peters
+Sara Jacobs
+Juan Vargas
+Diana DeGette
+Joe Neguse
+Jeff Hurd
+Lauren Boebert
+Jeff Crank
+Jason Crow
+Brittany Pettersen
+Gabe Evans
+John Larson
+Joe Courtney
+Rosa DeLauro
+Jim Himes
+Jahana Hayes
+Sarah McBride
+Jimmy Patronis
+Neal Dunn
+Kat Cammack
+Aaron Bean
+John Rutherford
+Randy Fine
+Cory Mills
+Mike Haridopolos
+Darren Soto
+Maxwell Frost
+Daniel Webster
+Gus Bilirakis
+Anna Paulina Luna
+Kathy Castor
+Laurel Lee
+Vern Buchanan
+Greg Steube
+Scott Franklin
+Byron Donalds
+Sheila Cherfilus-McCormick
+Brian Mast
+Lois Frankel
+Jared Moskowitz
+Frederica Wilson
+Debbie Wasserman Schultz
+Mario Diaz-Balart
+Maria Elvira Salazar
+Carlos Gimenez
+Buddy Carter
+Sanford Bishop
+Brian Jack
+Hank Johnson
+Nikema Williams
+Lucy McBath
+Rich McCormick
+Austin Scott
+Andrew Clyde
+Mike Collins
+Barry Loudermilk
+Rick Allen
+David Scott
+Ed Case
+Jill Tokuda
+Russ Fulcher
+Mike Simpson
+Jonathan Jackson
+Robin Kelly
+Delia Ramirez
+Chuy Garcia
+Mike Quigley
+Sean Casten
+Danny Davis
+Raja Krishnamoorthi
+Jan Schakowsky
+Brad Schneider
+Bill Foster
+Mike Bost
+Nikki Budzinski
+Lauren Underwood
+Mary Miller
+Darin LaHood
+Eric Sorensen
+Frank Mrvan
+Rudy Yakym
+Marlin Stutzman
+Jim Baird
+Victoria Spartz
+Jefferson Shreve
+Andre Carson
+Mark Messmer
+Erin Houchin
+Mariannette Miller-Meeks
+Ashley Hinson
+Zach Nunn
+Randy Feenstra
+Tracey Mann
+Derek Schmidt
+Sharice Davids
+Ron Estes
+James Comer
+Brett Guthrie
+Morgan McGarvey
+Thomas Massie
+Hal Rogers
+Andy Barr
+Steve Scalise
+Troy Carter
+Clay Higgins
+Mike Johnson
+Julia Letlow
+Cleo Fields
+Chellie Pingree
+Jared Golden
+Andy Harris
+Johnny Olszewski
+Sarah Elfreth
+Glenn Ivey
+Steny Hoyer
+April McClain Delaney
+Kweisi Mfume
+Jamie Raskin
+Richard Neal
+Jim McGovern
+Lori Trahan
+Jake Auchincloss
+Katherine Clark
+Seth Moulton
+Ayanna Pressley
+Stephen Lynch
+Bill Keating
+Jack Bergman
+John Moolenaar
+Hillary Scholten
+Bill Huizenga
+Tim Walberg
+Debbie Dingell
+Tom Barrett
+Kristen McDonald Rivet
+Lisa McClain
+John James
+Haley Stevens
+Rashida Tlaib
+Shri Thanedar
+Brad Finstad
+Angie Craig
+Kelly Morrison
+Betty McCollum
+Ilhan Omar
+Tom Emmer
+Michelle Fischbach
+Pete Stauber
+Trent Kelly
+Bennie Thompson
+Michael Guest
+Mike Ezell
+Wesley Bell
+Ann Wagner
+Bob Onder
+Mark Alford
+Emanuel Cleaver
+Sam Graves
+Eric Burlison
+Jason Smith
+Ryan Zinke
+Troy Downing
+Mike Flood
+Don Bacon
+Adrian Smith
+Dina Titus
+Mark Amodei
+Susie Lee
+Steven Horsford
+Chris Pappas
+Maggie Goodlander
+Donald Norcross
+Jeff Van Drew
+Herb Conaway
+Chris Smith
+Josh Gottheimer
+Frank Pallone
+Thomas Kean
+Rob Menendez
+Nellie Pou
+LaMonica McIver
+Bonnie Watson Coleman
+Melanie Stansbury
+Gabe Vasquez
+Teresa Leger Fernandez
+Nick LaLota
+Andrew Garbarino
+Tom Suozzi
+Laura Gillen
+Gregory Meeks
+Grace Meng
+Nydia Velazquez
+Hakeem Jeffries
+Yvette Clarke
+Dan Goldman
+Nicole Malliotakis
+Jerry Nadler
+Adriano Espaillat
+Alexandria Ocasio-Cortez
+Ritchie Torres
+George Latimer
+Mike Lawler
+Pat Ryan
+Josh Riley
+Paul Tonko
+Elise Stefanik
+John Mannion
+Nick Langworthy
+Claudia Tenney
+Joseph Morelle
+Tim Kennedy
+Don Davis
+Deborah Ross
+Greg Murphy
+Valerie Foushee
+Virginia Foxx
+Addison McDowell
+David Rouzer
+Mark Harris
+Richard Hudson
+Pat Harrigan
+Chuck Edwards
+Alma Adams
+Brad Knott
+Tim Moore
+Julie Fedorchak
+Greg Landsman
+David Taylor
+Joyce Beatty
+Jim Jordan
+Bob Latta
+Michael Rulli
+Max Miller
+Warren Davidson
+Marcy Kaptur
+Mike Turner
+Shontel Brown
+Troy Balderson
+Emilia Sykes
+David Joyce
+Mike Carey
+Kevin Hern
+Josh Brecheen
+Frank Lucas
+Tom Cole
+Stephanie Bice
+Suzanne Bonamici
+Cliff Bentz
+Maxine Dexter
+Val Hoyle
+Janelle Bynum
+Andrea Salinas
+Brian Fitzpatrick
+Brendan Boyle
+Dwight Evans
+Madeleine Dean
+Mary Gay Scanlon
+Chrissy Houlahan
+Ryan Mackenzie
+Rob Bresnahan
+Dan Meuser
+Scott Perry
+Lloyd Smucker
+Summer Lee
+John Joyce
+Guy Reschenthaler
+Glenn Thompson
+Mike Kelly
+Chris Deluzio
+Gabe Amo
+Seth Magaziner
+Nancy Mace
+Joe Wilson
+Sheri Biggs
+William Timmons
+Ralph Norman
+Jim Clyburn
+Russell Fry
+Dusty Johnson
+Diana Harshbarger
+Tim Burchett
+Chuck Fleischmann
+Scott DesJarlais
+Andy Ogles
+John Rose
+Matt Van Epps
+David Kustoff
+Steve Cohen
+Nathaniel Moran
+Dan Crenshaw
+Keith Self
+Pat Fallon
+Lance Gooden
+Jake Ellzey
+Lizzie Fletcher
+Morgan Luttrell
+Al Green
+Michael McCaul
+August Pfluger
+Craig Goldman
+Ronny Jackson
+Randy Weber
+Monica De La Cruz
+Veronica Escobar
+Pete Sessions
+Christian Menefee
+Jodey Arrington
+Joaquin Castro
+Chip Roy
+Troy Nehls
+Tony Gonzales
+Beth Van Duyne
+Roger Williams
+Brandon Gill
+Michael Cloud
+Henry Cuellar
+Sylvia Garcia
+Jasmine Crockett
+John Carter
+Julie Johnson
+Marc Veasey
+Vicente Gonzalez
+Greg Casar
+Brian Babin
+Lloyd Doggett
+Wesley Hunt
+Blake Moore
+Celeste Maloy
+Mike Kennedy
+Burgess Owens
+Becca Balint
+Rob Wittman
+Jen Kiggans
+Bobby Scott
+Jennifer McClellan
+John McGuire
+Ben Cline
+Eugene Vindman
+Don Beyer
+Morgan Griffith
+Suhas Subramanyam
+James Walkinshaw
+Suzan DelBene
+Rick Larsen
+Marie Gluesenkamp Perez
+Dan Newhouse
+Michael Baumgartner
+Emily Randall
+Pramila Jayapal
+Kim Schrier
+Adam Smith
+Marilyn Strickland
+Carol Miller
+Riley Moore
+Bryan Steil
+Mark Pocan
+Derrick Van Orden
+Gwen Moore
+Scott Fitzgerald
+Glenn Grothman
+Tom Tiffany
+Tony Wied
+Harriet Hageman
+Amata Coleman Radewagen
+Eleanor Holmes Norton
+James Moylan
+Stacey Plaskett
+
+=== 3. CURRENT US CABINET AND SENIOR OFFICIALS (Trump Administration, 2025) ===
+Donald Trump
+JD Vance
+Marco Rubio
+Scott Bessent
+Pete Hegseth
+Pam Bondi
+Doug Burgum
+Brooke Rollins
+Howard Lutnick
+Lori Chavez-DeRemer
+Robert F. Kennedy Jr.
+Scott Turner
+Sean Duffy
+Chris Wright
+Linda McMahon
+Doug Collins
+Markwayne Mullin
+Susie Wiles
+Lee Zeldin
+Russell Vought
+Tulsi Gabbard
+John Ratcliffe
+Jamieson Greer
+Kelly Loeffler
+Kristi Noem
+Todd Blanche
+
+=== 4. CURRENT WORLD HEADS OF STATE / GOVERNMENT ===
+--- United States ---
+Donald Trump
+
+--- United Kingdom ---
+Charles III
+Keir Starmer
+
+--- Canada ---
+Mark Carney
+
+--- France ---
+Emmanuel Macron
+Sebastien Lecornu
+
+--- Germany ---
+Frank-Walter Steinmeier
+Friedrich Merz
+
+--- Japan ---
+Naruhito
+Sanae Takaichi
+
+--- Australia ---
+Anthony Albanese
+
+--- India ---
+Droupadi Murmu
+Narendra Modi
+
+--- China ---
+Xi Jinping
+Li Qiang
+
+--- Russia ---
+Vladimir Putin
+Mikhail Mishustin
+
+--- Brazil ---
+Luiz Inacio Lula da Silva
+
+--- Mexico ---
+Claudia Sheinbaum
+
+--- South Korea ---
+Lee Jae Myung
+
+--- North Korea ---
+Kim Jong Un
+
+--- Israel ---
+Isaac Herzog
+Benjamin Netanyahu
+
+--- Ukraine ---
+Volodymyr Zelenskyy
+Yulia Svyrydenko
+
+--- Turkey ---
+Recep Tayyip Erdogan
+
+--- Saudi Arabia ---
+Mohammed bin Salman
+
+--- Iran ---
+Mojtaba Khamenei
+Masoud Pezeshkian
+
+--- Italy ---
+Sergio Mattarella
+Giorgia Meloni
+
+--- Argentina ---
+Javier Milei
+
+--- Indonesia ---
+Prabowo Subianto
+
+--- South Africa ---
+Cyril Ramaphosa
+
+--- European Union ---
+Antonio Costa
+Ursula von der Leyen
+
+--- Other Notable ---
+Volodymyr Zelenskyy
+Benjamin Netanyahu
+Narendra Modi
+Recep Tayyip Erdogan
+Viktor Orban
+Andrej Babis
+Mette Frederiksen
+Pedro Sanchez
+Ulf Kristersson
+Petteri Orpo
+Christopher Luxon
+Karol Nawrocki
+Donald Tusk
+Nayib Bukele
+Javier Milei
+Ahmed al-Sharaa
+
+=== 5. RECENT AND NOTABLE FORMER POLITICIANS STILL IN NEWS ===
+--- Former US Presidents ---
+Barack Obama
+Joe Biden
+George W. Bush
+Bill Clinton
+Jimmy Carter
+
+--- Former Vice Presidents ---
+Mike Pence
+Kamala Harris
+Al Gore
+Dick Cheney
+
+--- Other Notable Former US Officials ---
+Hillary Clinton
+Bernie Sanders
+Nancy Pelosi
+Mitt Romney
+John McCain
+Paul Ryan
+Eric Holder
+John Kerry
+Robert Gates
+Rex Tillerson
+James Mattis
+John Kelly
+Mike Pompeo
+Anthony Fauci
+Steve Bannon
+Liz Cheney
+Adam Kinzinger
+John Bolton
+Michael Flynn
+Roger Stone
+Paul Manafort
+Rudy Giuliani
+William Barr
+Jeff Sessions
+Rod Rosenstein
+Robert Mueller
+Jim Comey
+Andrew McCabe
+Michael Cohen
+Jared Kushner
+Ivanka Trump
+Hunter Biden
+Gavin Newsom
+Ron DeSantis
+Nikki Haley
+Vivek Ramaswamy
+Chris Christie
+Asa Hutchinson
+Doug Burgum
+Glenn Youngkin
+Greg Abbott
+Ken Paxton
+Andrew Cuomo
+Stacey Abrams
+Beto O'Rourke
+Pete Buttigieg
+Andrew Yang
+Marianne Williamson
+Amy Klobuchar
+Elizabeth Warren
+Cory Booker
+Julian Castro
+Michael Bloomberg
+Tom Steyer
+Eric Adams
+Bill de Blasio
+Rahm Emanuel
+Ariel Sharon
