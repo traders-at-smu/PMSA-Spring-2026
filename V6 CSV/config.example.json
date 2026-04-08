@@ -17,7 +17,7 @@
   "print_market_status": false,
 
   "_doc_play_sounds": "Play audio notifications on trade entry and exit. Requires entry.wav and exit.wav in the src/ directory. Set to false to silence all sounds.",
-  "play_sounds": true,
+  "play_sounds": false,
 
   "_doc_skip_multi_outcome": "When true, pairs with 3 or more Polymarket outcomes (e.g. soccer Home/Draw/Away) are silently skipped each scan cycle rather than evaluated. They are NOT added to failed/bad logs — they resume being evaluated if this flag is set back to false.",
   "skip_multi_outcome": false,

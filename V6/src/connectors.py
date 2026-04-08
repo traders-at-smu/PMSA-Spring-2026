@@ -236,6 +236,23 @@ class KalshiConnector:
             },
         }
 
+    def get_balance(self) -> dict[str, float]:
+        """Return available cash balance and total portfolio value."""
+        path = "/portfolio/balance"
+        headers = self._signed_headers("GET", path)
+        res = requests.get(f"{self.base}{path}", headers=headers, timeout=_TIMEOUT)
+        res.raise_for_status()
+        data = res.json()
+        
+        # Kalshi returns balance/portfolio_value in cents
+        balance = float(data.get("balance", 0.0)) / 100.0
+        portfolio = float(data.get("portfolio_value", 0.0)) / 100.0
+        
+        return {
+            "balance": balance,
+            "portfolio_value": portfolio,
+        }
+
     def place_order(
         self,
         ticker: str,
@@ -365,6 +382,25 @@ class PolymarketConnector:
         if not isinstance(market, dict):
             raise RuntimeError(f"Polymarket market payload malformed for slug '{market_slug}'")
         return market
+
+    def get_balance(self) -> dict[str, float]:
+        """Return available cash balance and total portfolio value."""
+        self._ensure_client()
+        # ClobClient.get_balance() returns { "balance": str, "locked": str, "cash": str }
+        try:
+            res = self._client.get_balance()
+            # The client might return a response object or a dict depending on version
+            if hasattr(res, "json"):
+                data = res.json()
+            else:
+                data = res
+            
+            return {
+                "balance": float(data.get("balance", 0.0)),
+                "cash": float(data.get("cash", 0.0)),
+            }
+        except Exception as exc:
+            raise RuntimeError(f"Polymarket balance fetch failed: {exc}") from exc
 
     @staticmethod
     def _extract_outcomes_tokens(market: dict[str, Any], market_slug: str = "") -> tuple[list[str], list[str]]:
@@ -618,6 +654,21 @@ def _parse_json_list(value: Any) -> list[str]:
     except json.JSONDecodeError:
         pass
     return [v.strip() for v in raw.split(",") if v.strip()]
+
+
+def get_latest_pairs_file(input_dir: str | None) -> str | None:
+    """Return the path to the newest .csv or .xlsx/.xls file in the input_files directory."""
+    if not input_dir:
+        return None
+    p = Path(input_dir)
+    if not p.exists() or not p.is_dir():
+        return None
+    candidates = [
+        f for ext in ("*.csv", "*.xlsx", "*.xls") for f in p.glob(ext)
+    ]
+    if not candidates:
+        return None
+    return str(max(candidates, key=lambda f: f.stat().st_mtime))
 
 
 def load_pairs(path: str) -> list[dict[str, Any]]:

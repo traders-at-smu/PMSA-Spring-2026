@@ -623,12 +623,7 @@ def _walk_depth(
         # Record slippage: one entry per distinct price-level combination.
         # If prices unchanged from the last entry, update it in-place so each
         # entry reflects the cumulative state at the END of that price level.
-        # Estimate exit fees at current position for slippage tracking
-        _avg_k = k_spend / contracts if contracts > 0 else 0.0
-        _avg_p = p_spend / contracts if contracts > 0 else 0.0
-        _exit_kf = apply_fee(kalshi_fee_fn, _avg_k, contracts, kalshi_round_up)
-        _exit_pf = apply_fee(poly_fee_fn, _avg_p, contracts, False, round_decimals=5)
-        edge_d = contracts * exit_target - cur_kp - _exit_kf - _exit_pf
+        edge_d = contracts * exit_target - cur_kp
         arr_now = (edge_d / cur_kp * 365.0 / days) if cur_kp > 0 and days > 0 else 0.0
         if slippage and slippage[-1]["k_price"] == nk and slippage[-1]["p_price"] == np_:
             slippage[-1]["contracts"] = contracts
@@ -847,8 +842,8 @@ def evaluate_pair(
     """
     max_contracts = int(cfg["max_contracts"])
     days = _days_to_resolution(pair.get("resolution_date", ""))
-    exit_target = float(cfg.get("exit_target_total_price", 0.99))
-    min_edge_pct = float(cfg.get("min_edge_pct", 0.0))
+    exit_target = 1.0  # V6 holds to expiry — settlement always pays $1/contract
+    min_edge_pct = float(cfg.get("min_edge_pct", 0.001))
 
     fee_cfg = cfg["fees"]
     k_round_up = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
@@ -1876,7 +1871,7 @@ def run_scan(
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")
     bad_log = cfg.get("bad_log", "bad_pairs.json")
-    max_workers = int(cfg.get("max_workers", 30))
+    max_workers = int(cfg.get("max_workers", 6))
     ts = datetime.now().strftime("%H:%M:%S")
     t0 = time.monotonic()
 
@@ -2014,21 +2009,15 @@ def run_scan(
             continue
 
         # Optional per-pair market status line (enabled via print_market_status in config).
-        if cfg.get("print_market_status", False):
-            k_yes_mp = (kq["yes_bid"] + kq["yes_ask"]) / 2
-            k_no_mp  = (kq["no_bid"]  + kq["no_ask"])  / 2
+        if cfg.get("print_market_status", True):
+            k_yes_ask = float(kq["yes_ask"])
+            k_no_ask  = float(kq["no_ask"])
             if pq.get("type") == "multi":
-                p_yes_bid = float(pq.get("primary_best_bid", 0.0))
                 p_yes_ask = float(pq.get("primary_best_ask", 0.0))
-                p_no_bid = float(pq.get("complement_best_bid", 0.0))
                 p_no_ask = float(pq.get("complement_best_ask", 0.0))
             else:
-                p_yes_bid = float(pq["yes_bid"])
                 p_yes_ask = float(pq["yes_ask"])
-                p_no_bid = float(pq["no_bid"])
                 p_no_ask = float(pq["no_ask"])
-            p_yes_mp = (p_yes_bid + p_yes_ask) / 2
-            p_no_mp  = (p_no_bid  + p_no_ask)  / 2
             days_left = _days_to_resolution(pair.get("resolution_date", ""))
             # Net-of-fees marginal edge for 1 contract in each direction
             fee_cfg   = cfg["fees"]
@@ -2055,8 +2044,8 @@ def run_scan(
             edge_color = Fore.GREEN if edge_pct > 0 else Fore.RED
             print(
                 f"  {Style.DIM}{label:<38}{Style.RESET_ALL}"
-                f"  K YES/NO: {k_yes_mp:.3f}/{k_no_mp:.3f}"
-                f"  P YES/NO: {p_yes_mp:.3f}/{p_no_mp:.3f}"
+                f"  K YES/NO: {k_yes_ask:.3f}/{k_no_ask:.3f}"
+                f"  P YES/NO: {p_yes_ask:.3f}/{p_no_ask:.3f}"
                 f"  exp={days_left:.1f}d"
                 f"  edge={edge_color}{edge_pct * 100:+.1f}%"
                 f"  ARR={net_arr * 100:+.1f}%{Style.RESET_ALL}"
@@ -2133,7 +2122,7 @@ def run_loop(
     _sounds_enabled = bool(cfg.get("play_sounds", True))
 
     interval = max(1, int(cfg.get("scan_interval_seconds", 2)))
-    pairs_per_cycle = int(cfg.get("pairs_per_cycle", 50))
+    pairs_per_cycle = int(cfg.get("pairs_per_cycle", 10))
     pair_offset = 0
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")

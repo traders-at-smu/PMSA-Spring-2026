@@ -21,12 +21,38 @@ from typing import Any
 import requests
 from colorama import Fore, Style
 
-from Archived_Models.V5.fees import apply_fee, parse_formula
+from src.fees import apply_fee, parse_formula
+from src.connectors import load_pairs, get_latest_pairs_file
 
 
 # Fee-rate failures must be treated as permanent so the pair is logged/skipped.
 class FeeRateError(RuntimeError):
     pass
+
+
+# ── Sound notifications ────────────────────────────────────────────────────────
+
+_SRC_DIR = Path(__file__).parent
+_sounds_enabled: bool = True
+
+
+def _play_sound(filename: str) -> None:
+    """Play a .wav from the src/ directory non-blocking. Silently no-ops if missing or disabled."""
+    if not _sounds_enabled:
+        return
+    import threading
+    path = _SRC_DIR / filename
+    if not path.exists():
+        return
+    try:
+        import winsound
+        threading.Thread(
+            target=winsound.PlaySound,
+            args=(str(path), winsound.SND_FILENAME | winsound.SND_ASYNC),
+            daemon=True,
+        ).start()
+    except Exception:
+        pass
 
 
 # ── Error classification ───────────────────────────────────────────────────────
@@ -102,9 +128,12 @@ def _days_to_resolution(resolution_date: Any) -> float:
                 # Try simple date parse YYYY-MM-DD
                 parts = s.split("T")[0].split("-")
                 if len(parts) == 3:
-                    dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc)
+                    dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc) + timedelta(days=1)
                 else:
                     return 365.0
+
+        if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
+            dt = dt + timedelta(days=1)
 
         now = datetime.now(timezone.utc)
         diff = (dt - now).total_seconds() / 86400.0
@@ -129,9 +158,11 @@ def _resolution_has_passed(resolution_date: Any) -> bool:
         except ValueError:
             parts = s.split("T")[0].split("-")
             if len(parts) == 3:
-                dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc)
+                dt = datetime(int(parts[0]), int(parts[1]), int(parts[2]), tzinfo=timezone.utc) + timedelta(days=1)
             else:
                 return False
+        if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
+            dt = dt + timedelta(days=1)
         return datetime.now(timezone.utc) >= dt
     except Exception:
         return False
@@ -228,9 +259,9 @@ def _combine_leg_levels(leg_levels: list[list[dict[str, Any]]]) -> list[dict[str
         if size <= 0:
             # Advance any exhausted leg(s)
             for i in range(len(leg_levels)):
-                while indices[i] < len(leg_levels) and remaining[i] <= 0:
+                while indices[i] < len(leg_levels[i]) and remaining[i] <= 0:
                     indices[i] += 1
-                    if indices[i] < len(leg_levels):
+                    if indices[i] < len(leg_levels[i]):
                         remaining[i] = int(leg_levels[i][indices[i]].get("size", 0))
             continue
         combined.append({
@@ -240,9 +271,9 @@ def _combine_leg_levels(leg_levels: list[list[dict[str, Any]]]) -> list[dict[str
         })
         for i in range(len(leg_levels)):
             remaining[i] -= size
-            while indices[i] < len(leg_levels) and remaining[i] <= 0:
+            while indices[i] < len(leg_levels[i]) and remaining[i] <= 0:
                 indices[i] += 1
-                if indices[i] < len(leg_levels):
+                if indices[i] < len(leg_levels[i]):
                     remaining[i] = int(leg_levels[i][indices[i]].get("size", 0))
 
     return combined
@@ -590,12 +621,7 @@ def _walk_depth(
         # Record slippage: one entry per distinct price-level combination.
         # If prices unchanged from the last entry, update it in-place so each
         # entry reflects the cumulative state at the END of that price level.
-        # Estimate exit fees at current position for slippage tracking
-        _avg_k = k_spend / contracts if contracts > 0 else 0.0
-        _avg_p = p_spend / contracts if contracts > 0 else 0.0
-        _exit_kf = apply_fee(kalshi_fee_fn, _avg_k, contracts, kalshi_round_up)
-        _exit_pf = apply_fee(poly_fee_fn, _avg_p, contracts, False, round_decimals=5)
-        edge_d = contracts * exit_target - cur_kp - _exit_kf - _exit_pf
+        edge_d = contracts * exit_target - cur_kp
         arr_now = (edge_d / cur_kp * 365.0 / days) if cur_kp > 0 and days > 0 else 0.0
         if slippage and slippage[-1]["k_price"] == nk and slippage[-1]["p_price"] == np_:
             slippage[-1]["contracts"] = contracts
@@ -617,18 +643,8 @@ def _walk_depth(
 
     final_kp = cur_kp
 
-    # Estimate exit fees: when selling back, fees are charged on the sell price.
-    # Use the average entry prices as a conservative proxy for exit sell prices.
-    est_exit_kf = 0.0
-    est_exit_pf = 0.0
-    if contracts > 0:
-        avg_k_sell = k_spend / contracts
-        avg_p_sell = p_spend / contracts
-        est_exit_kf = apply_fee(kalshi_fee_fn, avg_k_sell, contracts, kalshi_round_up)
-        est_exit_pf = apply_fee(poly_fee_fn, avg_p_sell, contracts, False, round_decimals=5)
-    total_exit_fees = est_exit_kf + est_exit_pf
-
-    final_edge_pct = (contracts * exit_target - final_kp - total_exit_fees) / final_kp if final_kp > 0 else 0.0
+    # V6: no exit fees — positions are held to expiry, settlement pays $1/contract automatically.
+    final_edge_pct = (contracts * exit_target - final_kp) / final_kp if final_kp > 0 else 0.0
     final_arr = (final_edge_pct * 365.0) / days if days > 0 else 0.0
 
     # After hitting max_contracts, count profitable contracts still available in the book.
@@ -680,7 +696,7 @@ def _walk_depth(
         "arr": final_arr,
         "edge_pct": final_edge_pct,
         "total_fee": cur_kf + cur_pf,
-        "exit_fee_estimate": total_exit_fees,
+        "exit_fee_estimate": 0.0,
         "stop_reason": stop_reason,
         "slippage": slippage,
         "remaining": remaining,
@@ -816,7 +832,8 @@ def evaluate_pair(
     """
     max_contracts = int(cfg["max_contracts"])
     days = _days_to_resolution(pair.get("resolution_date", ""))
-    exit_target = float(cfg.get("exit_target_total_price", 0.99))
+    exit_target = 1.0  # V6 holds to expiry — settlement always pays $1/contract
+    min_edge_pct = float(cfg.get("min_edge_pct", 0.001))
 
     fee_cfg = cfg["fees"]
     k_round_up = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
@@ -927,12 +944,9 @@ def evaluate_pair(
         )
 
         if walk["contracts"] > 0:
-            # Estimate exit fees for edge calculation (using avg entry prices as proxy)
+            # V6: no exit fees — settlement pays $1/contract at expiry automatically.
             c = walk["contracts"]
-            avg_k_exit = walk["k_spend"] / c if c > 0 else 0.0
-            avg_p_exit = walk["p_spend"] / c if c > 0 else 0.0
-            est_exit_fee = apply_fee(k_fee_fn, avg_k_exit, c, k_round_up) + apply_fee(p_fee_fn, avg_p_exit, c, False, round_decimals=5)
-            edge_dollar = c * exit_target - walk["kp_cost"] - est_exit_fee
+            edge_dollar = c * exit_target - walk["kp_cost"]
 
             # Sanity check: a genuine two-sided hedge always costs close to $1 per
             # contract. If the top-of-book sum is far below $1, both legs are almost
@@ -947,7 +961,7 @@ def evaluate_pair(
                 )
                 return [{"_bad_pair": True, "strategy": strat["strategy"], "cost_per_contract": walk["kp_cost"] / c}]
 
-            if edge_dollar <= 0:
+            if edge_dollar <= 0 or walk["edge_pct"] < min_edge_pct:
                 continue
 
             results.append({
@@ -1122,6 +1136,7 @@ def _build_log_entry(opp: dict[str, Any], mode: str, **overrides) -> dict[str, A
 
 def execute_paper(opp: dict[str, Any], log_path: str) -> dict[str, Any]:
     """Simulate a trade (no real orders) and append to the trade log."""
+    _play_sound("enter.wav")
     trade_num = _next_trade_number(log_path)
     entry = _build_log_entry(opp, "paper", trade_number=trade_num)
     _write_trade_log(entry, log_path)
@@ -1164,6 +1179,8 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
                 size=opp["contracts"],
                 price=price,
             )
+        # Only play sound if fully filled
+        _play_sound("enter.wav")
     except Exception as exc:
         partial = True
         print(
@@ -1187,7 +1204,6 @@ def _record_open_position(
     opp: dict[str, Any],
     trade: dict[str, Any],
     position_file: str,
-    cooldown_seconds: int = 3600,
 ) -> None:
     """Add an open position and write state to disk."""
     now = datetime.now(timezone.utc)
@@ -1215,7 +1231,6 @@ def _record_open_position(
         "entry_edge_pct": opp.get("edge_pct", 0.0),
         "entry_timestamp": now.isoformat(),
         "entry_trade_number": trade.get("trade_number", ""),
-        "cooldown_until": (now + timedelta(seconds=cooldown_seconds)).isoformat(),
         "poly_fee_rate": opp.get("poly_fee_rate"),
         "resolution_date": opp.get("resolution_date", ""),
     }
@@ -1290,7 +1305,6 @@ def _process_exit_positions(
     mode: str,
     log_path: str,
     position_file: str,
-    cooldowns: dict[str, str] | None = None,
     shutdown: bool = False,
 ) -> dict[str, Any]:
     """Evaluate and close open positions using bid rules."""
@@ -1346,7 +1360,6 @@ def _process_exit_positions(
             resolved_404.append(pair_id)
             continue
 
-        age = _position_age_seconds(position)
         fetch_delay = 2
         kq = pq = None
         while True:
@@ -1407,8 +1420,6 @@ def _process_exit_positions(
                     break
         if kq is None:
             continue
-        if shutdown:
-            time.sleep(1.5)
 
         p_token_ids = [t for t in (position.get("p_token_ids") or []) if str(t).strip()]
         p_levels = []
@@ -1476,150 +1487,14 @@ def _process_exit_positions(
             print(f"  {Fore.YELLOW}Exit Poly fetch failed for {pair_id}: {exc}{Style.RESET_ALL}")
             continue
 
-        if position["strategy"] == "BUY_KY_BUY_PN":
-            k_bid = kq["yes_bid"]
-            k_levels = kq.get("depth", {}).get("sell_yes", [])
-            k_side = "yes"
-            p_side = "no"
-        else:
-            k_bid = kq["no_bid"]
-            k_levels = kq.get("depth", {}).get("sell_no", [])
-            k_side = "no"
-            p_side = "yes"
-
-        target_hit = (k_bid + p_bid) >= target_sum
-        if not (target_hit or shutdown):
-            continue
-
-        # For shutdown, accept any bid. For convergence exits, require target_sum.
-        forced = shutdown
-        walk = _walk_depth_bids(k_levels, p_levels, position["contracts"], 0.0 if forced else target_sum)
-
-        # For convergence exits: if no contracts meet the target in the book, skip.
-        # For forced exits: sell the full position at best available bids.
-        if not forced and walk["contracts"] == 0:
-            continue
-
-        exit_contracts = walk["contracts"] if walk["contracts"] > 0 else position["contracts"]
-        exit_k_price = walk.get("k_price", k_bid)
-        exit_p_price = walk.get("p_price", p_bid)
-
-        # Execute the exit leg(s)
-        order_failed = False
-        if mode == "live":
-            try:
-                kalshi.place_order(
-                    ticker=position["kalshi_ticker"],
-                    side=k_side,
-                    contracts=exit_contracts,
-                    price=exit_k_price,
-                    client_order_id=f"EXIT:{pair_id}:{position.get('entry_trade_number', '')}:k",
-                    action="sell",
-                )
-            except Exception as exc:
-                order_failed = True
-                print(f"  {Fore.RED}Kalshi exit failed for {pair_id}: {exc}{Style.RESET_ALL}")
-            try:
-                if p_token_ids:
-                    leg_prices = walk.get("p_leg_prices", [])
-                    if not leg_prices:
-                        leg_prices = [exit_p_price for _ in p_token_ids]
-                    if len(leg_prices) < len(p_token_ids):
-                        leg_prices += [exit_p_price for _ in range(len(p_token_ids) - len(leg_prices))]
-                    for token_id, price in zip(p_token_ids, leg_prices):
-                        poly.place_order(
-                            token_id=token_id,
-                            side="sell",
-                            size=exit_contracts,
-                            price=price,
-                        )
-                else:
-                    poly.place_order(
-                        token_id=position.get("p_token_id", ""),
-                        side="sell",
-                        size=exit_contracts,
-                        price=exit_p_price,
-                    )
-            except Exception as exc:
-                order_failed = True
-                print(f"  {Fore.RED}Polymarket exit failed for {pair_id}: {exc}{Style.RESET_ALL}")
-
-        fee_cfg = cfg["fees"]
-        k_rup = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
-        k_rate = _kalshi_fee_rate_for_ticker(position.get("kalshi_ticker", ""))
-        k_fee_fn = _kalshi_fee_fn_for_rate(k_rate)
-        pos_poly_rate = position.get("poly_fee_rate")
-        if pos_poly_rate is None:
-            try:
-                token_ids = position.get("p_token_ids") or [position.get("p_token_id", "")]
-                pos_poly_rate = _resolve_poly_fee_rate(poly, token_ids)
-                position["poly_fee_rate"] = pos_poly_rate
-            except Exception as exc:
-                failed_log = cfg.get("failed_log", "failed_pairs.json")
-                _log_failed_pair(
-                    {
-                        "pair_id": position.get("pair_id", ""),
-                        "kalshi_ticker": position.get("kalshi_ticker", ""),
-                        "title": position.get("title", ""),
-                    },
-                    f"exit fee error: {exc}",
-                    failed_log,
-                )
-                print(
-                    f"  {Fore.YELLOW}! {position.get('pair_id', '')}: {exc}  "
-                    f"â†’ logged to failed pairs{Style.RESET_ALL}",
-                    file=sys.stderr,
-                )
-                continue
-        p_fee_fn = _poly_fee_fn_for_rate(float(pos_poly_rate))
-        # Use blended average exit prices for fee calculation, not just the last fill price
-        exit_k_spend_val = walk.get("k_spend", exit_k_price * exit_contracts)
-        exit_p_spend_val = walk.get("p_spend", exit_p_price * exit_contracts)
-        exit_k_avg = exit_k_spend_val / exit_contracts if exit_contracts else exit_k_price
-        exit_p_avg = exit_p_spend_val / exit_contracts if exit_contracts else exit_p_price
-        exit_fee = apply_fee(k_fee_fn, exit_k_avg, exit_contracts, k_rup) + apply_fee(p_fee_fn, exit_p_avg, exit_contracts, False, round_decimals=5)
-
-        trade_number = _next_trade_number(log_path)
-        exit_log = _build_exit_log_entry(
-            position=position,
-            exit_walk=walk,
-            exit_contracts=exit_contracts,
-            exit_fee=exit_fee,
-            timeout=False,
-            shutdown=shutdown,
-            mode=mode,
-            trade_number=trade_number,
-        )
-        _write_trade_log(exit_log, log_path)
-
-        remaining = position["contracts"] - exit_contracts
-        if order_failed:
-            print(f"  {Fore.YELLOW}PARTIAL exit for {pair_id} ({exit_contracts}/{position['contracts']}c){Style.RESET_ALL}")
-        elif remaining > 0:
-            print(f"  {Fore.GREEN}EXIT {exit_contracts}c of {position['contracts']}c for {pair_id} — {remaining}c remain (bids below target){Style.RESET_ALL}")
-        else:
-            print(f"  {Fore.GREEN}EXIT {exit_contracts}c for {pair_id} — fully closed K{exit_k_price:.4f}/P{exit_p_price:.4f}{Style.RESET_ALL}")
-
-        if remaining > 0 and not forced:
-            # Partial convergence exit — update position contract count and scale
-            # entry_kp_cost proportionally so the next exit log computes correct P&L
-            original_contracts = positions[pair_id]["contracts"]
-            old_kp_cost = positions[pair_id].get("entry_kp_cost", 0.0)
-            positions[pair_id]["contracts"] = remaining
-            positions[pair_id]["entry_kp_cost"] = old_kp_cost * remaining / original_contracts if original_contracts else 0.0
-        else:
-            exit_candidates.append(pair_id)
+        # V6: no convergence exit — positions are held to expiry for $1/contract payout.
 
     for pair_id in exit_candidates:
-        pos = positions.pop(pair_id, None)
-        if cooldowns is not None and pos is not None:
-            cooldowns[pair_id] = pos.get("cooldown_until", "")
+        positions.pop(pair_id, None)
 
     # Remove positions whose markets returned 404 (resolved/delisted)
     for pair_id in resolved_404:
-        pos = positions.pop(pair_id, None)
-        if cooldowns is not None and pos is not None:
-            cooldowns[pair_id] = pos.get("cooldown_until", "")
+        positions.pop(pair_id, None)
 
     _save_open_positions(position_file, positions)
     return positions
@@ -1908,6 +1783,8 @@ def run_scan(
     bad_ids: set[str] | None = None,
     skip_pair_ids: set[str] | None = None,
     on_new_position: Any | None = None,
+    batch_start: int | None = None,
+    total_pairs: int | None = None,
 ) -> list[dict[str, Any]]:
     """Run one full scan across all pairs using concurrent HTTP requests.
 
@@ -1934,7 +1811,7 @@ def run_scan(
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")
     bad_log = cfg.get("bad_log", "bad_pairs.json")
-    max_workers = int(cfg.get("max_workers", 30))
+    max_workers = int(cfg.get("max_workers", 6))
     ts = datetime.now().strftime("%H:%M:%S")
     t0 = time.monotonic()
 
@@ -1974,9 +1851,14 @@ def run_scan(
     skipped = len(pairs) - len(active_pairs)
 
     skip_note = f"  {Style.DIM}({skipped} skipped — failed/expired/bad){Style.RESET_ALL}" if skipped else ""
+    if batch_start is not None and total_pairs is not None:
+        batch_end = batch_start + len(active_pairs) - 1
+        batch_label = f"Fetching pairs {batch_start}–{batch_end} of {total_pairs}"
+    else:
+        batch_label = f"Fetching quotes for {len(active_pairs)} pair(s)"
     print(
         f"\n{Style.DIM}[{ts}]{Style.RESET_ALL} "
-        f"Fetching quotes for {len(active_pairs)} pair(s)  "
+        f"{batch_label}  "
         f"{Style.DIM}({max_workers} workers)...{Style.RESET_ALL}"
         f"{skip_note}"
     )
@@ -2072,21 +1954,15 @@ def run_scan(
             continue
 
         # Optional per-pair market status line (enabled via print_market_status in config).
-        if cfg.get("print_market_status", False):
-            k_yes_mp = (kq["yes_bid"] + kq["yes_ask"]) / 2
-            k_no_mp  = (kq["no_bid"]  + kq["no_ask"])  / 2
+        if cfg.get("print_market_status", True):
+            k_yes_ask = float(kq["yes_ask"])
+            k_no_ask  = float(kq["no_ask"])
             if pq.get("type") == "multi":
-                p_yes_bid = float(pq.get("primary_best_bid", 0.0))
                 p_yes_ask = float(pq.get("primary_best_ask", 0.0))
-                p_no_bid = float(pq.get("complement_best_bid", 0.0))
                 p_no_ask = float(pq.get("complement_best_ask", 0.0))
             else:
-                p_yes_bid = float(pq["yes_bid"])
                 p_yes_ask = float(pq["yes_ask"])
-                p_no_bid = float(pq["no_bid"])
                 p_no_ask = float(pq["no_ask"])
-            p_yes_mp = (p_yes_bid + p_yes_ask) / 2
-            p_no_mp  = (p_no_bid  + p_no_ask)  / 2
             days_left = _days_to_resolution(pair.get("resolution_date", ""))
             # Net-of-fees marginal edge for 1 contract in each direction
             fee_cfg   = cfg["fees"]
@@ -2113,8 +1989,8 @@ def run_scan(
             edge_color = Fore.GREEN if edge_pct > 0 else Fore.RED
             print(
                 f"  {Style.DIM}{label:<38}{Style.RESET_ALL}"
-                f"  K YES/NO: {k_yes_mp:.3f}/{k_no_mp:.3f}"
-                f"  P YES/NO: {p_yes_mp:.3f}/{p_no_mp:.3f}"
+                f"  K YES/NO: {k_yes_ask:.3f}/{k_no_ask:.3f}"
+                f"  P YES/NO: {p_yes_ask:.3f}/{p_no_ask:.3f}"
                 f"  exp={days_left:.1f}d"
                 f"  edge={edge_color}{edge_pct * 100:+.1f}%"
                 f"  ARR={net_arr * 100:+.1f}%{Style.RESET_ALL}"
@@ -2146,13 +2022,6 @@ def run_scan(
                         )
                     else:
                         executed_keys.add(exec_key)
-                        min_profit = float(cfg.get("min_profit_dollars", 0.25))
-                        if opp["edge_dollar"] < min_profit:
-                            print(
-                                f"    {Fore.YELLOW}⚠ skipping — profit ${opp['edge_dollar']:.2f} "
-                                f"below min ${min_profit:.2f}{Style.RESET_ALL}"
-                            )
-                            continue
                         trade = None
                         if mode == "paper":
                             trade = execute_paper(opp, log_path)
@@ -2194,15 +2063,13 @@ def run_loop(
     Failed pairs are loaded from the failed-pairs log at startup and accumulated
     in memory across cycles — they are never fetched again within this session.
     """
-    interval = max(1, int(cfg.get("scan_interval_seconds", 5)))
-    pairs_per_cycle = int(cfg.get("pairs_per_cycle", len(pairs)))
+    interval = max(1, int(cfg.get("scan_interval_seconds", 2)))
+    pairs_per_cycle = int(cfg.get("pairs_per_cycle", 10))
     pair_offset = 0
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")
     bad_log = cfg.get("bad_log", "bad_pairs.json")
     position_file = cfg.get("position_file", "open_positions.json")
-    cooldown_file = cfg.get("cooldown_file", "cooldowns.json")
-
     # Load any previously failed pairs so they are skipped from the first cycle
     failed_ids = load_failed_ids(failed_log)
     if failed_ids:
@@ -2234,27 +2101,35 @@ def run_loop(
             f"{position_file}{Style.RESET_ALL}"
         )
 
-    # Tracks cooldown_until per pair_id — persists to disk so restarts respect cooldowns
-    cooldowns: dict[str, str] = _load_cooldowns(cooldown_file)
-    # Prune expired cooldowns on startup
-    now_startup = datetime.now(timezone.utc)
-    cooldowns = {
-        pid: ts for pid, ts in cooldowns.items()
-        if datetime.fromisoformat(ts) > now_startup
-    }
-
     def _on_new_position(opp: dict[str, Any], trade: dict[str, Any]) -> None:
-        cooldown_seconds = int(cfg.get("entry_cooldown_seconds", 3600))
-        _record_open_position(positions, opp, trade, position_file, cooldown_seconds=cooldown_seconds)
+        _record_open_position(positions, opp, trade, position_file)
 
-    EXIT_INTERVAL = 10   # seconds between exit checks
-    SCAN_INTERVAL = 5    # seconds between new-pair scans
+    EXIT_INTERVAL = 5    # seconds between exit checks
+    SCAN_INTERVAL = 2    # seconds between new-pair scans
 
     last_exit_check = 0.0  # epoch seconds; 0 forces immediate check on first cycle
+    next_cycle_ids: set[str] = set()
+    scan_offset = 0  # rolling 0-based counter for batch progress display
 
     print(f"\n{Fore.CYAN}Bot running — press Ctrl+C to stop.{Style.RESET_ALL}")
     while True:
         try:
+            # --- Auto-reload pairs if a newer file is found in input_files_dir (csv mode only) ---
+            if str(cfg.get("pairs_input_mode", "excel")).lower() == "csv":
+                input_dir = cfg.get("input_files_dir", "input_files")
+                latest_file = get_latest_pairs_file(input_dir)
+                if latest_file and latest_file != cfg.get("pairs_file"):
+                    print(f"\n  {Fore.CYAN}[reload]{Style.RESET_ALL} Found new pairs file: {latest_file}")
+                    try:
+                        new_pairs = load_pairs(latest_file)
+                        if new_pairs:
+                            pairs = new_pairs
+                            cfg["pairs_file"] = latest_file
+                            pair_offset = 0  # Reset rotation for the new set
+                            print(f"  {Fore.CYAN}[reload]{Style.RESET_ALL} Loaded {len(pairs)} active pair(s)")
+                    except Exception as exc:
+                        print(f"  {Fore.RED}[reload] Failed to load {latest_file}: {exc}{Style.RESET_ALL}")
+
             # --- Exit check (every EXIT_INTERVAL seconds) ---
             if cfg.get("exit_enabled", True) and (time.time() - last_exit_check >= EXIT_INTERVAL):
                 positions = _process_exit_positions(
@@ -2265,36 +2140,20 @@ def run_loop(
                     mode=_resolve_execution_mode(cfg),
                     log_path=cfg.get("exit_log", "exit_trades.json"),
                     position_file=position_file,
-                    cooldowns=cooldowns,
                     shutdown=False,
                 )
-                _save_cooldowns(cooldown_file, cooldowns)
                 last_exit_check = time.time()
 
-            now = datetime.now(timezone.utc)
-            skip_pair_ids = set()
+            # Priority pairs from last cycle's entries, then round-robin fill
+            priority_pairs = [p for p in pairs if p["pair_id"] in next_cycle_ids]
+            remaining_pairs = [p for p in pairs if p["pair_id"] not in next_cycle_ids]
+            rotated = remaining_pairs[pair_offset:] + remaining_pairs[:pair_offset]
+            fill_slots = max(pairs_per_cycle - len(priority_pairs), 0)
+            scan_pairs = priority_pairs + rotated[:fill_slots]
+            pair_offset = (pair_offset + fill_slots) % max(len(remaining_pairs), 1)
 
-            # Skip pairs with an open position
-            for pos in positions.values():
-                skip_pair_ids.add(pos["pair_id"])
-
-            # Skip pairs still in cooldown (even if their position has closed)
-            for pair_id, cooldown_until_str in cooldowns.items():
-                try:
-                    cooldown_until = datetime.fromisoformat(cooldown_until_str)
-                    if cooldown_until > now:
-                        skip_pair_ids.add(pair_id)
-                except Exception:
-                    pass
-
-            # Rotate through non-position pairs, keeping open-position pairs first
-            open_pair_ids = {pos["pair_id"] for pos in positions.values()}
-            priority_pairs = [p for p in pairs if p["pair_id"] in open_pair_ids]
-            remaining_pairs = [p for p in pairs if p["pair_id"] not in open_pair_ids]
-            rotated_remaining = remaining_pairs[pair_offset:] + remaining_pairs[:pair_offset]
-            scan_pairs = (priority_pairs + rotated_remaining)[:pairs_per_cycle]
-            pair_offset = (pair_offset + max(pairs_per_cycle - len(priority_pairs), 0)) % max(len(remaining_pairs), 1)
-
+            total = len(pairs)
+            batch_start = scan_offset + 1
             opps = run_scan(
                 scan_pairs,
                 kalshi,
@@ -2304,29 +2163,20 @@ def run_loop(
                 failed_ids=failed_ids,
                 expired_ids=expired_ids,
                 bad_ids=bad_ids,
-                skip_pair_ids=skip_pair_ids,
                 on_new_position=_on_new_position,
+                batch_start=batch_start,
+                total_pairs=total,
             )
+            scan_offset = (scan_offset + len(scan_pairs)) % max(total, 1)
+            next_cycle_ids = {opp["pair_id"] for opp in opps}
             traded = len(opps)
             print(
                 f"  {Style.DIM}{traded} new entry trade(s) this cycle  "
-                f"| next scan in {SCAN_INTERVAL}s...{Style.RESET_ALL}"
+                f"| next scan in {interval}s...{Style.RESET_ALL}"
             )
-            time.sleep(SCAN_INTERVAL)
+            time.sleep(interval)
         except KeyboardInterrupt:
-            print(f"\n{Fore.YELLOW}Shutdown requested — closing positions on bids...{Style.RESET_ALL}")
-            if cfg.get("exit_enabled", True):
-                positions = _process_exit_positions(
-                    positions=positions,
-                    kalshi=kalshi,
-                    poly=poly,
-                    cfg=cfg,
-                    mode=_resolve_execution_mode(cfg),
-                    log_path=cfg.get("exit_log", "exit_trades.json"),
-                    position_file=position_file,
-                    cooldowns=cooldowns,
-                    shutdown=True,
-                )
-                _save_cooldowns(cooldown_file, cooldowns)
+            print(f"\n{Fore.YELLOW}Shutdown requested — leaving positions open to settle at expiry.{Style.RESET_ALL}")
+            _save_open_positions(position_file, positions)
             print(f"{Fore.YELLOW}Stopped.{Style.RESET_ALL}")
             break
