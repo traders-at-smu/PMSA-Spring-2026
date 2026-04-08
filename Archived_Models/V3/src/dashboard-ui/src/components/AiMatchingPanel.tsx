@@ -264,6 +264,28 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
       .catch(() => setScanModeLoaded(true));
   }, []);
 
+  const ALL_CATEGORIES = ["sports", "politics", "crypto", "tech", "geopolitics", "finance", "macro", "weather", "entertainment", "social_media", "awards", "other"];
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
+  const [categoryFilterLoaded, setCategoryFilterLoaded] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/ai-matching/category-filter")
+      .then(r => r.json())
+      .then(d => { setCategoryFilter(d.category); setCategoryFilterLoaded(true); })
+      .catch(() => setCategoryFilterLoaded(true));
+  }, []);
+
+  async function handleCategoryFilterChange(cat: string | null) {
+    setCategoryFilter(cat);
+    try {
+      await fetch("/api/ai-matching/category-filter", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: cat }),
+      });
+    } catch { /* silent */ }
+  }
+
   async function handleScanModeChange(mode: "fast" | "deep") {
     setScanMode(mode);
     try {
@@ -530,6 +552,55 @@ export function AiMatchingPanel({ paused }: { paused: boolean }) {
           <p className="text-[10px] text-zinc-600 mt-1">
             Pairs below this threshold are rejected. Takes effect on next scan.
           </p>
+        </div>
+      )}
+
+      {/* ── Category Filter ── */}
+      {categoryFilterLoaded && (
+        <div className="glass-card rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2.5">
+            <p className="text-[10px] text-zinc-500 uppercase tracking-wider font-semibold">Scan Category Filter</p>
+            {categoryFilter && (
+              <button
+                onClick={() => handleCategoryFilterChange(null)}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300 transition-colors"
+              >
+                Clear filter
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              onClick={() => handleCategoryFilterChange(null)}
+              disabled={status?.scanning}
+              className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${
+                categoryFilter === null
+                  ? "bg-blue-500/20 text-blue-300 border border-blue-500/40"
+                  : "bg-white/[0.03] text-zinc-500 border border-white/[0.06] hover:text-zinc-300"
+              } ${status?.scanning ? "cursor-not-allowed opacity-50" : ""}`}
+            >
+              All
+            </button>
+            {ALL_CATEGORIES.map(cat => (
+              <button
+                key={cat}
+                onClick={() => handleCategoryFilterChange(cat)}
+                disabled={status?.scanning}
+                className={`px-2.5 py-1 rounded-md text-[10px] font-semibold transition-all ${
+                  categoryFilter === cat
+                    ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                    : "bg-white/[0.03] text-zinc-500 border border-white/[0.06] hover:text-zinc-300"
+                } ${status?.scanning ? "cursor-not-allowed opacity-50" : ""}`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+          {categoryFilter && (
+            <p className="text-[10px] text-emerald-500/80 mt-2">
+              Next scan will only process <span className="font-semibold">{categoryFilter}</span> markets.
+            </p>
+          )}
         </div>
       )}
 

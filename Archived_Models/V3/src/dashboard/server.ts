@@ -101,6 +101,18 @@ export function startServer(deps: ServerDeps): void {
     }
   });
 
+  // Category filter — restrict scans to a single category (or null for all)
+  app.get("/api/ai-matching/category-filter", (_req, res) => {
+    res.json({ category: crossPlatformScreener.getCategoryFilter() });
+  });
+
+  app.post("/api/ai-matching/category-filter", (req, res) => {
+    const { category } = req.body;
+    // null or empty string = clear filter (scan all)
+    crossPlatformScreener.setCategoryFilter(category || null);
+    res.json({ ok: true, category: crossPlatformScreener.getCategoryFilter() });
+  });
+
   // Stop a running scan
   app.post("/api/cross-platform/stop", (_req, res) => {
     crossPlatformScreener.abortScan();

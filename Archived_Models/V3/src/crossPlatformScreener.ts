@@ -919,6 +919,15 @@ export class CrossPlatformScreener {
   private _scanProgress = { done: 0, total: 0 };
   private _fundsDepleted = false;
   private _fundsDepletedEvaluated = 0;
+  private _categoryFilter: string | null = null; // null = all categories
+
+  setCategoryFilter(category: string | null): void {
+    this._categoryFilter = category;
+  }
+
+  getCategoryFilter(): string | null {
+    return this._categoryFilter;
+  }
 
   // Incremental scan state — persists between scans
   private _prevPolyIds = new Set<string>();
@@ -1486,7 +1495,14 @@ export class CrossPlatformScreener {
     let belowThreshold = 0;
 
     // In incremental mode, only iterate over the specified Poly subset
-    const polyToProcess = incrementalOpts?.onlyPoly ?? polyMarkets;
+    let polyToProcess = incrementalOpts?.onlyPoly ?? polyMarkets;
+
+    // Apply category filter if set — only process Poly markets in that category
+    if (this._categoryFilter) {
+      const before = polyToProcess.length;
+      polyToProcess = polyToProcess.filter(pm => pm.category === this._categoryFilter);
+      this._log("step", `Category filter: "${this._categoryFilter}" — ${polyToProcess.length}/${before} Poly markets selected`);
+    }
 
     // Primary pass: enhanced similarity
     for (const pm of polyToProcess) {
