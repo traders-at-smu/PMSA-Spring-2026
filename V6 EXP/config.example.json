@@ -72,13 +72,21 @@
   "polymarket": {
     "_doc_private_key": "Ethereum wallet private key (starts with 0x). Used for signing orders.",
     "private_key": "",
-    "_doc_clob_creds": "CLOB API credentials \u00e2\u20ac\u201d generate at clob.polymarket.com after connecting your wallet.",
+    "_doc_clob_creds": "CLOB API credentials – generate at clob.polymarket.com after connecting your wallet.",
     "api_key": "",
     "api_secret": "",
     "api_passphrase": "",
     "_doc_urls": "Polymarket API base URLs. Leave blank to use the default production endpoints.",
     "clob_url": "",
     "gamma_url": ""
+  },
+  "_doc_dropbox": "Dropbox API credentials for uploading trade exports. See README for how to get a refresh token.",
+  "dropbox": {
+    "enabled": false,
+    "app_key": "",
+    "app_secret": "",
+    "refresh_token": "",
+    "remote_path": "/trades"
   },
   "auto_update_pairs": true,
   "update_on_startup": false,

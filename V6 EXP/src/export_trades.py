@@ -86,6 +86,56 @@ def _load_json(path: Path) -> dict | list:
         return json.load(fh)
 
 
+def upload_to_dropbox(local_path: str, cfg: dict) -> bool:
+    """Upload a file to Dropbox using credentials from the config.
+    Returns True if successful, False otherwise.
+    """
+    dbx_cfg = cfg.get("dropbox", {})
+    if not dbx_cfg.get("enabled"):
+        return False
+
+    app_key      = dbx_cfg.get("app_key")
+    app_secret   = dbx_cfg.get("app_secret")
+    refresh_token = dbx_cfg.get("refresh_token")
+    remote_dir   = dbx_cfg.get("remote_path", "/trades").rstrip("/")
+
+    if not all([app_key, app_secret, refresh_token]):
+        print("  [dropbox] ERROR: Missing credentials (app_key, app_secret, or refresh_token).")
+        return False
+
+    try:
+        import dropbox
+        from dropbox.files import WriteMode
+    except ImportError:
+        print("  [dropbox] ERROR: 'dropbox' library not installed. Run 'pip install dropbox'.")
+        return False
+
+    local_file = Path(local_path)
+    if not local_file.exists():
+        print(f"  [dropbox] ERROR: Local file not found: {local_path}")
+        return False
+
+    # Ensure remote_path is a clean absolute path for Dropbox (starts with /)
+    # If remote_dir is empty or "/", it becomes "/filename"
+    # If remote_dir is "/trades", it becomes "/trades/filename"
+    remote_path = f"/{remote_dir.strip('/')}/{local_file.name}".replace("//", "/")
+
+    try:
+        with dropbox.Dropbox(
+            app_key=app_key,
+            app_secret=app_secret,
+            oauth2_refresh_token=refresh_token
+        ) as dbx:
+            with local_file.open("rb") as f:
+                print(f"  [dropbox] Uploading {local_file.name} to {remote_path}...")
+                dbx.files_upload(f.read(), remote_path, mode=WriteMode("overwrite"))
+                print("  [dropbox] Upload successful!")
+                return True
+    except Exception as e:
+        print(f"  [dropbox] ERROR during upload: {e}")
+        return False
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def export(data_dir: str, out_path: str) -> None:
@@ -269,7 +319,7 @@ def export(data_dir: str, out_path: str) -> None:
     print(f"  {entry_count} entries  |  {open_count} open  |  {closed_count} closed")
 
 
-def dated_export(data_dir: str | None = None, out_dir: str | None = None) -> str:
+def dated_export(data_dir: str | None = None, out_dir: str | None = None, cfg: dict | None = None) -> str:
     """Run export with a datestamped filename. Returns the output path written.
 
     Intended to be called from the scheduler or other modules.
@@ -282,6 +332,11 @@ def dated_export(data_dir: str | None = None, out_dir: str | None = None) -> str
     today = date.today().isoformat()   # e.g. 2026-04-09
     out_path = str(Path(_out_dir) / f"trades_export_{today}.csv")
     export(_data, out_path)
+
+    # Optional: Upload to Dropbox if enabled
+    if cfg and cfg.get("dropbox", {}).get("enabled"):
+        upload_to_dropbox(out_path, cfg)
+
     return out_path
 
 

@@ -193,5 +193,80 @@
     "entry_trade_number": "T00025",
     "poly_fee_rate": 0.0,
     "resolution_date": "2026-04-13"
+  },
+  "92": {
+    "pair_id": "92",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXPGATOUR-MAST26-BDEC",
+    "p_token_id": "66179603014990857411757853029858742112684886279921671054294118974840399911612",
+    "p_token_ids": [
+      "66179603014990857411757853029858742112684886279921671054294118974840399911612"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "110418008203792792268114717933058884388143135270395587506293975692059241151415",
+    "no_token_id": "66179603014990857411757853029858742112684886279921671054294118974840399911612",
+    "title": "dechambeau",
+    "contracts": 14,
+    "entry_k_price": 0.02,
+    "entry_p_price": 0.97,
+    "entry_kp_cost": 13.871000000000002,
+    "entry_fills": [
+      {
+        "k_price": 0.02,
+        "p_price": 0.969,
+        "contracts": 9
+      },
+      {
+        "k_price": 0.02,
+        "p_price": 0.97,
+        "contracts": 5
+      }
+    ],
+    "entry_fee": 0.02,
+    "entry_edge_dollar": 0.129,
+    "entry_arr": 0.7962950965694933,
+    "entry_edge_pct": 0.009299978372143159,
+    "entry_timestamp": "2026-04-09T17:41:29.159463+00:00",
+    "entry_trade_number": "T00063",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-13"
+  },
+  "93": {
+    "pair_id": "93",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXPGATOUR-MAST26-JRAH",
+    "p_token_id": "81100929577553674096369161538709763228943470380146968558688494703628734004408",
+    "p_token_ids": [
+      "81100929577553674096369161538709763228943470380146968558688494703628734004408"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "14891744631569327882180091417355223283074176862943214903789359145380999929720",
+    "no_token_id": "81100929577553674096369161538709763228943470380146968558688494703628734004408",
+    "title": "rahm",
+    "contracts": 12,
+    "entry_k_price": 0.05,
+    "entry_p_price": 0.937,
+    "entry_kp_cost": 11.883999999999999,
+    "entry_fills": [
+      {
+        "k_price": 0.05,
+        "p_price": 0.937,
+        "contracts": 12
+      }
+    ],
+    "entry_fee": 0.04,
+    "entry_edge_dollar": 0.116,
+    "entry_arr": 0.8357712979428947,
+    "entry_edge_pct": 0.009761023224503656,
+    "entry_timestamp": "2026-04-09T17:41:29.162437+00:00",
+    "entry_trade_number": "T00064",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-13"
   }
 }

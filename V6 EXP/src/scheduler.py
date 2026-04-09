@@ -37,12 +37,12 @@ def run_generator(generator_dir):
         print(f"  {Fore.RED}[{ts}] [scheduler] Unexpected error: {e}{Style.RESET_ALL}")
         return False
 
-def run_export(v6_dir):
+def run_export(v6_dir, cfg):
     """Export today's trades log to a dated CSV in data/."""
     ts = datetime.now().strftime("%H:%M:%S")
     try:
         from export_trades import dated_export
-        out_path = dated_export()
+        out_path = dated_export(cfg=cfg)
         print(f"  {Style.DIM}[{ts}] [scheduler] Trade export written: {out_path}{Style.RESET_ALL}")
     except Exception as e:
         print(f"  {Fore.YELLOW}[{ts}] [scheduler] Trade export failed: {e}{Style.RESET_ALL}")
@@ -92,7 +92,7 @@ def scheduler_loop(cfg):
         last_run_date = datetime.now().date()
 
     if cfg.get("export_on_startup", False):
-        run_export(v6_dir)
+        run_export(v6_dir, cfg)
 
     while True:
         now = datetime.now()
@@ -101,7 +101,7 @@ def scheduler_loop(cfg):
         if now.hour == 3 and now.minute == 0 and last_run_date != now.date():
             if run_generator(generator_dir):
                 copy_newest_output(generator_outputs, v6_inputs)
-            run_export(v6_dir)
+            run_export(v6_dir, cfg)
             last_run_date = now.date()
         
         # Sleep for 30 seconds before checking again
