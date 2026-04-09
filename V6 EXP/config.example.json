@@ -81,5 +81,7 @@
     "gamma_url": ""
   },
   "auto_update_pairs": true,
-  "update_on_startup": false
+  "update_on_startup": false,
+  "_doc_export_on_startup": "Run a trade export to CSV immediately on bot startup. Output is written to data/trades_export_YYYY-MM-DD.csv. The same export also runs automatically at 3 AM alongside the pairs generator.",
+  "export_on_startup": false
 }

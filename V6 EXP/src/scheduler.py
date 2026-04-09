@@ -37,6 +37,17 @@ def run_generator(generator_dir):
         print(f"  {Fore.RED}[{ts}] [scheduler] Unexpected error: {e}{Style.RESET_ALL}")
         return False
 
+def run_export(v6_dir):
+    """Export today's trades log to a dated CSV in data/."""
+    ts = datetime.now().strftime("%H:%M:%S")
+    try:
+        from export_trades import dated_export
+        out_path = dated_export()
+        print(f"  {Style.DIM}[{ts}] [scheduler] Trade export written: {out_path}{Style.RESET_ALL}")
+    except Exception as e:
+        print(f"  {Fore.YELLOW}[{ts}] [scheduler] Trade export failed: {e}{Style.RESET_ALL}")
+
+
 def copy_newest_output(generator_outputs, v6_inputs):
     ts = datetime.now().strftime("%H:%M:%S")
     latest_output = get_latest_file(generator_outputs)
@@ -73,20 +84,24 @@ def scheduler_loop(cfg):
     
     print(f"  [scheduler] Background updater active. Target time: 03:00 daily.")
 
-    # Optional: Run immediately on startup for testing
+    # Optional: Run immediately on startup
     if cfg.get("update_on_startup", False):
         print(f"  [scheduler] Running initial startup update...")
         if run_generator(generator_dir):
             copy_newest_output(generator_outputs, v6_inputs)
         last_run_date = datetime.now().date()
 
+    if cfg.get("export_on_startup", False):
+        run_export(v6_dir)
+
     while True:
         now = datetime.now()
-        
+
         # Check if it's 3:00 AM and we haven't run today
         if now.hour == 3 and now.minute == 0 and last_run_date != now.date():
             if run_generator(generator_dir):
                 copy_newest_output(generator_outputs, v6_inputs)
+            run_export(v6_dir)
             last_run_date = now.date()
         
         # Sleep for 30 seconds before checking again

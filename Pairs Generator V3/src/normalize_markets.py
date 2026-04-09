@@ -9,7 +9,7 @@ def to_ascii(s: str) -> str:
 import os
 
 BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
-STOPWORDS_PATH = os.path.join(BASE_DIR, "..", "..", "resources", "EN-Stopwords.txt")
+STOPWORDS_PATH = os.path.join(BASE_DIR, "..", "resources", "EN-Stopwords.txt")
 COMMIT_EVERY   = 10_000
 
 # Precompiled regexes

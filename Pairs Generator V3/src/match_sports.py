@@ -34,7 +34,7 @@ def _normalize_token_ids_list(raw):
 def _normalize_token_ids(raw):
     """Return a JSON array string of token IDs, handling pre-serialized strings."""
     return json.dumps(_normalize_token_ids_list(raw))
-CATEGORIES_DIR   = os.path.join(BASE_DIR, "..", "..", "resources")
+CATEGORIES_DIR   = os.path.join(BASE_DIR, "..", "resources")
 OUTPUT_FILE      = os.path.join(BASE_DIR, "..", "outputs", "matched_sports_pairs.csv")
 DATE_WINDOW      = 1    # days either side (for regular team sports)
 MAX_TEAMS_KALSHI = 2    # skip Kalshi markets where more than 2 teams extracted
