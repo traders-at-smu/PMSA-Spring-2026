@@ -29,6 +29,11 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+
+# Databases
 markets.db
 markets.db-shm
 markets.db-wal
+sports_markets.db
+sports_markets.db-shm
+sports_markets.db-wal

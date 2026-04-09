@@ -1,1 +1,147 @@
-{}
+{
+  "107": {
+    "pair_id": "107",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXPGATOUR-MAST26-PREE",
+    "p_token_id": "23929001677199884634421584409854821108392581496920266505702032309240799085085",
+    "p_token_ids": [
+      "23929001677199884634421584409854821108392581496920266505702032309240799085085"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "23929001677199884634421584409854821108392581496920266505702032309240799085085",
+    "no_token_id": "110219663650296830580018989124066471998703546424034073114728140337754596054789",
+    "title": "reed",
+    "contracts": 2,
+    "entry_k_price": 0.94,
+    "entry_p_price": 0.048,
+    "entry_kp_cost": 1.986,
+    "entry_fills": [
+      {
+        "k_price": 0.94,
+        "p_price": 0.048,
+        "contracts": 2
+      }
+    ],
+    "entry_fee": 0.01,
+    "entry_edge_dollar": 0.014,
+    "entry_arr": 0.5860655724772509,
+    "entry_edge_pct": 0.007049345417925484,
+    "entry_timestamp": "2026-04-09T14:37:56.991842+00:00",
+    "entry_trade_number": "T00006",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-13"
+  },
+  "45": {
+    "pair_id": "45",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXATPCHALLENGERMATCH-26APR09JARSTR-JAR",
+    "p_token_id": "34971717602251481058558095414702509750169871843040987678259578975622393208680",
+    "p_token_ids": [
+      "34971717602251481058558095414702509750169871843040987678259578975622393208680"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "34971717602251481058558095414702509750169871843040987678259578975622393208680",
+    "no_token_id": "",
+    "title": "jarry stricker",
+    "contracts": 100,
+    "entry_k_price": 0.17,
+    "entry_p_price": 0.8,
+    "entry_kp_cost": 99.58999999999983,
+    "entry_fills": [
+      {
+        "k_price": 0.17,
+        "p_price": 0.8,
+        "contracts": 100
+      }
+    ],
+    "entry_fee": 2.59,
+    "entry_edge_dollar": 0.41,
+    "entry_arr": 0.23510021092903305,
+    "entry_edge_pct": 0.004116879204741117,
+    "entry_timestamp": "2026-04-09T14:36:07.825368+00:00",
+    "entry_trade_number": "T00003",
+    "poly_fee_rate": 0.1,
+    "resolution_date": "2026-04-15"
+  },
+  "135": {
+    "pair_id": "135",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXPGATOUR-MAST26-CGOT",
+    "p_token_id": "59903521524948817210995351145023052041694577357792067581664983181344781301630",
+    "p_token_ids": [
+      "59903521524948817210995351145023052041694577357792067581664983181344781301630"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "59903521524948817210995351145023052041694577357792067581664983181344781301630",
+    "no_token_id": "65967517527402411834245708438425714441623644657376221141072991765388837197339",
+    "title": "gotterup",
+    "contracts": 14,
+    "entry_k_price": 0.98,
+    "entry_p_price": 0.017,
+    "entry_kp_cost": 13.828000000000003,
+    "entry_fills": [
+      {
+        "k_price": 0.98,
+        "p_price": 0.002,
+        "contracts": 10
+      },
+      {
+        "k_price": 0.98,
+        "p_price": 0.017,
+        "contracts": 4
+      }
+    ],
+    "entry_fee": 0.02,
+    "entry_edge_dollar": 0.172,
+    "entry_arr": 1.0356095591707504,
+    "entry_edge_pct": 0.012438530517789774,
+    "entry_timestamp": "2026-04-09T14:47:06.465379+00:00",
+    "entry_trade_number": "T00018",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-13"
+  },
+  "105": {
+    "pair_id": "105",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXPGATOUR-MAST26-TFLE",
+    "p_token_id": "25605353386857852050433234346644257874798767464904433152264621687544796590919",
+    "p_token_ids": [
+      "25605353386857852050433234346644257874798767464904433152264621687544796590919"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "25605353386857852050433234346644257874798767464904433152264621687544796590919",
+    "no_token_id": "115483302436050060330657996514889406855033408384320085942058701641233157973227",
+    "title": "fleetwood",
+    "contracts": 6,
+    "entry_k_price": 0.95,
+    "entry_p_price": 0.039,
+    "entry_kp_cost": 5.954,
+    "entry_fills": [
+      {
+        "k_price": 0.95,
+        "p_price": 0.039,
+        "contracts": 6
+      }
+    ],
+    "entry_fee": 0.02,
+    "entry_edge_dollar": 0.046,
+    "entry_arr": 0.6432118883758884,
+    "entry_edge_pct": 0.007725898555592923,
+    "entry_timestamp": "2026-04-09T14:46:47.350233+00:00",
+    "entry_trade_number": "T00015",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2026-04-13"
+  }
+}
