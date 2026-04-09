@@ -11,7 +11,15 @@
       "Read(//tmp/**)",
       "Bash(python -c \"import json; d=json.load\\(open\\('d:/GitHub/PMSA/V6 CSV/data/open_positions.json'\\)\\); print\\(len\\(d\\)\\)\")",
       "Bash(python -c ':*)",
-      "Bash(python -c \"import json; c=json.load\\(open\\('d:/GitHub/PMSA/V6 CSV/config.json'\\)\\); print\\(json.dumps\\({k:v for k,v in c.items\\(\\) if 'log' in k.lower\\(\\) or 'path' in k.lower\\(\\) or 'json' in k.lower\\(\\)}, indent=2\\)\\)\")"
+      "Bash(python -c \"import json; c=json.load\\(open\\('d:/GitHub/PMSA/V6 CSV/config.json'\\)\\); print\\(json.dumps\\({k:v for k,v in c.items\\(\\) if 'log' in k.lower\\(\\) or 'path' in k.lower\\(\\) or 'json' in k.lower\\(\\)}, indent=2\\)\\)\")",
+      "Bash(python3 -c ':*)",
+      "Bash(pip show:*)",
+      "Bash(python3 -c \"import aiohttp, openpyxl; print\\('deps ok'\\)\")",
+      "Bash(python3 main.py)",
+      "Bash(python3)",
+      "Bash(ls \"d:/GitHub/PMSA/Pairs Generator V3/\"*.db)",
+      "Bash(ls \"d:/GitHub/PMSA/Pairs Generator V3/src/\"*.db)",
+      "Bash(import shutil:*)"
     ]
   }
 }

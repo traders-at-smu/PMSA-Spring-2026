@@ -961,6 +961,21 @@ def evaluate_pair(
                 )
                 return [{"_bad_pair": True, "strategy": strat["strategy"], "cost_per_contract": walk["kp_cost"] / c}]
 
+            # Arb gap check: if any fill level has 1 - (k_price + p_price) > 0.15,
+            # the edge is unrealistically large — likely an inaccurate/mismatched pair.
+            _max_arb_gap = max(
+                (1.0 - (s["k_price"] + s["p_price"]) for s in walk.get("slippage", [])),
+                default=0.0,
+            )
+            if _max_arb_gap > 0.15:
+                print(
+                    f"  [WARN] {pair['pair_id']} {strat['strategy']}: "
+                    f"max arb gap={_max_arb_gap:.3f} > 0.15 — "
+                    f"prices too good to be true, flagging as bad",
+                    file=sys.stderr,
+                )
+                return [{"_bad_pair": True, "strategy": strat["strategy"], "cost_per_contract": walk["kp_cost"] / c, "price_gap": _max_arb_gap}]
+
             if edge_dollar <= 0 or walk["edge_pct"] < min_edge_pct:
                 continue
 
@@ -1946,11 +1961,20 @@ def run_scan(
             continue
 
         if opps and opps[0].get("_bad_pair"):
-            reason = (
-                f"{opps[0].get('strategy')} cost/contract={opps[0].get('cost_per_contract', 0):.3f} < 0.85"
-            )
+            bad_opp = opps[0]
+            if bad_opp.get("price_gap"):
+                reason = (
+                    f"{bad_opp.get('strategy')} price gap={bad_opp.get('price_gap', 0):.3f} > 0.15"
+                )
+                msg = f"  {Fore.YELLOW}! {label}: fill price gap too large  → logged to bad pairs{Style.RESET_ALL}"
+            else:
+                reason = (
+                    f"{bad_opp.get('strategy')} cost/contract={bad_opp.get('cost_per_contract', 0):.3f} < 0.85"
+                )
+                msg = f"  {Fore.YELLOW}! {label}: same-side/mismatched pair  → logged to bad pairs{Style.RESET_ALL}"
             bad_ids.add(pair["pair_id"])
             _log_bad_pair(pair, reason, bad_log)
+            print(msg, file=sys.stderr)
             continue
 
         # Optional per-pair market status line (enabled via print_market_status in config).
@@ -2127,6 +2151,19 @@ def run_loop(
                             cfg["pairs_file"] = latest_file
                             pair_offset = 0  # Reset rotation for the new set
                             print(f"  {Fore.CYAN}[reload]{Style.RESET_ALL} Loaded {len(pairs)} active pair(s)")
+                            # Clear stale state so new pairs are not pre-skipped
+                            failed_ids.clear()
+                            expired_ids.clear()
+                            bad_ids.clear()
+                            positions.clear()
+                            for _path in (failed_log, expired_log, bad_log, position_file):
+                                try:
+                                    Path(_path).write_text("", encoding="utf-8")
+                                except Exception:
+                                    pass
+                            print(
+                                f"  {Fore.CYAN}[reload]{Style.RESET_ALL} Cleared failed/expired/bad/positions state for new pairs file"
+                            )
                     except Exception as exc:
                         print(f"  {Fore.RED}[reload] Failed to load {latest_file}: {exc}{Style.RESET_ALL}")
 

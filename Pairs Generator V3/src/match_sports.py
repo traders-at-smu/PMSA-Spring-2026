@@ -1277,6 +1277,20 @@ def run():
                 )
                 if not is_golf_outright:
                     continue
+
+            # Golf: Kalshi markets are always "will X WIN the tournament".
+            # Only pair with Polymarket markets that ask the same question.
+            # Reject anything else (lowest round, debutant, make cut, etc.).
+            if ev["sport"] == "Golf":
+                slug_lower_g = slug.lower()
+                poly_title_g = (row["raw_title"] or "").lower()
+                is_win_market = (
+                    "will-" in slug_lower_g and "-win-" in slug_lower_g
+                ) or (
+                    "will " in poly_title_g and " win " in poly_title_g
+                )
+                if not is_win_market:
+                    continue
                 k_title = ev.get("raw_data", {}).get("title", "").lower()
                 p_title = (row["raw_title"] or "").lower()
                 if not any(kw in k_title and kw in p_title for kw in _GOLF_TOURNAMENT_KEYWORDS):
