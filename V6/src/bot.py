@@ -2145,14 +2145,21 @@ def run_loop(
                 last_exit_check = time.time()
 
             # Priority pairs from last cycle's entries, then round-robin fill
-            priority_pairs = [p for p in pairs if p["pair_id"] in next_cycle_ids]
-            remaining_pairs = [p for p in pairs if p["pair_id"] not in next_cycle_ids]
+            # Pre-filter permanently excluded pairs so they never occupy batch slots
+            scannable = [
+                p for p in pairs
+                if p["pair_id"] not in failed_ids
+                and p["pair_id"] not in expired_ids
+                and p["pair_id"] not in bad_ids
+            ]
+            priority_pairs = [p for p in scannable if p["pair_id"] in next_cycle_ids]
+            remaining_pairs = [p for p in scannable if p["pair_id"] not in next_cycle_ids]
             rotated = remaining_pairs[pair_offset:] + remaining_pairs[:pair_offset]
             fill_slots = max(pairs_per_cycle - len(priority_pairs), 0)
             scan_pairs = priority_pairs + rotated[:fill_slots]
             pair_offset = (pair_offset + fill_slots) % max(len(remaining_pairs), 1)
 
-            total = len(pairs)
+            total = len(scannable)
             batch_start = scan_offset + 1
             opps = run_scan(
                 scan_pairs,
