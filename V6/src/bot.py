@@ -1811,7 +1811,7 @@ def run_scan(
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")
     bad_log = cfg.get("bad_log", "bad_pairs.json")
-    max_workers = int(cfg.get("max_workers", 6))
+    max_workers = int(cfg.get("max_workers", 10))
     ts = datetime.now().strftime("%H:%M:%S")
     t0 = time.monotonic()
 
