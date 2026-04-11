@@ -1223,6 +1223,17 @@ def run():
                     poly_teams.append(t)
                     seen_lc.add(t.lower())
 
+        # If slug decode produced exactly 2 teams but text extraction pushed the total
+        # over 2 (e.g. city name "Cleveland" matching Cavaliers/Guardians/Browns alongside
+        # the actual AHL team), trust the slug — it encodes exactly the two teams playing.
+        if len(poly_teams) > 2 and len(slug_teams) == 2:
+            poly_teams = slug_teams
+
+        # Skip Polymarket markets where > 2 teams were extracted (bundle/season markets),
+        # unless it is a tournament sport (Golf/Tennis) which legitimately has 1 team.
+        if len(poly_teams) > 2 and poly_sport not in _TOURNAMENT_SPORTS:
+            continue
+
         # Tennis / golf H2H: fall back to player names extracted from the title
         if not poly_teams and poly_sport in ("Tennis", "Golf"):
             poly_teams = extract_player_names(row["raw_title"] or "")

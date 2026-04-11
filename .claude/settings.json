@@ -24,7 +24,10 @@
       "Bash(python src/export_trades.py)",
       "WebSearch",
       "WebFetch(domain:www.dropbox.com)",
-      "WebFetch(domain:developers.dropbox.com)"
+      "WebFetch(domain:developers.dropbox.com)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); first=next\\(iter\\(d.values\\(\\)\\)\\); print\\(json.dumps\\(first, indent=2\\)\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('src/match_sports.py'\\).read\\(\\)\\); print\\('OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('src/export_trades.py'\\).read\\(\\)\\); print\\('OK'\\)\")"
     ]
   }
 }

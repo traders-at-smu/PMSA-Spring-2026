@@ -21,6 +21,16 @@ import sys
 from datetime import date
 from pathlib import Path
 
+try:
+    import requests as _requests
+    _REQUESTS_OK = True
+except ImportError:
+    _REQUESTS_OK = False
+
+_KALSHI_API   = "https://api.elections.kalshi.com/trade-api/v2"
+_POLY_GAMMA   = "https://gamma-api.polymarket.com"
+_TIMEOUT      = 8
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -136,6 +146,108 @@ def upload_to_dropbox(local_path: str, cfg: dict) -> bool:
         return False
 
 
+# ── Title lookups (run once per unique token at export time) ─────────────────
+
+def _load_pairs_lookup(input_dir: Path) -> dict[str, dict]:
+    """Build a lookup keyed by kalshi_market_id from all daily CSV pairs files.
+
+    Returns {kalshi_market_id: row_dict} so the export can resolve resolution_date
+    and other pair metadata without hitting any APIs.
+    """
+    lookup: dict[str, dict] = {}
+    for csv_path in sorted(input_dir.glob("output-*.csv")):
+        try:
+            with csv_path.open(encoding="utf-8") as fh:
+                for row in csv.DictReader(fh):
+                    kid = str(row.get("kalshi_market_id") or "").strip()
+                    if kid and kid not in lookup:
+                        lookup[kid] = row
+        except Exception:
+            pass
+    return lookup
+
+
+def _fetch_kalshi_title(ticker: str, _cache: dict = {}) -> str:
+    """Fetch Kalshi market subtitle/title for a ticker via API. Returns '' on failure.
+
+    Retries once on 429 rate-limit with a short delay before giving up.
+    """
+    import time
+    if not ticker or not _REQUESTS_OK:
+        return ""
+    if ticker in _cache:
+        return _cache[ticker]
+    title = ""
+    for attempt in range(2):
+        try:
+            r = _requests.get(f"{_KALSHI_API}/markets/{ticker}", timeout=_TIMEOUT)
+            if r.status_code == 429 and attempt == 0:
+                time.sleep(1.5)
+                continue
+            r.raise_for_status()
+            mkt = r.json().get("market", {})
+            title = str(mkt.get("subtitle") or mkt.get("title") or "").strip()
+            break
+        except Exception:
+            if attempt == 0:
+                time.sleep(1.5)
+    _cache[ticker] = title
+    return title
+
+
+def _fetch_poly_title(token_id: str, _cache: dict = {}) -> str:
+    """Fetch Polymarket market question for a token ID via Gamma API. Returns '' on failure."""
+    if not token_id or not _REQUESTS_OK:
+        return ""
+    if token_id in _cache:
+        return _cache[token_id]
+    try:
+        r = _requests.get(
+            f"{_POLY_GAMMA}/markets",
+            params={"clob_token_ids": token_id},
+            timeout=_TIMEOUT,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        market = payload[0] if isinstance(payload, list) and payload else payload
+        title = str(market.get("question") or "") if isinstance(market, dict) else ""
+    except Exception:
+        title = ""
+    _cache[token_id] = title
+    return title
+
+
+def _enrich_records(records: list[dict], pairs_lookup: dict[str, dict]) -> None:
+    """Fill in missing poly_market_title, kalshi_market_title, and resolution_date.
+
+    Resolution date comes from the local pairs files (no API call needed).
+    Market titles are fetched from the APIs and cached per unique token.
+    """
+    for t in records:
+        ticker = str(t.get("kalshi_token", "")).strip()
+        pair   = pairs_lookup.get(ticker, {})
+
+        # Resolution date — read from the pairs file first, then the trade record itself
+        if not t.get("resolution_date"):
+            res = str(pair.get("resolution_time_utc") or "").strip()
+            if res:
+                t["resolution_date"] = res[:10]  # keep YYYY-MM-DD portion only
+
+        # Poly market title — API fetch, cached per token; slug as fallback
+        if not t.get("poly_market_title"):
+            token = (t.get("p_token_ids") or [t.get("polymarket_token", "")])[0]
+            if token:
+                t["poly_market_title"] = _fetch_poly_title(str(token).strip())
+        if not t.get("poly_market_title"):
+            slug = str(pair.get("poly_slug") or "").strip()
+            if slug:
+                t["poly_market_title"] = slug.replace("-", " ").title()
+
+        # Kalshi market title — API fetch, cached per ticker
+        if not t.get("kalshi_market_title") and ticker:
+            t["kalshi_market_title"] = _fetch_kalshi_title(ticker)
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 
 def export(data_dir: str, out_path: str) -> None:
@@ -176,6 +288,16 @@ def export(data_dir: str, out_path: str) -> None:
         default=1,
     )
 
+    # Build lookup from local pairs files (resolution_date, etc.) — no API needed
+    input_dir = Path(data_dir).parent / "input_files"
+    pairs_lookup = _load_pairs_lookup(input_dir)
+    print(f"Loaded pairs lookup from {input_dir} ({len(pairs_lookup)} entries)")
+
+    # Enrich records: resolution_date from pairs files, titles from APIs
+    print("Fetching market titles from APIs (cached per unique token)...")
+    _enrich_records(entry_records, pairs_lookup)
+    _enrich_records(exit_orphans, pairs_lookup)
+
     rows = []
 
     # ── Entry-rooted rows ──────────────────────────────────────────────────────
@@ -203,11 +325,13 @@ def export(data_dir: str, out_path: str) -> None:
             "trade_phase":           "entry",
             "pair_id":               t.get("pair_id", ""),
             "title":                 t.get("title", ""),
+            "poly_market_title":     t.get("poly_market_title", ""),
+            "kalshi_market_title":   t.get("kalshi_market_title", ""),
             "strategy":              t.get("strategy", ""),
             "mode":                  t.get("mode", ""),
             "execution_date":        t.get("execution_date", ""),
             "timestamp":             t.get("timestamp", ""),
-            "resolution_date":       pos.get("resolution_date", ""),
+            "resolution_date":       pos.get("resolution_date", "") or t.get("resolution_date", ""),
             # Entry fill summary
             "entry_fills_summary":   _fmt_fills(fills),
             "entry_avg_k_price":     round(avg_k, 4) if avg_k is not None else "",
@@ -250,6 +374,8 @@ def export(data_dir: str, out_path: str) -> None:
             "trade_phase":            "exit",
             "pair_id":                t.get("pair_id", ""),
             "title":                  t.get("title", ""),
+            "poly_market_title":      t.get("poly_market_title", ""),
+            "kalshi_market_title":    t.get("kalshi_market_title", ""),
             "strategy":               t.get("strategy", ""),
             "mode":                   t.get("mode", ""),
             "execution_date":         t.get("execution_date", ""),

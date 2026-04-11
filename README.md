@@ -1,4 +1,10 @@
 # Polymarket × Kalshi Arbitrage Bot
+## 📊 Contribution Stats
+<!-- STATS_START -->
+<!-- STATS_END -->
+
+
+
 
 Cross-venue prediction market arbitrage tooling for [Polymarket](https://polymarket.com) and [Kalshi](https://kalshi.com).
 

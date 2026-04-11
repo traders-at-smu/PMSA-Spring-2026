@@ -982,6 +982,8 @@ def evaluate_pair(
             results.append({
                 "pair_id": pair["pair_id"],
                 "title": pair.get("title", pair["pair_id"]),
+                "poly_market_title": pair.get("poly_market_question", ""),
+                "kalshi_market_title": kalshi_quotes.get("kalshi_title", ""),
                 "kalshi_ticker": pair["kalshi_ticker"],
                 "polymarket_slug": pair.get("polymarket_market_slug", ""),
                 "kalshi_url": kalshi_url,
@@ -1126,6 +1128,8 @@ def _build_log_entry(opp: dict[str, Any], mode: str, **overrides) -> dict[str, A
     now = datetime.now(timezone.utc)
     entry: dict[str, Any] = {
         "title": opp["title"],
+        "poly_market_title": opp.get("poly_market_title", ""),
+        "kalshi_market_title": opp.get("kalshi_market_title", ""),
         "pair_id": opp["pair_id"],
         "trade_phase": "entry",
         "fills": _slippage_to_fills(opp.get("slippage", [])),
@@ -1139,6 +1143,7 @@ def _build_log_entry(opp: dict[str, Any], mode: str, **overrides) -> dict[str, A
         "execution_date": now.date().isoformat(),
         "timestamp": now.isoformat(),
         "mode": mode,
+        "resolution_date": str(opp.get("resolution_date", "")),
         "kalshi_token": opp["kalshi_ticker"],
         "polymarket_token": opp["p_token_id"],
         "p_token_ids": opp.get("p_token_ids", []),
@@ -1689,6 +1694,9 @@ def _build_polymarket_quotes(pair: dict[str, Any], poly) -> dict[str, Any]:
             if len(outcomes_lc) == 2 and "yes" in outcomes_lc and "no" in outcomes_lc:
                 primary = "yes"
                 pair["poly_primary_outcome"] = primary
+        # Cache the poly question from the already-fetched market data
+        if market and not pair.get("poly_market_question"):
+            pair["poly_market_question"] = str(market.get("question") or "").strip()
 
     outcomes_lc = [o.strip().lower() for o in outcomes]
     binary_yes_no = len(outcomes_lc) == 2 and "yes" in outcomes_lc and "no" in outcomes_lc
@@ -1760,6 +1768,12 @@ def _build_polymarket_quotes(pair: dict[str, Any], poly) -> dict[str, Any]:
     pair["poly_fee_rate"] = fee_rate
     pq["type"] = "binary"
     pq["poly_fee_rate"] = fee_rate
+
+    # Fetch and cache poly market question for binary pre-populated token pairs
+    if not pair.get("poly_market_question"):
+        yid = pq.get("yes_token_id", "")
+        pair["poly_market_question"] = poly.get_question_by_token(yid) if yid else ""
+
     return pq
 
 

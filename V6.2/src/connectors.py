@@ -221,6 +221,8 @@ class KalshiConnector:
             no_bid  = no_bid_ob
             no_ask  = max(0.0, 1.0 - yes_bid_ob)
 
+        kalshi_title = str(mkt.get("subtitle") or mkt.get("title") or "").strip()
+
         return {
             "yes_bid": yes_bid,
             "yes_ask": yes_ask,
@@ -228,6 +230,7 @@ class KalshiConnector:
             "no_ask":  no_ask,
             "event_ticker": event_ticker,
             "event_url": event_url,
+            "kalshi_title": kalshi_title,
             "depth": {
                 "buy_yes": self._derive_asks(no_bids),   # to buy YES, cross NO bids
                 "buy_no":  self._derive_asks(yes_bids),  # to buy NO, cross YES bids
@@ -546,6 +549,28 @@ class PolymarketConnector:
             raise RuntimeError(f"Polymarket fee-rate response missing base_fee: {payload}")
         bps = int(payload.get("base_fee", 0))
         return bps / 10000.0
+
+    def get_question_by_token(self, token_id: str) -> str:
+        """Fetch the market question text for a Polymarket token ID via Gamma API.
+
+        Returns empty string on failure rather than raising.
+        """
+        if not token_id:
+            return ""
+        try:
+            res = requests.get(
+                f"{self.gamma_host}/markets",
+                params={"clob_token_ids": token_id},
+                timeout=_TIMEOUT,
+            )
+            res.raise_for_status()
+            payload = res.json()
+            market = payload[0] if isinstance(payload, list) and payload else payload
+            if isinstance(market, dict):
+                return str(market.get("question") or "").strip()
+        except Exception:
+            pass
+        return ""
 
     def _fetch_book(self, token_id: str) -> dict[str, Any]:
         res = requests.get(
