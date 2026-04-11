@@ -1840,7 +1840,7 @@ def run_scan(
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")
     bad_log = cfg.get("bad_log", "bad_pairs.json")
-    max_workers = int(cfg.get("max_workers", 6))
+    max_workers = int(cfg.get("max_workers", 25))
     ts = datetime.now().strftime("%H:%M:%S")
     t0 = time.monotonic()
 
@@ -2102,7 +2102,7 @@ def run_loop(
     in memory across cycles — they are never fetched again within this session.
     """
     interval = max(1, int(cfg.get("scan_interval_seconds", 2)))
-    pairs_per_cycle = int(cfg.get("pairs_per_cycle", 10))
+    pairs_per_cycle = int(cfg.get("pairs_per_cycle", 25))
     pair_offset = 0
     failed_log = cfg.get("failed_log", "failed_pairs.json")
     expired_log = cfg.get("expired_log", "expired_pairs.json")
@@ -2195,15 +2195,22 @@ def run_loop(
                 )
                 last_exit_check = time.time()
 
+            # Pre-filter permanently excluded pairs so they never occupy batch slots
+            scannable = [
+                p for p in pairs
+                if p["pair_id"] not in failed_ids
+                and p["pair_id"] not in expired_ids
+                and p["pair_id"] not in bad_ids
+            ]
             # Priority pairs from last cycle's entries, then round-robin fill
-            priority_pairs = [p for p in pairs if p["pair_id"] in next_cycle_ids]
-            remaining_pairs = [p for p in pairs if p["pair_id"] not in next_cycle_ids]
+            priority_pairs = [p for p in scannable if p["pair_id"] in next_cycle_ids]
+            remaining_pairs = [p for p in scannable if p["pair_id"] not in next_cycle_ids]
             rotated = remaining_pairs[pair_offset:] + remaining_pairs[:pair_offset]
             fill_slots = max(pairs_per_cycle - len(priority_pairs), 0)
             scan_pairs = priority_pairs + rotated[:fill_slots]
             pair_offset = (pair_offset + fill_slots) % max(len(remaining_pairs), 1)
 
-            total = len(pairs)
+            total = len(scannable)
             batch_start = scan_offset + 1
             opps = run_scan(
                 scan_pairs,

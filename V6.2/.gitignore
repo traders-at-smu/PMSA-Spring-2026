@@ -35,5 +35,7 @@ config/credentials.json
 # Runtime data
 logs/
 data/runtime/
+data/*.json
+data/*.csv
 *.sqlite
 *.db
