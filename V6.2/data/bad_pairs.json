@@ -1,15 +1,1 @@
-{"pair_id": "6", "kalshi_ticker": "KXSERIEAGAME-26APR12PARNAP-NAP", "title": "parma seattle sounders napoli", "reason": "BUY_KN_BUY_PY cost/contract=0.569 < 0.85", "timestamp": "2026-04-11T08:04:01.475241+00:00"}
-{"pair_id": "15", "kalshi_ticker": "KXMLBGAME-26APR112040COLSD-COL", "title": "rockies padres", "reason": "BUY_KN_BUY_PY cost/contract=0.618 < 0.85", "timestamp": "2026-04-11T08:04:01.479377+00:00"}
-{"pair_id": "82", "kalshi_ticker": "KXWTACHALLENGERMATCH-26APR11MINBAS-BAS", "title": "olmo ribera", "reason": "BUY_KY_BUY_PN cost/contract=0.759 < 0.85", "timestamp": "2026-04-11T08:04:11.409653+00:00"}
-{"pair_id": "107", "kalshi_ticker": "KXWTAMATCH-26APR11JIMZVO-JIM", "title": "kasintseva zvonareva", "reason": "BUY_KN_BUY_PY cost/contract=0.810 < 0.85", "timestamp": "2026-04-11T08:04:22.345280+00:00"}
-{"pair_id": "117", "kalshi_ticker": "KXATPMATCH-26APR11GEAKYP-GEA", "title": "gea kypson", "reason": "BUY_KN_BUY_PY price gap=0.170 > 0.15", "timestamp": "2026-04-11T08:04:22.349586+00:00"}
-{"pair_id": "118", "kalshi_ticker": "KXATPMATCH-26APR11ARNHAL-ARN", "title": "arnaldi halys", "reason": "BUY_KN_BUY_PY price gap=0.170 > 0.15", "timestamp": "2026-04-11T08:04:22.353937+00:00"}
-{"pair_id": "119", "kalshi_ticker": "KXATPMATCH-26APR11MEDGAU-GAU", "title": "medjedovic gaubas", "reason": "BUY_KY_BUY_PN price gap=0.190 > 0.15", "timestamp": "2026-04-11T08:04:22.355926+00:00"}
-{"pair_id": "120", "kalshi_ticker": "KXATPMATCH-26APR11OFNSAN-OFN", "title": "ofner quilez", "reason": "BUY_KN_BUY_PY price gap=0.190 > 0.15", "timestamp": "2026-04-11T08:04:22.358573+00:00"}
-{"pair_id": "121", "kalshi_ticker": "KXATPMATCH-26APR11CERZEP-CER", "title": "cerundolo zeppieri", "reason": "BUY_KN_BUY_PY price gap=0.200 > 0.15", "timestamp": "2026-04-11T08:04:22.361815+00:00"}
-{"pair_id": "122", "kalshi_ticker": "KXATPMATCH-26APR11MARCAR-MAR", "title": "busta martinez", "reason": "BUY_KY_BUY_PN price gap=0.260 > 0.15", "timestamp": "2026-04-11T08:04:22.365610+00:00"}
-{"pair_id": "123", "kalshi_ticker": "KXATPMATCH-26APR11DEJBON-BON", "title": "jong bonzi", "reason": "BUY_KY_BUY_PN price gap=0.170 > 0.15", "timestamp": "2026-04-11T08:04:22.369664+00:00"}
-{"pair_id": "125", "kalshi_ticker": "KXATPMATCH-26APR11ALCMUL-ALC", "title": "muller gurri", "reason": "BUY_KY_BUY_PN price gap=0.180 > 0.15", "timestamp": "2026-04-11T08:04:22.373715+00:00"}
-{"pair_id": "126", "kalshi_ticker": "KXATPMATCH-26APR11QUIBAS-BAS", "title": "quinn basilashvili", "reason": "BUY_KY_BUY_PN cost/contract=0.731 < 0.85", "timestamp": "2026-04-11T09:16:05.536972+00:00"}
-{"pair_id": "127", "kalshi_ticker": "KXATPMATCH-26APR11VUKVIR-VIR", "title": "virtanen vukic", "reason": "BUY_KN_BUY_PY cost/contract=0.336 < 0.85", "timestamp": "2026-04-11T10:21:29.881358+00:00"}
-{"pair_id": "124", "kalshi_ticker": "KXATPMATCH-26APR11TRUBUD-BUD", "title": "trungelliti kjaer", "reason": "BUY_KN_BUY_PY price gap=0.160 > 0.15", "timestamp": "2026-04-11T12:35:19.987141+00:00"}
+{"pair_id": "94", "kalshi_ticker": "KXATPMATCH-26APR12VIRMUL-MUL", "title": "muller virtanen", "reason": "BUY_KN_BUY_PY price gap=0.170 > 0.15", "timestamp": "2026-04-11T18:10:19.178614+00:00"}

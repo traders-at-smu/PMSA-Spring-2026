@@ -1014,6 +1014,8 @@ _INCOMPATIBLE_SLUG_FRAGMENTS = (
     "-match-total",
     "-set-totals",
     "-set-total",
+    "-set-handicap",
+    "-handicap",
     # We now allow -1h- and -2h- but only if both platforms match
 )
 
@@ -1254,6 +1256,25 @@ def run():
         poly_date = parse_date(poly_raw.get("gameStartTime") or poly_raw.get("endDateIso") or poly_raw.get("endDate") or poly_raw.get("closeTime"))
         if not poly_date:
             continue
+
+        # Slugs encode the LOCAL game date (e.g. mlb-tex-lad-2026-04-11).
+        # For late-evening US games that cross midnight UTC (e.g. 9 PM CT = 2 AM
+        # UTC next day), gameStartTime rolls over to the next calendar date.
+        # When the slug date is exactly 1 day before the UTC-derived date, trust
+        # the slug — it is always the correct local game date for matching.
+        _slug_date_m = re.search(r"(\d{4})-(\d{2})-(\d{2})(?:-|$)", slug)
+        if _slug_date_m:
+            try:
+                slug_dt = datetime(
+                    int(_slug_date_m.group(1)),
+                    int(_slug_date_m.group(2)),
+                    int(_slug_date_m.group(3)),
+                    tzinfo=timezone.utc,
+                )
+                if (poly_date.date() - slug_dt.date()).days == 1:
+                    poly_date = slug_dt
+            except ValueError:
+                pass
 
         poly_set = {t.lower() for t in poly_teams}
         poly_url = f"https://polymarket.com/event/{slug}" if slug else ""

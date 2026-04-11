@@ -1,326 +1,82 @@
 {
-  "26": {
-    "pair_id": "26",
-    "strategy": "BUY_KY_BUY_PN",
-    "k_side": "yes",
-    "p_side": "no",
-    "kalshi_ticker": "KXKBOGAME-26APR110400KIAHAN-HAN",
-    "p_token_id": "105197350392849975626907114060203193776985209628378997386499787104381572055934",
+  "70": {
+    "pair_id": "70",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXLOLGAME-26APR121900C9SEN-C9",
+    "p_token_id": "26282815395708940169337718494944852746411848812906524152998912841969933168989",
     "p_token_ids": [
-      "105197350392849975626907114060203193776985209628378997386499787104381572055934"
+      "26282815395708940169337718494944852746411848812906524152998912841969933168989"
     ],
-    "p_leg_prices": [
-      0.93
-    ],
-    "p_leg_spend": [
-      2.79
-    ],
-    "yes_token_id": "57632350454814733011862890770744728665282328111709113959250364241770434538278",
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "26282815395708940169337718494944852746411848812906524152998912841969933168989",
     "no_token_id": "",
-    "title": "hanwha eagles kia tigers",
-    "contracts": 3,
-    "entry_k_price": 0.03,
-    "entry_p_price": 0.93,
-    "entry_kp_cost": 2.90953,
-    "entry_fills": [
-      {
-        "k_price": 0.03,
-        "p_price": 0.93,
-        "contracts": 3,
-        "p_leg_prices": [
-          0.93
-        ]
-      }
-    ],
-    "entry_fee": 0.02953,
-    "entry_edge_dollar": 0.0905,
-    "entry_arr": 1.4810943675212451,
-    "entry_edge_pct": 0.031094369193649773,
-    "entry_timestamp": "2026-04-11T08:05:27.422640+00:00",
-    "entry_trade_number": "T03640",
-    "poly_fee_rate": 0.1,
-    "resolution_date": "2026-04-18"
-  },
-  "102": {
-    "pair_id": "102",
-    "strategy": "BUY_KY_BUY_PN",
-    "k_side": "yes",
-    "p_side": "no",
-    "kalshi_ticker": "KXWTAMATCH-26APR11SONPOH-POH",
-    "p_token_id": "14778905285332058987977973102942156768083940167163044787891245763810907077391",
-    "p_token_ids": [
-      "14778905285332058987977973102942156768083940167163044787891245763810907077391"
-    ],
-    "p_leg_prices": [
-      0.942038
-    ],
-    "p_leg_spend": [
-      24.493
-    ],
-    "yes_token_id": "67413365924499370975597084794624147727196217806546018324912191077576993708318",
-    "no_token_id": "",
-    "title": "sonmez pohle",
-    "contracts": 26,
-    "entry_k_price": 0.04,
-    "entry_p_price": 0.95,
-    "entry_kp_cost": 25.74497,
-    "entry_fills": [
-      {
-        "k_price": 0.04,
-        "p_price": 0.941,
-        "contracts": 23,
-        "p_leg_prices": [
-          0.941
-        ]
-      },
-      {
-        "k_price": 0.04,
-        "p_price": 0.95,
-        "contracts": 3,
-        "p_leg_prices": [
-          0.95
-        ]
-      }
-    ],
-    "entry_fee": 0.21197000000000002,
-    "entry_edge_dollar": 0.255,
-    "entry_arr": 0.4768531393840521,
-    "entry_edge_pct": 0.00990601270850195,
-    "entry_timestamp": "2026-04-11T10:01:20.065858+00:00",
-    "entry_trade_number": "T03653",
-    "poly_fee_rate": 0.1,
-    "resolution_date": "2026-04-18"
-  },
-  "19": {
-    "pair_id": "19",
-    "strategy": "BUY_KY_BUY_PN",
-    "k_side": "yes",
-    "p_side": "no",
-    "kalshi_ticker": "KXLOLMAP-26APR120400DNFFOX-1-FOX",
-    "p_token_id": "104301444328712280468881725693849872696810797593153469424162796868334307449891",
-    "p_token_ids": [
-      "104301444328712280468881725693849872696810797593153469424162796868334307449891"
-    ],
-    "p_leg_prices": [
-      0.36
-    ],
-    "p_leg_spend": [
-      35.999999999999964
-    ],
-    "yes_token_id": "10595427882555393944714994140736498423027193534271147505803345589969508929675",
-    "no_token_id": "",
-    "title": "bnk fearx dn soopers",
+    "title": "cloud9 sentinels",
     "contracts": 100,
-    "entry_k_price": 0.59,
-    "entry_p_price": 0.36,
-    "entry_kp_cost": 99.00400000000012,
+    "entry_k_price": 0.2,
+    "entry_p_price": 0.75,
+    "entry_kp_cost": 97.99499999999996,
     "entry_fills": [
       {
-        "k_price": 0.59,
-        "p_price": 0.36,
-        "contracts": 100,
-        "p_leg_prices": [
-          0.36
-        ]
+        "k_price": 0.2,
+        "p_price": 0.75,
+        "contracts": 100
       }
     ],
-    "entry_fee": 4.004,
-    "entry_edge_dollar": 0.996,
-    "entry_arr": 2.5263326349074475,
-    "entry_edge_pct": 0.010060199587894229,
-    "entry_timestamp": "2026-04-11T13:06:59.398146+00:00",
-    "entry_trade_number": "T04268",
-    "poly_fee_rate": 0.1,
-    "resolution_date": "2026-04-12"
-  },
-  "124": {
-    "pair_id": "124",
-    "strategy": "BUY_KN_BUY_PY",
-    "k_side": "no",
-    "p_side": "yes",
-    "kalshi_ticker": "KXATPMATCH-26APR11TRUBUD-BUD",
-    "p_token_id": "87394645741111201881049857994168233990950832020667532096063470778588282977518",
-    "p_token_ids": [
-      "87394645741111201881049857994168233990950832020667532096063470778588282977518"
-    ],
-    "p_leg_prices": [],
-    "p_leg_spend": [],
-    "yes_token_id": "87394645741111201881049857994168233990950832020667532096063470778588282977518",
-    "no_token_id": "",
-    "title": "trungelliti kjaer",
-    "contracts": 11,
-    "entry_k_price": 0.54,
-    "entry_p_price": 0.33,
-    "entry_kp_cost": 10.013209999999999,
-    "entry_fills": [
-      {
-        "k_price": 0.54,
-        "p_price": 0.33,
-        "contracts": 11
-      }
-    ],
-    "entry_fee": 0.44321,
-    "entry_edge_dollar": 0.9868,
-    "entry_arr": 4.811692969963551,
-    "entry_edge_pct": 0.09854881701272629,
-    "entry_timestamp": "2026-04-11T12:35:07.717858+00:00",
-    "entry_trade_number": "T04099",
-    "poly_fee_rate": 0.1,
-    "resolution_date": "2026-04-18"
-  },
-  "142": {
-    "pair_id": "142",
-    "strategy": "BUY_KN_BUY_PY",
-    "k_side": "no",
-    "p_side": "yes",
-    "kalshi_ticker": "KXNBAGAME-26APR12SACPOR-SAC",
-    "p_token_id": "59924568836710455927146857369417207256319816968219331280177503293262632485946",
-    "p_token_ids": [
-      "59924568836710455927146857369417207256319816968219331280177503293262632485946"
-    ],
-    "p_leg_prices": [],
-    "p_leg_spend": [],
-    "yes_token_id": "59924568836710455927146857369417207256319816968219331280177503293262632485946",
-    "no_token_id": "",
-    "title": "kings trail blazers",
-    "contracts": 4,
-    "entry_k_price": 0.9,
-    "entry_p_price": 0.09,
-    "entry_kp_cost": 3.9927599999999996,
-    "entry_fills": [
-      {
-        "k_price": 0.89,
-        "p_price": 0.09,
-        "contracts": 3
-      },
-      {
-        "k_price": 0.9,
-        "p_price": 0.09,
-        "contracts": 1
-      }
-    ],
-    "entry_fee": 0.06276,
-    "entry_edge_dollar": 0.0072,
-    "entry_arr": 0.27897022312571346,
-    "entry_edge_pct": 0.0018132820404933826,
-    "entry_timestamp": "2026-04-11T15:03:38.802078+00:00",
-    "entry_trade_number": "T04296",
+    "entry_fee": 2.995,
+    "entry_edge_dollar": 2.005,
+    "entry_arr": 3.3321547044988042,
+    "entry_edge_pct": 0.020460227562631144,
+    "entry_timestamp": "2026-04-11T18:12:41.437187+00:00",
+    "entry_trade_number": "T04438",
     "poly_fee_rate": 0.1,
     "resolution_date": "2026-04-13"
   },
-  "161": {
-    "pair_id": "161",
+  "117": {
+    "pair_id": "117",
     "strategy": "BUY_KN_BUY_PY",
     "k_side": "no",
     "p_side": "yes",
-    "kalshi_ticker": "KXPGATOUR-MAST26-PREE",
-    "p_token_id": "23929001677199884634421584409854821108392581496920266505702032309240799085085",
+    "kalshi_ticker": "KXATPMATCH-26APR12LANMUS-MUS",
+    "p_token_id": "75627024661154805202971855789824229910915010464292253202177263766197003441853",
     "p_token_ids": [
-      "23929001677199884634421584409854821108392581496920266505702032309240799085085"
+      "75627024661154805202971855789824229910915010464292253202177263766197003441853"
     ],
     "p_leg_prices": [],
     "p_leg_spend": [],
-    "yes_token_id": "23929001677199884634421584409854821108392581496920266505702032309240799085085",
-    "no_token_id": "110219663650296830580018989124066471998703546424034073114728140337754596054789",
-    "title": "reed",
-    "contracts": 12,
-    "entry_k_price": 0.95,
-    "entry_p_price": 0.04,
-    "entry_kp_cost": 11.909999999999997,
+    "yes_token_id": "75627024661154805202971855789824229910915010464292253202177263766197003441853",
+    "no_token_id": "",
+    "title": "musetti landaluce",
+    "contracts": 100,
+    "entry_k_price": 0.35,
+    "entry_p_price": 0.53,
+    "entry_kp_cost": 91.94100000000013,
     "entry_fills": [
       {
-        "k_price": 0.95,
-        "p_price": 0.039,
+        "k_price": 0.33,
+        "p_price": 0.53,
+        "contracts": 2
+      },
+      {
+        "k_price": 0.34,
+        "p_price": 0.53,
         "contracts": 10
       },
       {
-        "k_price": 0.95,
-        "p_price": 0.04,
-        "contracts": 2
+        "k_price": 0.35,
+        "p_price": 0.53,
+        "contracts": 88
       }
     ],
-    "entry_fee": 0.04,
-    "entry_edge_dollar": 0.09,
-    "entry_arr": 1.2085030211175438,
-    "entry_edge_pct": 0.007556675062972581,
-    "entry_timestamp": "2026-04-11T17:13:27.888435+00:00",
-    "entry_trade_number": "T04328",
-    "poly_fee_rate": 0.0,
-    "resolution_date": "2026-04-13"
-  },
-  "164": {
-    "pair_id": "164",
-    "strategy": "BUY_KY_BUY_PN",
-    "k_side": "yes",
-    "p_side": "no",
-    "kalshi_ticker": "KXPGATOUR-MAST26-JROS",
-    "p_token_id": "19059473655881665827167360703173170369997368150134958921180711487840168880724",
-    "p_token_ids": [
-      "19059473655881665827167360703173170369997368150134958921180711487840168880724"
-    ],
-    "p_leg_prices": [],
-    "p_leg_spend": [],
-    "yes_token_id": "21202285189814573471226720134408126754666767714963331163406584149708020395832",
-    "no_token_id": "19059473655881665827167360703173170369997368150134958921180711487840168880724",
-    "title": "rose",
-    "contracts": 85,
-    "entry_k_price": 0.04,
-    "entry_p_price": 0.95,
-    "entry_kp_cost": 84.29699999999995,
-    "entry_fills": [
-      {
-        "k_price": 0.04,
-        "p_price": 0.949,
-        "contracts": 83
-      },
-      {
-        "k_price": 0.04,
-        "p_price": 0.95,
-        "contracts": 2
-      }
-    ],
-    "entry_fee": 0.23,
-    "entry_edge_dollar": 0.703,
-    "entry_arr": 1.3375004678051363,
-    "entry_edge_pct": 0.008339561312977282,
-    "entry_timestamp": "2026-04-11T17:22:47.275255+00:00",
-    "entry_trade_number": "T04330",
-    "poly_fee_rate": 0.0,
-    "resolution_date": "2026-04-13"
-  },
-  "114": {
-    "pair_id": "114",
-    "strategy": "BUY_KN_BUY_PY",
-    "k_side": "no",
-    "p_side": "yes",
-    "kalshi_ticker": "KXATPMATCH-26APR11CARMOL-MOL",
-    "p_token_id": "60455775645009651055731287624009749962494246614556080992686889543327801709375",
-    "p_token_ids": [
-      "60455775645009651055731287624009749962494246614556080992686889543327801709375"
-    ],
-    "p_leg_prices": [],
-    "p_leg_spend": [],
-    "yes_token_id": "60455775645009651055731287624009749962494246614556080992686889543327801709375",
-    "no_token_id": "",
-    "title": "baena molcan",
-    "contracts": 14,
-    "entry_k_price": 0.52,
-    "entry_p_price": 0.41,
-    "entry_kp_cost": 13.60866,
-    "entry_fills": [
-      {
-        "k_price": 0.52,
-        "p_price": 0.41,
-        "contracts": 14
-      }
-    ],
-    "entry_fee": 0.58866,
-    "entry_edge_dollar": 0.3913,
-    "entry_arr": 1.428807371554625,
-    "entry_edge_pct": 0.028756688755542395,
-    "entry_timestamp": "2026-04-11T15:41:35.209832+00:00",
-    "entry_trade_number": "T04299",
+    "entry_fee": 4.081,
+    "entry_edge_dollar": 8.059,
+    "entry_arr": 3.462079496411169,
+    "entry_edge_pct": 0.0876540390032723,
+    "entry_timestamp": "2026-04-11T18:12:41.467229+00:00",
+    "entry_trade_number": "T04439",
     "poly_fee_rate": 0.1,
-    "resolution_date": "2026-04-18"
+    "resolution_date": "2026-04-20"
   }
 }
