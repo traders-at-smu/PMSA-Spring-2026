@@ -289,10 +289,10 @@
     ],
     "entry_fee": 0.08902,
     "entry_edge_dollar": 0.011,
-    "entry_arr": 0.22121019641427175,
+    "entry_arr": 0.2212203563160197,
     "entry_edge_pct": 0.005520306482589411,
-    "entry_timestamp": "2026-04-11T21:23:38.300660+00:00",
-    "entry_trade_number": "T04969",
+    "entry_timestamp": "2026-04-11T21:24:14.434560+00:00",
+    "entry_trade_number": "T04972",
     "poly_fee_rate": 0.1,
     "resolution_date": "2026-04-20"
   },
