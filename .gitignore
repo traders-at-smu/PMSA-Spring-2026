@@ -16,12 +16,13 @@ logs/
 # Sensitive / generated data files
 **/config/settings.json
 **/config/config.json
+api-keys.json
 **/data/state.db
 **/data/state.db-shm
 **/data/state.db-wal
 **/opportunities*.json
 **/trades*.json
-config.json
+# config.json is now tracked (credentials live in api-keys.json which is gitignored above)
 
 # Python artifacts
 __pycache__/
@@ -37,3 +38,5 @@ markets.db-wal
 sports_markets.db
 sports_markets.db-shm
 sports_markets.db-wal
+ 
+v5/config.json

@@ -46,6 +46,17 @@ def _strip_comments(text: str) -> str:
     )
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge override into base. override wins on scalar conflicts."""
+    result = dict(base)
+    for k, v in override.items():
+        if k in result and isinstance(result[k], dict) and isinstance(v, dict):
+            result[k] = _deep_merge(result[k], v)
+        else:
+            result[k] = v
+    return result
+
+
 def load_config(path: str) -> dict:
     example = _SCRIPT_DIR / "config.example.json"
     p = Path(path)
@@ -60,8 +71,16 @@ def load_config(path: str) -> dict:
     if p.exists() and p.resolve() != example.resolve():
         with p.open(encoding="utf-8") as f:
             user_cfg = json.loads(_strip_comments(f.read()))
-            # Shallow merge: user keys override defaults
-            cfg.update(user_cfg)
+            cfg = _deep_merge(cfg, user_cfg)
+
+    # Load api-keys.json from the same directory as config, deep-merge on top
+    keys_path = Path(path).parent / "api-keys.json"
+    if not keys_path.is_absolute():
+        keys_path = _SCRIPT_DIR / keys_path
+    if keys_path.exists():
+        with keys_path.open(encoding="utf-8") as f:
+            keys = json.loads(_strip_comments(f.read()))
+        cfg = _deep_merge(cfg, keys)
 
     # Ensure all data paths are prefixed with data/ if not already absolute
     data_keys = [

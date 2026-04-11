@@ -24,9 +24,8 @@ dist/
 .DS_Store
 Thumbs.db
 
-# Secrets/config
-config.json
-config/config.json
+# Secrets — credentials live in api-keys.json (gitignored); config.json is safe to commit
+api-keys.json
 config/credentials.json
 *.pem
 *.key

@@ -1,0 +1,21 @@
+{
+    "_doc": "API credentials template. Copy to api-keys.json and fill in your values. This file is safe to commit — api-keys.json is gitignored.",
+    "kalshi": {
+        "api_key": "",
+        "private_key_base64": "",
+        "base_url": ""
+    },
+    "polymarket": {
+        "private_key": "",
+        "api_key": "",
+        "api_secret": "",
+        "api_passphrase": "",
+        "clob_url": "",
+        "gamma_url": ""
+    },
+    "dropbox": {
+        "app_key": "",
+        "app_secret": "",
+        "refresh_token": ""
+    }
+}
