@@ -8,7 +8,7 @@
     "min_edge_pct": 0.001,
 
     "_doc_max_contracts": "Maximum contracts to accumulate in a single arb trade. Depth-walk stops when this cap is reached.",
-    "max_contracts": 100,
+    "max_contracts": 1000,
 
     "_doc_scan_interval_seconds": "Seconds between full scan cycles in 'run' mode.",
     "scan_interval_seconds": 2,
@@ -29,7 +29,7 @@
     "skip_multi_outcome": false,
 
     "_doc_exit_enabled": "Monitor open positions and sell at bids when the exit rule is met.",
-    "exit_enabled": true,
+    "exit_enabled": false,
 
     "_doc_exit_target_total_price": "Combined YES+NO bid threshold to trigger early exit (e.g. 0.99). V6 holds to expiry by default — only used for early-exit scanning.",
     "exit_target_total_price": 0.99,
