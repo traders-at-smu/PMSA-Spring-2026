@@ -528,27 +528,27 @@ class PolymarketConnector:
         return max(prices) if prices else 0.0
 
     def get_fee_rate(self, token_id: str) -> float:
-        """Fetch the live taker fee rate for a token from the CLOB API.
+        """Return the taker fee rate for a Polymarket token.
 
-        Returns the fee rate as a decimal (e.g. 0.03 for 3% Sports).
-        The endpoint returns base_fee in basis points (bps); divide by 10000.
+        Checks feesEnabled via the Gamma API. If fees are disabled (e.g. NHL),
+        returns 0.0. If enabled, returns the fixed sports taker rate of 0.03.
 
-        Endpoint: GET https://clob.polymarket.com/fee-rate?token_id={token_id}
-        Response:  {"base_fee": <int bps>}  e.g. {"base_fee": 300} for Sports (3%)
+        The CLOB fee-rate endpoint returns incorrect values (1000 bps instead of
+        300 bps for sports), so we do not use it for the rate itself.
         """
         if not token_id:
             raise RuntimeError("Polymarket fee-rate lookup failed: empty token_id")
         res = requests.get(
-            f"{self.clob_host}/fee-rate",
-            params={"token_id": token_id},
+            f"{self.gamma_host}/markets",
+            params={"clob_token_ids": token_id},
             timeout=_TIMEOUT,
         )
         res.raise_for_status()
-        payload = res.json()
-        if "base_fee" not in payload:
-            raise RuntimeError(f"Polymarket fee-rate response missing base_fee: {payload}")
-        bps = int(payload.get("base_fee", 0))
-        return bps / 10000.0
+        data = res.json()
+        if not data:
+            raise RuntimeError(f"Polymarket gamma API returned no market for token_id={token_id}")
+        fees_enabled = data[0].get("feesEnabled", True)
+        return 0.03 if fees_enabled else 0.0
 
     def get_question_by_token(self, token_id: str) -> str:
         """Fetch the market question text for a Polymarket token ID via Gamma API.

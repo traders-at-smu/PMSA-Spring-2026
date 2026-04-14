@@ -75,8 +75,8 @@
             "round_up_to_cent": true
         },
         "polymarket": {
-            "_doc": "Formula is for config validation only; runtime uses the live fee-rate endpoint.",
-            "formula": "p * (1 - p) * 0.02 * c"
+            "_doc": "Formula is for config validation only; runtime uses 0.03 if feesEnabled=true (Gamma API), 0.0 if feesEnabled=false (e.g. NHL).",
+            "formula": "p * (1 - p) * 0.03 * c"
         }
     },
 
