@@ -11,7 +11,7 @@
     "max_contracts": 1000,
 
     "_doc_scan_interval_seconds": "Seconds between full scan cycles in 'run' mode.",
-    "scan_interval_seconds": 2,
+    "scan_interval_seconds": 0,
 
     "_doc_pairs_per_cycle": "Max pairs to scan per cycle. Pairs with open positions are always scanned first; the rest rotate so every pair gets checked evenly.",
     "pairs_per_cycle": 25,
