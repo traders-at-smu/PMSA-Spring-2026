@@ -253,17 +253,7 @@ def _enrich_records(records: list[dict], pairs_lookup: dict[str, dict]) -> None:
 def export(data_dir: str, out_path: str, clear_after: bool = False) -> None:
     data = Path(data_dir)
 
-    trades   = _load_ndjson(data / "entry_trades.json")
-    positions: dict = _load_json(data / "open_positions.json")  # keyed by pair_id
-
-    # Build lookup: entry_trade_number → position record (for resolution_date etc.)
-    pos_by_entry_trade: dict[str, dict] = {}
-    for pos in positions.values():
-        tn = pos.get("entry_trade_number", "")
-        if tn:
-            pos_by_entry_trade[tn] = pos
-
-    entry_records: list[dict] = trades
+    entry_records: list[dict] = _load_ndjson(data / "entry_trades.json")
 
     # Determine max fill levels across all entry fills so column count is consistent
     max_entry_levels = max(
@@ -286,17 +276,13 @@ def export(data_dir: str, out_path: str, clear_after: bool = False) -> None:
     for t in entry_records:
         tn     = t["trade_number"]
         fills  = t.get("fills", [])
-        pos    = pos_by_entry_trade.get(tn, {})
 
         avg_k  = _weighted_avg(fills, "k_price")
         avg_p  = _weighted_avg(fills, "p_price")
         avg_combined = round(avg_k + avg_p, 4) if avg_k is not None and avg_p is not None else ""
 
-        status = "open" if pos else "entry_only"
-
         row: dict = {
             "trade_number":          tn,
-            "status":                status,
             "pair_id":               t.get("pair_id", ""),
             "title":                 t.get("title", ""),
             "poly_market_title":     t.get("poly_market_title", ""),
@@ -305,7 +291,7 @@ def export(data_dir: str, out_path: str, clear_after: bool = False) -> None:
             "mode":                  t.get("mode", ""),
             "execution_date":        t.get("execution_date", ""),
             "timestamp":             t.get("timestamp", ""),
-            "resolution_date":       pos.get("resolution_date", "") or t.get("resolution_date", ""),
+            "resolution_date":       t.get("resolution_date", ""),
             "entry_fills_summary":   _fmt_fills(fills),
             "entry_avg_k_price":     round(avg_k, 4) if avg_k is not None else "",
             "entry_avg_p_price":     round(avg_p, 4) if avg_p is not None else "",
@@ -353,9 +339,7 @@ def export(data_dir: str, out_path: str, clear_after: bool = False) -> None:
         for row in rows:
             writer.writerow({k: row.get(k, "") for k in fieldnames})
 
-    open_count = sum(1 for r in rows if r["status"] == "open")
     print(f"Exported {len(rows)} trade(s) -> {out}")
-    print(f"  {len(rows)} entries  |  {open_count} open")
 
     if clear_after:
         entry_log = Path(data_dir) / "entry_trades.json"
