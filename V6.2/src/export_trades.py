@@ -381,23 +381,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    # Load config + api-keys so Dropbox upload works when run directly
-    def _deep_merge(base: dict, override: dict) -> dict:
-        for k, v in override.items():
-            if k in base and isinstance(base[k], dict) and isinstance(v, dict):
-                _deep_merge(base[k], v)
-            else:
-                base[k] = v
-        return base
-
-    _cfg: dict = {}
-    for _fname in ("config.json", "api-keys.json"):
-        _p = _base / _fname
-        if _p.exists():
-            with _p.open(encoding="utf-8") as _f:
-                _deep_merge(_cfg, json.load(_f))
-
     if args.out:
         export(args.data, args.out)
     else:
-        dated_export(args.data, cfg=_cfg)
+        dated_export(args.data)
