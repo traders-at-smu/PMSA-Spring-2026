@@ -381,7 +381,15 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
+    # Load config + api-keys so Dropbox upload works when run directly
+    _cfg: dict = {}
+    for _fname in ("config.json", "api-keys.json"):
+        _p = _base / _fname
+        if _p.exists():
+            with _p.open(encoding="utf-8") as _f:
+                _cfg.update(json.load(_f))
+
     if args.out:
         export(args.data, args.out)
     else:
-        dated_export(args.data)
+        dated_export(args.data, cfg=_cfg)
