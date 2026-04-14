@@ -82,7 +82,7 @@ def scheduler_loop(cfg):
 
     last_run_date = None
     
-    print(f"  [scheduler] Background updater active. Target time: 03:00 daily.")
+    print(f"  [scheduler] Background updater active. Target time: 06:00 UTC (01:00 CDT) daily.")
 
     # Optional: Run immediately on startup
     if cfg.get("update_on_startup", False):
@@ -97,8 +97,8 @@ def scheduler_loop(cfg):
     while True:
         now = datetime.now()
 
-        # Check if it's 3:00 AM and we haven't run today
-        if now.hour == 3 and now.minute == 0 and last_run_date != now.date():
+        # Check if it's 6:00 AM UTC (1:00 AM CDT) and we haven't run today
+        if now.hour == 6 and now.minute == 0 and last_run_date != now.date():
             if run_generator(generator_dir):
                 copy_newest_output(generator_outputs, v6_inputs)
             run_export(v6_dir, cfg)
