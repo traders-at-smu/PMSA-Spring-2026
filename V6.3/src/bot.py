@@ -1965,10 +1965,22 @@ def evaluate_soccer(
         )
 
         if walk["contracts"] <= 0:
-            best_k = final_k_levels[0]["price"] if final_k_levels else 1.0
-            best_p = final_p_levels[0]["price"] if final_p_levels else 1.0
-            k_fee  = apply_fee(k_fee_fn, best_k, 1, k_round_up)
-            p_fee  = apply_fee(p_fee_fn, best_p, 1, False, round_decimals=5)
+            if k_leg_fee_fns:
+                # 2-Kalshi-leg: compute fee per leg from each leg's best price
+                k_leg_prices = [lvl[0]["price"] if lvl else 1.0 for lvl in k_level_lists]
+                k_fee = sum(apply_fee(fn, p, 1, k_round_up) for fn, p in zip(k_leg_fee_fns, k_leg_prices))
+                best_k = sum(k_leg_prices)
+            else:
+                best_k = final_k_levels[0]["price"] if final_k_levels else 1.0
+                k_fee  = apply_fee(k_fee_fn, best_k, 1, k_round_up)
+            if len(p_level_lists) > 1:
+                # 2-Polymarket-leg: compute fee per leg from each leg's best price
+                p_leg_prices = [lvl[0]["price"] if lvl else 1.0 for lvl in p_level_lists]
+                p_fee = sum(apply_fee(p_fee_fn, p, 1, False, round_decimals=5) for p in p_leg_prices)
+                best_p = sum(p_leg_prices)
+            else:
+                best_p = final_p_levels[0]["price"] if final_p_levels else 1.0
+                p_fee  = apply_fee(p_fee_fn, best_p, 1, False, round_decimals=5)
             total  = best_k + best_p + k_fee + p_fee
             print(f"    {sname:<40}  no arb  (k={best_k:.3f}+kfee={k_fee:.4f} + p={best_p:.3f}+pfee={p_fee:.4f} = {total:.4f}, target={target:.1f})")
             continue
