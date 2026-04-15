@@ -4,7 +4,9 @@
       "Bash(grep -l \"demo\\\\|Demo\" \"d:\\\\GitHub\\\\polymarket-copy-trading-bot-mtg\\\\polymarket-copy-trading-bot\\\\V1\\\\src\\\\dashboard-ui\\\\src\\\\components\"/*.tsx)",
       "Bash(cp \"d:/GitHub/polymarket-copy-trading-bot-mtg/polymarket-copy-trading-bot/V1/src/dashboard-ui/src/components/ExecutionPanel.tsx\" /tmp/exec_current_backup.tsx)",
       "Bash(cp /tmp/exec_9167200.tsx \"d:/GitHub/polymarket-copy-trading-bot-mtg/polymarket-copy-trading-bot/V1/src/dashboard-ui/src/components/ExecutionPanel.tsx\")",
-      "Bash(python3 -c \":*)"
+      "Bash(python3 -c \":*)",
+      "Bash(python main.py --config config.json validate)",
+      "Bash(python3 -c ':*)"
     ]
   }
 }
