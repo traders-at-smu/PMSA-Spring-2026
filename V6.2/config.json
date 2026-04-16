@@ -83,7 +83,7 @@
     "_doc_dropbox": "Dropbox upload settings. Credentials (app_key, app_secret, refresh_token) go in api-keys.json.",
     "dropbox": {
         "enabled": true,
-        "remote_path": "/"
+        "remote_path": "/Daily Excel"
     },
 
     "auto_update_pairs": true,
