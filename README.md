@@ -24,7 +24,8 @@ Legacy versions (V1–V4) and the arb-scanner web app are preserved under `Archi
 ├── V6/              # Active bot (Sports focus)
 ├── V5/              # Active bot (General focus)
 ├── V6 EXP/          # Experimental branch
-├── Pairs Generator V3/ # New pair generation & matching logic
+├── Pairs Generator V6.2/ # Pair generation for V6.2 bot
+├── Pairs Generator V6.4/ # Pair generation for V6.4 bot
 ├── Polytoken/       # Legacy pair generation pipeline
 ├── Archived_Models/ # Legacy: V1-V4, V6 CSV, arb-scanner
 ├── Information/     # Fee docs, trade rules, design notes

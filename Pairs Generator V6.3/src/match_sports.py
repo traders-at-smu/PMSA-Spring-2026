@@ -364,13 +364,6 @@ _TICKER_CODE_MAP: dict[str, dict[str, str]] = {
         "AJA":  "Ajax",               "PSV":  "PSV Eindhoven",
         "FEY":  "Feyenoord",
         "GIR":  "Girona",             "CAS":  "Casa Pia",
-        # UEFA Europa League 2026 codes
-        "RCC":  "RC Celta de Vigo",   "SCF":  "SC Freiburg",
-        "AVL":  "Aston Villa",        "BFC":  "Bologna",
-        "FRA":  "Frankfurt",          "MON":  "AS Monaco",
-        "TOT":  "Tottenham",          "BIL":  "Athletic Bilbao",
-        "GLB":  "Galatasaray",        "RAN":  "Rangers",
-        "OLY":  "Olympiakos",         "MAL":  "Malmo FF",
         # South American
         "ARG":  "Argentinos Juniors", "BAN":  "Banfield",
         "IACC": "Instituto Córdoba",  "DYJ":  "Defensa y Justicia",
@@ -471,9 +464,6 @@ def extract_kalshi_outcome(market_id: str, ticker: str, title: str, teams: list[
     m = re.search(r"-([A-Z0-9]+)$", market_id_upper)
     if m:
         code = m.group(1)
-        # Tie/draw contracts have a fixed suffix, not a team code
-        if code in ("TIE", "DRAW"):
-            return "Draw"
         if sport in _TICKER_CODE_MAP and code in _TICKER_CODE_MAP[sport]:
             return _TICKER_CODE_MAP[sport][code]
         # Fallback: search all maps
@@ -481,12 +471,9 @@ def extract_kalshi_outcome(market_id: str, ticker: str, title: str, teams: list[
             if code in d:
                 return d[code]
         # Fallback 2: try to match code against the teams list
-        # Use both spaced and spaceless forms ("SC FREIBURG" → "SCFREIBURG")
-        # so codes like "SCF" match "SC Freiburg" correctly.
         for team in teams:
             t_norm = to_ascii(team).upper()
-            t_norm_ns = t_norm.replace(" ", "")
-            if t_norm.startswith(code) or t_norm_ns.startswith(code) or code.startswith(t_norm[:3]):
+            if t_norm.startswith(code) or code.startswith(t_norm[:3]):
                 return team
                 
     # 2. Check title for team names
@@ -1010,6 +997,7 @@ def extract_player_names(title: str) -> list[str]:
 # (e.g. "will they draw?", "will the home side cover -1.5?") and cannot
 # be paired with a Kalshi winner market.
 _INCOMPATIBLE_SLUG_FRAGMENTS = (
+    "-draw",
     "-spread-",
     "-total-",
     "-over-",
@@ -1030,104 +1018,6 @@ _INCOMPATIBLE_SLUG_FRAGMENTS = (
     "-handicap",
     # We now allow -1h- and -2h- but only if both platforms match
 )
-
-
-# ---------------------------------------------------------------------------
-# Soccer trio consolidation
-# ---------------------------------------------------------------------------
-
-def _consolidate_soccer_trio(results: list[dict]) -> list[dict]:
-    """
-    Group results by (poly_slug, kalshi_event_ticker). When a group contains
-    exactly 3 rows that form a full soccer trio (one Draw outcome + two winner
-    outcomes), merge them into a single output row with:
-      - kalshi_market_id  = T1 Kalshi market ID (primary)
-      - kalshi_t2_ticker  = T2 Kalshi market ID
-      - kalshi_tie_ticker = Draw Kalshi market ID
-      - poly_outcomes     = ["Team1", "Team2", "Draw"] (T1/T2/Tie order)
-      - poly_token_ids    = [t1y,t1n, t2y,t2n, tiy,tin] (aligned with above)
-    Groups that are not a complete trio are returned as-is (binary pairs).
-    """
-    from collections import defaultdict
-
-    groups: dict[tuple, list[dict]] = defaultdict(list)
-    for rec in results:
-        key = (rec.get("poly_slug", ""), rec.get("kalshi_event_ticker", ""))
-        groups[key].append(rec)
-
-    final: list[dict] = []
-    for (slug, event_ticker), recs in groups.items():
-        if len(recs) == 1 or len(recs) > 3:
-            final.extend(recs)
-            continue
-
-        if len(recs) == 2:
-            draw_recs = [r for r in recs
-                         if r.get("poly_outcome", "").strip().lower() in ("draw", "tie", "drawn")]
-            if draw_recs:
-                # Incomplete soccer trio (Draw + one team, missing the other) — drop it.
-                continue
-            # Binary game (two sides, no draw) — keep as separate rows so each
-            # outcome is independently tradeable with its own poly token.
-            final.extend(recs)
-            continue
-
-        tie_recs = [r for r in recs
-                    if r.get("poly_outcome", "").strip().lower() in ("draw", "tie", "drawn")]
-        non_tie_recs = [r for r in recs if r not in tie_recs]
-
-        if len(tie_recs) != 1 or len(non_tie_recs) != 2:
-            final.extend(recs)
-            continue
-
-        tie_rec = tie_recs[0]
-
-        # Determine T1/T2 ordering from the poly_outcomes list stored in each rec.
-        try:
-            all_outcomes = json.loads(non_tie_recs[0].get("poly_outcomes", "[]"))
-        except Exception:
-            all_outcomes = []
-
-        if len(all_outcomes) >= 2:
-            # T1 = whichever non-tie rec's outcome appears first in the outcomes list
-            order = {o.strip().lower(): i for i, o in enumerate(all_outcomes)}
-            non_tie_recs.sort(key=lambda r: order.get(r["poly_outcome"].strip().lower(), 99))
-        t1_rec, t2_rec = non_tie_recs[0], non_tie_recs[1]
-
-        # Reorder tokens to canonical [T1y,T1n, T2y,T2n, Tiy,Tin] layout.
-        try:
-            outcomes_list = json.loads(t1_rec.get("poly_outcomes", "[]"))
-            token_ids_list = json.loads(t1_rec.get("poly_token_ids", "[]"))
-        except Exception:
-            outcomes_list, token_ids_list = [], []
-
-        t1_label  = t1_rec["poly_outcome"]
-        t2_label  = t2_rec["poly_outcome"]
-        tie_label = tie_rec["poly_outcome"]
-
-        if len(outcomes_list) == 3 and len(token_ids_list) == 6:
-            label_idx = {o.strip().lower(): i for i, o in enumerate(outcomes_list)}
-            i1 = label_idx.get(t1_label.strip().lower(),  0)
-            i2 = label_idx.get(t2_label.strip().lower(),  1)
-            it = label_idx.get(tie_label.strip().lower(), 2)
-            ordered_tokens   = [
-                token_ids_list[2*i1], token_ids_list[2*i1+1],
-                token_ids_list[2*i2], token_ids_list[2*i2+1],
-                token_ids_list[2*it], token_ids_list[2*it+1],
-            ]
-            ordered_outcomes = [t1_label, t2_label, tie_label]
-        else:
-            ordered_tokens   = token_ids_list
-            ordered_outcomes = outcomes_list
-
-        consolidated = dict(t1_rec)
-        consolidated["poly_outcomes"]     = json.dumps(ordered_outcomes)
-        consolidated["poly_token_ids"]    = json.dumps(ordered_tokens)
-        consolidated["kalshi_t2_ticker"]  = t2_rec["kalshi_market_id"]
-        consolidated["kalshi_tie_ticker"] = tie_rec["kalshi_market_id"]
-        final.append(consolidated)
-
-    return final
 
 
 # ---------------------------------------------------------------------------
@@ -1267,12 +1157,10 @@ def run():
                 seen_lc.add(t.lower())
         
         # Add individual market details
-        # Use the specific market_id (not the event ticker) so that draw market
-        # IDs containing "-TIE" or "-DRAW" are correctly classified.
         ev["markets"].append({
             "market_id":    row["market_id"],
             "title":        row["raw_title"] or row["normalized_title"],
-            "market_type":  get_market_type(row["market_id"], row["raw_title"], "kalshi"),
+            "market_type":  get_market_type(ticker, row["raw_title"], "kalshi"),
             "outcome_team": extract_kalshi_outcome(row["market_id"], ticker, row["raw_title"], ev["teams"], ev["sport"]),
         })
 
@@ -1320,12 +1208,6 @@ def run():
             continue
 
         poly_market_type = get_market_type(slug, row["raw_title"], "polymarket")
-        # For 3-outcome soccer: the Draw outcome row shares the same slug as T1/T2
-        # (no "-draw" fragment), so poly_market_type would be "winner". Override to
-        # "draw" so it can match against the Kalshi draw/tie market.
-        _outcome_lc = (row["outcome"] or "").strip().lower()
-        if _outcome_lc in ("draw", "tie", "drawn"):
-            poly_market_type = "draw"
         poly_sport       = classify_poly_sport(slug)
         # Include slug in text to help extract teams from abbreviations/identifiers
         text             = (row["outcome"] or "") + " " + (row["raw_title"] or "") + " " + (row["normalized_title"] or "") + " " + slug
@@ -1453,15 +1335,7 @@ def run():
             if ev["sport"] not in _TOURNAMENT_SPORTS and days_apart > 1:
                 continue
 
-            # Tiebreaker 1: prefer game-result events over advance/btts/1h/corners markets.
-            # Tiebreaker 2: prefer synthetic 3-outcome trio (negrisk_*) over plain binary
-            #   markets so trio outcomes displace binary matches for the same Kalshi slot.
-            _ev_upper = ev["event_ticker"].upper()
-            _game_priority = 0 if any(
-                s in _ev_upper for s in ("ADVANCE", "BTTS", "1H", "CORNERS", "TOTAL", "SPREAD")
-            ) else 1
-            _is_trio = 1 if row["market_id"].startswith("negrisk_") else 0
-            score = (len(shared), _game_priority, _is_trio, -days_apart)
+            score = (len(shared), -days_apart)             # higher shared > fewer days
 
             # For each market in the event, check if it matches poly_market_type and outcome
             for mkt in ev["markets"]:
@@ -1476,14 +1350,7 @@ def run():
                     p_out_norm = to_ascii(poly_outcome.lower())
                     k_out_norm = to_ascii(kalshi_outcome.lower())
                     if p_out_norm not in k_out_norm and k_out_norm not in p_out_norm:
-                        # Substring check failed — try canonical team name extraction
-                        # as fallback (handles "FC Bayern München" vs "Bayern Munich")
-                        p_out_teams = set(t.lower() for t in extract_teams(
-                            poly_outcome, pattern, canonical_map, poly_sport))
-                        k_out_teams = set(t.lower() for t in extract_teams(
-                            kalshi_outcome, pattern, canonical_map, ev["sport"]))
-                        if not (p_out_teams & k_out_teams):
-                            continue
+                        continue
 
                 ticker = ev["event_ticker"]
                 mkt_id = mkt["market_id"]
@@ -1510,10 +1377,8 @@ def run():
                     # Normalize token IDs and align with outcomes
                     token_ids = _normalize_token_ids_list(poly_raw.get("clobTokenIds", []))
 
-                    # Reorder so primary_outcome token is always at index 0.
-                    # Only applies to binary (2-outcome) markets; 3-outcome soccer
-                    # markets are reordered during trio consolidation instead.
-                    if (primary_outcome and len(outcomes) == 2 and len(token_ids) == 2
+                    # Reorder so primary_outcome token is always at index 0
+                    if (primary_outcome and len(outcomes) >= 2 and len(token_ids) >= 2
                             and outcomes[0].strip().lower() != primary_outcome.strip().lower()
                             and outcomes[1].strip().lower() == primary_outcome.strip().lower()):
                         outcomes = [outcomes[1], outcomes[0]]
@@ -1539,7 +1404,6 @@ def run():
                         "resolution_time":     poly_raw.get("endDateIso") or "",
                         "kalshi_event_ticker": ticker,
                         "kalshi_market_id":    mkt_id,
-                        "kalshi_outcome":      mkt["outcome_team"],
                         "kalshi_title":        mkt["title"],
                         "kalshi_teams":        "; ".join(ev["teams"]),
                         "kalshi_date":         ev["date"].strftime("%Y-%m-%d"),
@@ -1548,18 +1412,14 @@ def run():
                     })
 
     # Step 1: best poly per kalshi (already enforced by best_for_kalshi dict)
-    # Step 2: from those, keep best kalshi per (poly_market_id, outcome) pair.
-    # Keying by outcome (not just market_id) lets all 3 soccer outcome rows survive
-    # so _consolidate_soccer_trio can merge them into one output row. For binary
-    # pairs only one outcome row matched in the inner loop anyway, so this is safe.
-    best_for_poly: dict[tuple, tuple] = {}
+    # Step 2: from those, keep best kalshi per poly (one-to-one pairing)
+    best_for_poly: dict[str, tuple] = {}
     for score, rec in best_for_kalshi.values():
-        key = (rec["poly_market_id"], rec["poly_outcome"])
-        if key not in best_for_poly or score > best_for_poly[key][0]:
-            best_for_poly[key] = (score, rec)
+        pid = rec["poly_market_id"]
+        if pid not in best_for_poly or score > best_for_poly[pid][0]:
+            best_for_poly[pid] = (score, rec)
 
     results = [v[1] for v in best_for_poly.values()]
-    results = _consolidate_soccer_trio(results)
 
     # Filter out expired markets. Allow live/in-progress games whose
     # Polymarket endDateIso has already ticked past midnight UTC (date-only
@@ -1596,11 +1456,10 @@ def run():
         "expiry_poly_utc", "resolution_time",
         "kalshi_event_ticker", "kalshi_market_id", "kalshi_title",
         "kalshi_teams", "kalshi_date", "kalshi_url", "expiry_kalshi_utc",
-        "kalshi_t2_ticker", "kalshi_tie_ticker",
     ]
 
     with open(OUTPUT_FILE, "w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction="ignore", restval="")
+        writer = csv.DictWriter(fh, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(results)
 

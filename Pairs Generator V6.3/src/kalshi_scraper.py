@@ -85,7 +85,7 @@ def flush(conn, cursor, batch, stored):
             continue
 
         is_golf_tennis = any(ticker.startswith(p) for p in GOLF_TENNIS_PREFIXES)
-        max_days_ahead = 14 if is_golf_tennis else 3
+        max_days_ahead = 14 if is_golf_tennis else 2
 
         exp_str = market.get("expected_expiration_time") or market.get("close_time", "")
         try:

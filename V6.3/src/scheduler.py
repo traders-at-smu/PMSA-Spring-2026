@@ -19,17 +19,17 @@ def get_latest_file(directory, pattern="*.csv"):
 def run_generator(generator_dir):
     ts = datetime.now().strftime("%H:%M:%S")
     print(f"\n  {Fore.CYAN}┌──────────────────────────────────────────────────────────┐{Style.RESET_ALL}")
-    print(f"  {Fore.CYAN}│{Style.RESET_ALL}  {Style.BRIGHT}SCHEDULED UPDATE:{Style.RESET_ALL} Running Pairs Generator V3...    {Fore.CYAN}│{Style.RESET_ALL}")
+    print(f"  {Fore.CYAN}│{Style.RESET_ALL}  {Style.BRIGHT}SCHEDULED UPDATE:{Style.RESET_ALL} Running Pairs Generator V6.3...    {Fore.CYAN}│{Style.RESET_ALL}")
     print(f"  {Fore.CYAN}└──────────────────────────────────────────────────────────┘{Style.RESET_ALL}")
     
     try:
         import sys
-        # Run main.py in Pairs Generator V3
+        # Run main.py in Pairs Generator V6.3
         result = subprocess.run([sys.executable, "main.py"], cwd=generator_dir, check=True, capture_output=True)
-        print(f"  {Style.DIM}[{ts}] [scheduler] Pairs Generator V3 finished successfully.{Style.RESET_ALL}")
+        print(f"  {Style.DIM}[{ts}] [scheduler] Pairs Generator V6.3 finished successfully.{Style.RESET_ALL}")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"  {Fore.RED}[{ts}] [scheduler] ERROR running Pairs Generator V3: {e}{Style.RESET_ALL}")
+        print(f"  {Fore.RED}[{ts}] [scheduler] ERROR running Pairs Generator V6.3: {e}{Style.RESET_ALL}")
         if e.stderr:
             print(f"  {Fore.RED}Details: {e.stderr.decode()}{Style.RESET_ALL}")
         return False
@@ -76,7 +76,7 @@ def scheduler_loop(cfg):
     # Resolve paths relative to the V6 EXP directory
     v6_dir = Path(__file__).parent.parent.resolve()
     root_dir = v6_dir.parent
-    generator_dir = root_dir / "Pairs Generator V3"
+    generator_dir = root_dir / "Pairs Generator V6.3"
     generator_outputs = generator_dir / "outputs"
     v6_inputs = v6_dir / cfg.get("input_files_dir", "input_files")
 

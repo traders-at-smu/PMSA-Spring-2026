@@ -761,6 +761,9 @@ def load_pairs(path: str) -> list[dict[str, Any]]:
             "pair_id": pair_id,
             "title": _pick(row, "title_clean", "title", "poly_title", "kalshi_title", default=pair_id),
             "kalshi_ticker": kalshi_ticker,
+            # Soccer 3-outcome columns (optional — absent for standard binary pairs)
+            "kalshi_t2_ticker": _pick(row, "kalshi_t2_ticker") or None,
+            "kalshi_tie_ticker": _pick(row, "kalshi_tie_ticker") or None,
             # Token IDs are optional — if absent they are resolved via slug at scan time
             "polymarket_yes_token_id": _pick(row, "polymarket_yes_token_id"),
             "polymarket_no_token_id": _pick(row, "polymarket_no_token_id"),

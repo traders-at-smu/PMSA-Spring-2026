@@ -12,7 +12,7 @@ DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "markets.db")
 
 
 def main():
-    print("=== V3: Async Sports Pairs Generator ===\n")
+    print("=== V6.3: Async Sports Pairs Generator ===\n")
 
     print("=== Step 1 & 2: Scrape sports markets (async) ===\n")
     kalshi_scraper.run()
@@ -34,7 +34,7 @@ def main():
             os.remove(p)
     print("Database cleaned up.")
 
-    print("\nDone. V3 Sports pairs exported to outputs/")
+    print("\nDone. V6.3 Sports pairs exported to outputs/")
 
 
 if __name__ == "__main__":

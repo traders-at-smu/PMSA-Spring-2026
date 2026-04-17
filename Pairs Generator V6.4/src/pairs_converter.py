@@ -7,10 +7,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUTS_DIR = os.path.join(BASE_DIR, "..", "outputs")
 INPUT_FILE = os.path.join(OUTPUTS_DIR, "matched_sports_pairs.csv")
 
-# Output goes directly into both V6.3 and V6.2 input_files/ so each bot picks it up.
 OUTPUT_DIRS = [
-    os.path.join(BASE_DIR, "..", "..", "V6.3", "input_files"),
-    os.path.join(BASE_DIR, "..", "..", "V6.2", "input_files"),
+    os.path.join(BASE_DIR, "..", "..", "V6.4", "input_files"),
 ]
 
 def get_output_filenames():

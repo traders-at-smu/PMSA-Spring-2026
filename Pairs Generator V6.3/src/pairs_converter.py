@@ -7,21 +7,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUTS_DIR = os.path.join(BASE_DIR, "..", "outputs")
 INPUT_FILE = os.path.join(OUTPUTS_DIR, "matched_sports_pairs.csv")
 
-# Output goes directly into both V6.3 and V6.2 input_files/ so each bot picks it up.
-OUTPUT_DIRS = [
-    os.path.join(BASE_DIR, "..", "..", "V6.3", "input_files"),
-    os.path.join(BASE_DIR, "..", "..", "V6.2", "input_files"),
-]
-
-def get_output_filenames():
-    """Return one output path per bot, creating dirs as needed."""
+def get_output_filename():
+    """Generates a filename in the format output-mm-dd-yy.csv."""
     now = datetime.now()
-    fname = now.strftime("output-%m-%d-%y.csv")
-    paths = []
-    for d in OUTPUT_DIRS:
-        os.makedirs(d, exist_ok=True)
-        paths.append(os.path.join(d, fname))
-    return paths
+    return os.path.join(OUTPUTS_DIR, now.strftime("output-%m-%d-%y.csv"))
 
 def extract_slug(url):
     """Extracts the slug from a Polymarket URL."""
@@ -60,8 +49,8 @@ def run():
         print(f"Error: {INPUT_FILE} not found. Please run the matching process first.")
         return
 
-    output_files = get_output_filenames()
-    print(f"Translating {INPUT_FILE} to {len(output_files)} output(s)...")
+    output_file = get_output_filename()
+    print(f"Translating {INPUT_FILE} to {output_file}...")
 
     results = []
     with open(INPUT_FILE, "r", newline="", encoding="utf-8") as f:
@@ -81,7 +70,6 @@ def run():
                 "pair_id": i + 1,
                 "title_clean": row.get("poly_title", ""),
                 "category_tag": fee_tag,
-                "sport": row.get("sport", ""),
                 "similarity_score": round(similarity_score, 2),
                 "poly_market_id": row.get("poly_market_id", ""),
                 "poly_slug": row.get("poly_slug", ""),
@@ -94,9 +82,7 @@ def run():
                 "poly_primary_outcome": row.get("poly_outcome", ""),
                 "expiry_poly_utc": row.get("expiry_poly_utc", ""),
                 "expiry_kalshi_utc": row.get("expiry_kalshi_utc", ""),
-                "resolution_time_utc": row.get("resolution_time", ""),
-                "kalshi_t2_ticker": row.get("kalshi_t2_ticker", ""),
-                "kalshi_tie_ticker": row.get("kalshi_tie_ticker", ""),
+                "resolution_time_utc": row.get("resolution_time", "")
             }
             results.append(converted)
 
@@ -105,21 +91,20 @@ def run():
         return
 
     fieldnames = [
-        "pair_id", "title_clean", "category_tag", "sport", "similarity_score",
+        "pair_id", "title_clean", "category_tag", "similarity_score",
         "poly_market_id", "poly_slug", "poly_url",
         "kalshi_market_id", "kalshi_url",
         "poly_event_url", "poly_outcomes_json", "poly_token_ids_json",
         "poly_primary_outcome", "expiry_poly_utc", "expiry_kalshi_utc",
-        "resolution_time_utc",
-        "kalshi_t2_ticker", "kalshi_tie_ticker",
+        "resolution_time_utc"
     ]
 
-    for output_file in output_files:
-        with open(output_file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(results)
-        print(f"  Written {len(results)} pairs to {output_file}")
+    with open(output_file, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(results)
+
+    print(f"Successfully converted {len(results)} pairs to {output_file}")
 
 if __name__ == "__main__":
     run()

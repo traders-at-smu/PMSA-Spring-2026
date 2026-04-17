@@ -513,6 +513,7 @@ def _walk_depth(
     poly_fee_fn,
     kalshi_round_up: bool,
     exit_target: float = 1.0,
+    k_leg_fee_fns: list | None = None,
 ) -> dict[str, Any]:
     """Walk the combined orderbook depth, accumulating contracts while profitable.
 
@@ -550,6 +551,7 @@ def _walk_depth(
     stop_reason = "depth_exhausted"
     p_leg_spend: list[float] | None = None
     p_leg_last: list[float] | None = None
+    k_leg_spend_accum: list[float] | None = None
 
     # Slippage tracking: one entry per distinct (k_price, p_price) level pair,
     # updated in-place as contracts accumulate at the same prices.
@@ -575,6 +577,7 @@ def _walk_depth(
             continue
 
         nk = float(k_levels[k_idx]["price"])
+        k_leg_prices_curr = k_levels[k_idx].get("leg_prices")
         p_level = p_levels[p_idx]
         np_ = float(p_level["price"])
         leg_prices = p_level.get("leg_prices")
@@ -582,8 +585,19 @@ def _walk_depth(
         avg_k = (k_spend + nk) / nc
         avg_p = (p_spend + np_) / nc
 
+        # Initialize per-leg K spend accumulator on first encounter of leg prices
+        if k_leg_prices_curr is not None and k_leg_spend_accum is None:
+            k_leg_spend_accum = [0.0 for _ in k_leg_prices_curr]
+
         # Recompute fees for the candidate position
-        next_kf = apply_fee(kalshi_fee_fn, avg_k, nc, kalshi_round_up)
+        if k_leg_fee_fns is not None and k_leg_prices_curr and k_leg_spend_accum is not None:
+            # Per-leg Kalshi fee for 2K+1P structures — avoids underestimation from combining
+            next_kf = sum(
+                apply_fee(fn, (k_leg_spend_accum[i] + k_leg_prices_curr[i]) / nc, nc, kalshi_round_up)
+                for i, fn in enumerate(k_leg_fee_fns)
+            )
+        else:
+            next_kf = apply_fee(kalshi_fee_fn, avg_k, nc, kalshi_round_up)
         next_pf = apply_fee(poly_fee_fn, avg_p, nc, False, round_decimals=5)
         delta_fee = (next_kf - cur_kf) + (next_pf - cur_pf)
 
@@ -618,6 +632,11 @@ def _walk_depth(
                 p_leg_spend[i] += float(lp)
             p_leg_last = [float(lp) for lp in leg_prices]
 
+        # Track per-leg Kalshi spend (for 2K+1P soccer structures)
+        if k_leg_prices_curr is not None and k_leg_spend_accum is not None:
+            for i, lp in enumerate(k_leg_prices_curr):
+                k_leg_spend_accum[i] += float(lp)
+
         # Record slippage: one entry per distinct price-level combination.
         # If prices unchanged from the last entry, update it in-place so each
         # entry reflects the cumulative state at the END of that price level.
@@ -629,6 +648,8 @@ def _walk_depth(
             slippage[-1]["arr"] = round(arr_now, 4)
             if p_leg_last is not None:
                 slippage[-1]["p_leg_prices"] = [round(v, 6) for v in p_leg_last]
+            if k_leg_prices_curr is not None:
+                slippage[-1]["k_leg_prices"] = [round(v, 6) for v in k_leg_prices_curr]
         else:
             entry = {
                 "k_price": round(nk, 6),
@@ -639,6 +660,8 @@ def _walk_depth(
             }
             if p_leg_last is not None:
                 entry["p_leg_prices"] = [round(v, 6) for v in p_leg_last]
+            if k_leg_prices_curr is not None:
+                entry["k_leg_prices"] = [round(v, 6) for v in k_leg_prices_curr]
             slippage.append(entry)
 
     final_kp = cur_kp
@@ -684,12 +707,18 @@ def _walk_depth(
     if p_leg_spend is not None and contracts > 0:
         p_leg_prices = [round(v / contracts, 6) for v in p_leg_spend]
 
+    k_leg_prices = []
+    if k_leg_spend_accum is not None and contracts > 0:
+        k_leg_prices = [round(v / contracts, 6) for v in k_leg_spend_accum]
+
     return {
         "contracts": contracts,
         "k_spend": k_spend,
         "p_spend": p_spend,
         "k_price": k_price,
         "p_price": p_price,
+        "k_leg_spend": k_leg_spend_accum or [],
+        "k_leg_prices": k_leg_prices,
         "p_leg_spend": p_leg_spend or [],
         "p_leg_prices": p_leg_prices,
         "kp_cost": final_kp,
@@ -1172,14 +1201,27 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
     trade_num = _next_trade_number(log_path)
     client_id = f"{trade_num}:{opp['pair_id']}:{opp['strategy']}"
 
-    # Kalshi leg
-    kalshi.place_order(
-        ticker=opp["kalshi_ticker"],
-        side=opp["k_side"],
-        contracts=opp["contracts"],
-        price=opp["k_price"],
-        client_order_id=f"{client_id}:k",
-    )
+    # Kalshi leg(s) — soccer structures may have multiple Kalshi tickers
+    k_tickers_exec = opp.get("k_tickers")
+    if k_tickers_exec:
+        k_sides_exec  = opp.get("k_sides", [opp["k_side"]] * len(k_tickers_exec))
+        k_prices_exec = opp.get("k_prices") or [opp["k_price"]] * len(k_tickers_exec)
+        for i, (ticker, side, price) in enumerate(zip(k_tickers_exec, k_sides_exec, k_prices_exec)):
+            kalshi.place_order(
+                ticker=ticker,
+                side=side,
+                contracts=opp["contracts"],
+                price=price,
+                client_order_id=f"{client_id}:k{i}",
+            )
+    else:
+        kalshi.place_order(
+            ticker=opp["kalshi_ticker"],
+            side=opp["k_side"],
+            contracts=opp["contracts"],
+            price=opp["k_price"],
+            client_order_id=f"{client_id}:k",
+        )
 
     # Polymarket leg(s)
     partial = False
@@ -1233,6 +1275,8 @@ def _record_open_position(
         "k_side": opp["k_side"],
         "p_side": opp["p_side"],
         "kalshi_ticker": opp["kalshi_ticker"],
+        "k_tickers": opp.get("k_tickers", [opp["kalshi_ticker"]]),
+        "k_sides": opp.get("k_sides", [opp["k_side"]]),
         "p_token_id": opp.get("p_token_id", ""),
         "p_token_ids": opp.get("p_token_ids", []),
         "p_leg_prices": opp.get("p_leg_prices", []),
@@ -1672,6 +1716,363 @@ def _print_fill_breakdown(opp: dict[str, Any]) -> None:
 
 # ── Scan cycle ────────────────────────────────────────────────────────────────
 
+def _build_soccer_quotes(pair: dict[str, Any], kalshi, poly) -> dict[str, Any]:
+    """Fetch all orderbook data for a soccer/binary pair in one parallel batch.
+
+    3-outcome pairs: 3 Kalshi tickers (T1, T2, Tie) and 6 Polymarket token IDs
+    [t1_yes, t1_no, t2_yes, t2_no, tie_yes, tie_no].
+
+    Binary NegRisk pairs: 2 Kalshi tickers (T1, T2) and 2 Polymarket YES tokens
+    [t1_yes, t2_yes] — T1_NO-equiv = tokens[1] and T2_NO-equiv = tokens[0].
+
+    Returns a dict with type="soccer" containing all legs' quotes.
+    """
+    t1_ticker  = pair["kalshi_ticker"]
+    t2_ticker  = pair.get("kalshi_t2_ticker")
+    tie_ticker = pair.get("kalshi_tie_ticker")
+    token_ids  = [str(t) for t in pair.get("poly_token_ids", [])]
+
+    if len(token_ids) < 2:
+        raise RuntimeError(
+            f"Soccer pair {pair['pair_id']}: expected >=2 poly_token_ids, got {len(token_ids)}"
+        )
+
+    # Binary NegRisk: only YES tokens supplied — T1_NO-equiv = T2_YES and vice versa
+    is_binary_soccer = len(token_ids) == 2
+    has_t2  = bool(t2_ticker)
+    has_tie = bool(tie_ticker) and len(token_ids) >= 6
+
+    # Assemble the list of Kalshi tickers to fetch
+    k_fetch = {"t1": t1_ticker}
+    if has_t2:
+        k_fetch["t2"] = t2_ticker
+    if has_tie:
+        k_fetch["tie"] = tie_ticker
+
+    # Fetch all Kalshi and Polymarket books in parallel
+    k_results: dict[str, Any] = {}
+    with ThreadPoolExecutor(max_workers=len(k_fetch)) as pool:
+        k_futures = {pool.submit(kalshi.get_quotes, ticker): key for key, ticker in k_fetch.items()}
+        for fut in as_completed(k_futures):
+            key = k_futures[fut]
+            k_results[key] = fut.result()  # raises on error
+
+    if is_binary_soccer:
+        books = poly.get_books(token_ids[:2])
+    else:
+        books = poly.get_books(token_ids[:6 if has_tie else 4])
+
+    def _poly_leg(yes_tid: str, no_tid: str) -> dict[str, Any]:
+        yes_book = books.get(yes_tid)
+        no_book  = books.get(no_tid)
+        if not yes_book or not no_book:
+            raise RuntimeError(
+                f"Soccer pair {pair['pair_id']}: missing Polymarket book for "
+                f"tokens ...{yes_tid[-8:]} / ...{no_tid[-8:]}"
+            )
+        return {
+            "yes_tid":    yes_tid,
+            "no_tid":     no_tid,
+            "yes_ask":    poly._best_ask(yes_book),
+            "no_ask":     poly._best_ask(no_book),
+            "yes_levels": _normalize_levels(poly._parse_ask_levels(yes_book)),
+            "no_levels":  _normalize_levels(poly._parse_ask_levels(no_book)),
+        }
+
+    if is_binary_soccer:
+        # T1_YES=tokens[0], T1_NO-equiv=tokens[1] (=T2_YES)
+        # T2_YES=tokens[1], T2_NO-equiv=tokens[0] (=T1_YES)
+        poly_t1  = _poly_leg(token_ids[0], token_ids[1])
+        poly_t2  = _poly_leg(token_ids[1], token_ids[0]) if has_t2 else None
+        poly_tie = None
+    else:
+        poly_t1  = _poly_leg(token_ids[0], token_ids[1])
+        poly_t2  = _poly_leg(token_ids[2], token_ids[3]) if has_t2 else None
+        poly_tie = _poly_leg(token_ids[4], token_ids[5]) if has_tie else None
+
+    # Resolve Polymarket fee rate via T1 YES token (all tokens share the same event fee status)
+    fee_rate = _resolve_poly_fee_rate(poly, [token_ids[0]])
+    pair["poly_fee_rate"] = fee_rate
+
+    outcomes = [str(o) for o in pair.get("poly_outcomes", [])]
+
+    return {
+        "type":      "soccer",
+        "has_t2":    has_t2,
+        "has_tie":   has_tie,
+        "kalshi":    {
+            "t1":  k_results["t1"],
+            "t2":  k_results.get("t2"),
+            "tie": k_results.get("tie"),
+        },
+        "poly":      {
+            "t1":  poly_t1,
+            "t2":  poly_t2,
+            "tie": poly_tie,
+        },
+        "poly_fee_rate": fee_rate,
+        "outcomes":  outcomes,
+    }
+
+
+# All 18 soccer arbitrage structures.
+# k_outcomes / p_outcomes: list of (slot, side) where slot in {"t1","t2","tie"}, side in {"yes","no"}
+# target: payout per contract ($1 for YES structures, $2 for NO structures)
+_SOCCER_STRUCTURES: list[dict[str, Any]] = [
+    # ── Group A — 2-leg binary arb, one outcome at a time ───────────────────────
+    {"name": "BUY_KT1Y_BUY_PT1N",         "k": [("t1","yes")],            "p": [("t1","no")],           "target": 1.0},
+    {"name": "BUY_PT1Y_BUY_KT1N",         "k": [("t1","no")],             "p": [("t1","yes")],          "target": 1.0},
+    {"name": "BUY_KT2Y_BUY_PT2N",         "k": [("t2","yes")],            "p": [("t2","no")],           "target": 1.0},
+    {"name": "BUY_PT2Y_BUY_KT2N",         "k": [("t2","no")],             "p": [("t2","yes")],          "target": 1.0},
+    {"name": "BUY_KTIY_BUY_PTIN",         "k": [("tie","yes")],           "p": [("tie","no")],          "target": 1.0},
+    {"name": "BUY_PTIY_BUY_KTIN",         "k": [("tie","no")],            "p": [("tie","yes")],         "target": 1.0},
+    # ── Group B — 3-leg YES, cover all 3 outcomes; exactly one pays $1 ─────────
+    {"name": "BUY_PT1Y_BUY_PT2Y_BUY_KTIY","k": [("tie","yes")],           "p": [("t1","yes"),("t2","yes")], "target": 1.0},
+    {"name": "BUY_KT1Y_BUY_KT2Y_BUY_PTIY","k": [("t1","yes"),("t2","yes")],"p": [("tie","yes")],        "target": 1.0},
+    {"name": "BUY_PT1Y_BUY_PTIY_BUY_KT2Y","k": [("t2","yes")],           "p": [("t1","yes"),("tie","yes")], "target": 1.0},
+    {"name": "BUY_KT1Y_BUY_KTIY_BUY_PT2Y","k": [("t1","yes"),("tie","yes")],"p": [("t2","yes")],        "target": 1.0},
+    {"name": "BUY_PT2Y_BUY_PTIY_BUY_KT1Y","k": [("t1","yes")],           "p": [("t2","yes"),("tie","yes")], "target": 1.0},
+    {"name": "BUY_KT2Y_BUY_KTIY_BUY_PT1Y","k": [("t2","yes"),("tie","yes")],"p": [("t1","yes")],        "target": 1.0},
+    # ── Group C — 3-leg NO, cover all 3 outcomes; two pay $1 each = $2 total ───
+    {"name": "BUY_PT1N_BUY_PT2N_BUY_KTIN","k": [("tie","no")],            "p": [("t1","no"),("t2","no")],   "target": 2.0},
+    {"name": "BUY_KT1N_BUY_KT2N_BUY_PTIN","k": [("t1","no"),("t2","no")],"p": [("tie","no")],              "target": 2.0},
+    {"name": "BUY_PT1N_BUY_PTIN_BUY_KT2N","k": [("t2","no")],            "p": [("t1","no"),("tie","no")],  "target": 2.0},
+    {"name": "BUY_KT1N_BUY_KTIN_BUY_PT2N","k": [("t1","no"),("tie","no")],"p": [("t2","no")],              "target": 2.0},
+    {"name": "BUY_PT2N_BUY_PTIN_BUY_KT1N","k": [("t1","no")],            "p": [("t2","no"),("tie","no")],  "target": 2.0},
+    {"name": "BUY_KT2N_BUY_KTIN_BUY_PT1N","k": [("t2","no"),("tie","no")],"p": [("t1","no")],              "target": 2.0},
+]
+
+
+def evaluate_soccer(
+    pair: dict[str, Any],
+    soccer_quotes: dict[str, Any],
+    cfg: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Evaluate all applicable soccer arbitrage structures for a 3-outcome pair.
+
+    Returns at most one opportunity per call — the highest edge_dollar candidate.
+    This avoids doubling up on correlated positions in the same match.
+    """
+    max_contracts = int(cfg["max_contracts"])
+    days          = _days_to_resolution(pair.get("resolution_date", ""))
+    min_edge_pct  = float(cfg.get("min_edge_pct", 0.001))
+
+    fee_cfg    = cfg["fees"]
+    k_round_up = bool(fee_cfg["kalshi"].get("round_up_to_cent", True))
+    pair_poly_rate = _require_poly_fee_rate(pair.get("poly_fee_rate"), pair.get("pair_id", "pair"))
+    p_fee_fn   = _poly_fee_fn_for_rate(pair_poly_rate)
+
+    sq_kalshi = soccer_quotes["kalshi"]
+    sq_poly   = soccer_quotes["poly"]
+    has_t2    = soccer_quotes["has_t2"]
+    has_tie   = soccer_quotes["has_tie"]
+
+    def _k_levels(slot: str, side: str) -> list[dict[str, Any]]:
+        """Return normalized Kalshi ask levels for (slot, side)."""
+        kq = sq_kalshi.get(slot)
+        if kq is None:
+            return []
+        key = "buy_yes" if side == "yes" else "buy_no"
+        return _normalize_levels(kq["depth"].get(key, []))
+
+    def _p_levels(slot: str, side: str) -> list[dict[str, Any]]:
+        """Return normalized Polymarket ask levels for (slot, side)."""
+        pq = sq_poly.get(slot)
+        if pq is None:
+            return []
+        key = "yes_levels" if side == "yes" else "no_levels"
+        return pq.get(key, [])
+
+    def _k_ask(slot: str, side: str) -> float:
+        kq = sq_kalshi.get(slot)
+        if kq is None:
+            return 1.0
+        return float(kq["yes_ask"] if side == "yes" else kq["no_ask"])
+
+    def _p_token_ids(slot: str, side: str) -> list[str]:
+        pq = sq_poly.get(slot)
+        if pq is None:
+            return []
+        return [pq["yes_tid"] if side == "yes" else pq["no_tid"]]
+
+    t1_event_url = (sq_kalshi["t1"] or {}).get("event_url", "")
+    t1_title     = (sq_kalshi["t1"] or {}).get("kalshi_title", "")
+
+    candidates: list[dict[str, Any]] = []
+
+    print(f"  [soccer] {pair.get('title', pair['pair_id'])}  —  checking 18 structures:")
+    for strat in _SOCCER_STRUCTURES:
+        sname     = strat["name"]
+        k_legs    = strat["k"]  # list of (slot, side)
+        p_legs    = strat["p"]  # list of (slot, side)
+        target    = strat["target"]
+
+        # Skip structures that require unavailable markets
+        uses_t2  = any(s == "t2"  for s, _ in k_legs + p_legs)
+        uses_tie = any(s == "tie" for s, _ in k_legs + p_legs)
+        if uses_t2  and not has_t2:
+            print(f"    {sname:<40}  skip (no t2 market)")
+            continue
+        if uses_tie and not has_tie:
+            print(f"    {sname:<40}  skip (no tie market)")
+            continue
+
+        # Build level lists for each leg
+        k_level_lists = [_k_levels(slot, side) for slot, side in k_legs]
+        p_level_lists = [_p_levels(slot, side) for slot, side in p_legs]
+
+        # Skip if any required level is empty
+        if any(not lvl for lvl in k_level_lists + p_level_lists):
+            print(f"    {sname:<40}  skip (no liquidity)")
+            continue
+
+        # Combine multi-leg sides
+        if len(k_level_lists) == 1:
+            final_k_levels = k_level_lists[0]
+            k_leg_fee_fns  = None  # single Kalshi leg — use standard fee fn
+            k_fee_fn       = _kalshi_fee_fn_for_rate(
+                _kalshi_fee_rate_for_ticker(
+                    pair["kalshi_ticker"] if k_legs[0][0] == "t1"
+                    else pair.get(f"kalshi_{k_legs[0][0]}_ticker", pair["kalshi_ticker"])
+                )
+            )
+        else:
+            # 2 Kalshi legs — combine levels and use per-leg fee fns
+            final_k_levels = _combine_leg_levels(k_level_lists)
+            k_leg_fee_fns  = [
+                _kalshi_fee_fn_for_rate(_kalshi_fee_rate_for_ticker(
+                    pair["kalshi_ticker"] if slot == "t1"
+                    else pair.get(f"kalshi_{slot}_ticker", pair["kalshi_ticker"])
+                ))
+                for slot, _ in k_legs
+            ]
+            k_fee_fn = k_leg_fee_fns[0]  # fallback (unused when k_leg_fee_fns is set)
+
+        if len(p_level_lists) == 1:
+            final_p_levels = p_level_lists[0]
+        else:
+            final_p_levels = _combine_leg_levels(p_level_lists)
+
+        if not final_k_levels or not final_p_levels:
+            continue
+
+        walk = _walk_depth(
+            final_k_levels, final_p_levels,
+            days, max_contracts,
+            k_fee_fn, p_fee_fn, k_round_up,
+            exit_target=target,
+            k_leg_fee_fns=k_leg_fee_fns,
+        )
+
+        if walk["contracts"] <= 0:
+            if k_leg_fee_fns:
+                # 2-Kalshi-leg: compute fee per leg from each leg's best price
+                k_leg_prices = [lvl[0]["price"] if lvl else 1.0 for lvl in k_level_lists]
+                k_fee = sum(apply_fee(fn, p, 1, k_round_up) for fn, p in zip(k_leg_fee_fns, k_leg_prices))
+                best_k = sum(k_leg_prices)
+            else:
+                best_k = final_k_levels[0]["price"] if final_k_levels else 1.0
+                k_fee  = apply_fee(k_fee_fn, best_k, 1, k_round_up)
+            if len(p_level_lists) > 1:
+                # 2-Polymarket-leg: compute fee per leg from each leg's best price
+                p_leg_prices = [lvl[0]["price"] if lvl else 1.0 for lvl in p_level_lists]
+                p_fee = sum(apply_fee(p_fee_fn, p, 1, False, round_decimals=5) for p in p_leg_prices)
+                best_p = sum(p_leg_prices)
+            else:
+                best_p = final_p_levels[0]["price"] if final_p_levels else 1.0
+                p_fee  = apply_fee(p_fee_fn, best_p, 1, False, round_decimals=5)
+            total  = best_k + best_p + k_fee + p_fee
+            print(f"    {sname:<40}  no arb  (k={best_k:.3f}+kfee={k_fee:.4f} + p={best_p:.3f}+pfee={p_fee:.4f} = {total:.4f}, target={target:.1f})")
+            continue
+
+        c          = walk["contracts"]
+        edge_dollar = c * target - walk["kp_cost"]
+
+        if edge_dollar <= 0 or walk["edge_pct"] < min_edge_pct:
+            print(f"    {sname:<40}  no arb  (edge={edge_dollar:.4f}, {walk['edge_pct']*100:.3f}%)")
+            continue
+
+        print(f"    {sname:<40}  ARB     edge=${edge_dollar:.4f}  {walk['edge_pct']*100:.3f}%  {c}c")
+
+        # For 2-leg Group A structures: apply same-side guard (same logic as evaluate_pair)
+        if len(k_legs) == 1 and len(p_legs) == 1:
+            top_sum = walk["k_price"] + walk["p_price"]
+            if top_sum < 0.80:
+                # Mismatched / same-side pair — flag the whole soccer pair as bad
+                return [{"_bad_pair": True, "strategy": sname, "cost_per_contract": walk["kp_cost"] / c}]
+            _max_gap = max(
+                (target - (s["k_price"] + s["p_price"]) for s in walk.get("slippage", [])),
+                default=0.0,
+            )
+            if _max_gap > 0.15:
+                return [{"_bad_pair": True, "strategy": sname, "cost_per_contract": walk["kp_cost"] / c, "price_gap": _max_gap}]
+
+        # Collect Kalshi ticker(s) and side(s) for this structure
+        k_tickers_list = []
+        k_sides_list   = []
+        for slot, side in k_legs:
+            if slot == "t1":
+                k_tickers_list.append(pair["kalshi_ticker"])
+            else:
+                k_tickers_list.append(pair.get(f"kalshi_{slot}_ticker", pair["kalshi_ticker"]))
+            k_sides_list.append(side)
+
+        # Collect Polymarket token IDs
+        p_token_ids_list = []
+        for slot, side in p_legs:
+            p_token_ids_list.extend(_p_token_ids(slot, side))
+
+        candidates.append({
+            "pair_id":           pair["pair_id"],
+            "title":             pair.get("title", pair["pair_id"]),
+            "poly_market_title": pair.get("poly_market_question", ""),
+            "kalshi_market_title": t1_title,
+            "kalshi_ticker":     pair["kalshi_ticker"],  # T1 ticker for display/URL
+            "kalshi_event_url":  t1_event_url,
+            "polymarket_url":    pair.get("polymarket_url", ""),
+            "poly_event_url":    pair.get("poly_event_url", ""),
+            "polymarket_slug":   pair.get("polymarket_market_slug", ""),
+            "strategy":          sname,
+            "k_side":            k_sides_list[0],     # primary side for display
+            "p_side":            p_legs[0][1],
+            "k_tickers":         k_tickers_list,
+            "k_sides":           k_sides_list,
+            "k_prices":          walk.get("k_leg_prices") or [walk["k_price"]],
+            "p_token_ids":       p_token_ids_list,
+            "p_token_id":        p_token_ids_list[0] if p_token_ids_list else "",
+            "yes_token_id":      "",
+            "no_token_id":       "",
+            "contracts":         c,
+            "k_price":           walk["k_price"],
+            "p_price":           walk["p_price"],
+            "k_spend":           walk.get("k_spend", 0.0),
+            "p_spend":           walk.get("p_spend", 0.0),
+            "k_leg_prices":      walk.get("k_leg_prices", []),
+            "k_leg_spend":       walk.get("k_leg_spend", []),
+            "p_leg_prices":      walk.get("p_leg_prices", []),
+            "p_leg_spend":       walk.get("p_leg_spend", []),
+            "kp_cost":           walk["kp_cost"],
+            "edge_dollar":       round(edge_dollar, 4),
+            "edge_pct":          walk["edge_pct"],
+            "arr":               walk["arr"],
+            "total_fee":         walk["total_fee"],
+            "days":              days,
+            "exit_target":       target,
+            "slippage":          walk["slippage"],
+            "remaining":         walk["remaining"],
+            "poly_fee_rate":     pair.get("poly_fee_rate"),
+            "resolution_date":   str(pair.get("resolution_date", "")),
+        })
+
+    if not candidates:
+        return []
+
+    # Return only the single best opportunity (highest edge_dollar) to avoid
+    # doubling up on correlated positions in the same match.
+    best = max(candidates, key=lambda o: o["edge_dollar"])
+    return [best]
+
+
 def _build_polymarket_quotes(pair: dict[str, Any], poly) -> dict[str, Any]:
     slug = pair.get("polymarket_market_slug", "")
     outcomes = [str(o) for o in pair.get("poly_outcomes", [])]
@@ -1782,15 +2183,28 @@ def _fetch_pair(pair: dict[str, Any], kalshi, poly) -> tuple[dict, dict, dict]:
 
     Retries up to 3 times with exponential backoff on transient errors (429, 503,
     timeouts). Permanent errors (404, bad ticker) are raised immediately.
+
+    For soccer 3-outcome pairs (len(poly_outcomes)==3) uses _build_soccer_quotes
+    which fetches all 3 Kalshi markets + 6 Polymarket books in parallel. Returns
+    (pair, kq_t1, soccer_quotes) where soccer_quotes["type"]=="soccer".
     """
+    is_soccer = (
+        len(pair.get("poly_outcomes", [])) == 3
+        or (bool(pair.get("kalshi_t2_ticker")) and len(pair.get("poly_token_ids", [])) == 2)
+    )
     max_retries = 3
     delay = 1.0  # seconds before first retry; doubles each attempt
     last_exc: Exception | None = None
     for attempt in range(max_retries + 1):
         try:
-            kq = kalshi.get_quotes(pair["kalshi_ticker"])
-            pq = _build_polymarket_quotes(pair, poly)
-            return pair, kq, pq
+            if is_soccer:
+                soccer_quotes = _build_soccer_quotes(pair, kalshi, poly)
+                kq = soccer_quotes["kalshi"]["t1"]  # T1 quotes as representative kq
+                return pair, kq, soccer_quotes
+            else:
+                kq = kalshi.get_quotes(pair["kalshi_ticker"])
+                pq = _build_polymarket_quotes(pair, poly)
+                return pair, kq, pq
         except Exception as exc:
             if _is_transient_error(exc) and attempt < max_retries:
                 last_exc = exc
@@ -1963,7 +2377,10 @@ def run_scan(
             _, kq, pq = result
             if cfg.get("skip_multi_outcome", False) and pq.get("type") == "multi":
                 continue
-            opps = evaluate_pair(pair, kq, pq, cfg)
+            if pq.get("type") == "soccer":
+                opps = evaluate_soccer(pair, pq, cfg)
+            else:
+                opps = evaluate_pair(pair, kq, pq, cfg)
         except Exception as exc:
             failed_ids.add(pair["pair_id"])
             _log_failed_pair(pair, f"eval error: {exc}", failed_log)
@@ -1995,7 +2412,12 @@ def run_scan(
         if cfg.get("print_market_status", True):
             k_yes_ask = float(kq["yes_ask"])
             k_no_ask  = float(kq["no_ask"])
-            if pq.get("type") == "multi":
+            if pq.get("type") == "soccer":
+                # Show T1 Polymarket prices as representative status for soccer pairs
+                pt1 = pq["poly"]["t1"]
+                p_yes_ask = float(pt1["yes_ask"]) if pt1 else 0.0
+                p_no_ask  = float(pt1["no_ask"])  if pt1 else 0.0
+            elif pq.get("type") == "multi":
                 p_yes_ask = float(pq.get("primary_best_ask", 0.0))
                 p_no_ask = float(pq.get("complement_best_ask", 0.0))
             else:

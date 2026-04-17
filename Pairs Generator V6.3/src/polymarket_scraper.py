@@ -36,118 +36,6 @@ def _parse_end_dt(end_date: str):
 
 GOLF_TOURNAMENT_KEYWORDS = {"pga", "lpga", "masters", "open championship", "us open", "golf"}
 
-def _create_soccer_trio_markets(conn):
-    """
-    After individual markets are scraped, group binary soccer markets by their
-    parent Polymarket event. When a group of exactly 3 binary Yes/No markets
-    shares the same event (one per outcome: T1 win, T2 win, Draw), insert a
-    synthetic combined market with outcomes=[T1, T2, Draw] and 6 clobTokenIds
-    so normalize_markets creates 3 outcome rows and match_sports can find the trio.
-
-    The synthetic market_id is prefixed with "negrisk_" so it never collides
-    with real Polymarket numeric IDs.
-    """
-    from collections import defaultdict
-
-    rows = conn.execute(
-        "SELECT market_id, raw_data FROM markets_raw WHERE platform='polymarket'"
-    ).fetchall()
-
-    event_groups: dict = defaultdict(list)
-    for row in rows:
-        try:
-            raw = json.loads(row["raw_data"] or "{}")
-        except Exception:
-            continue
-        events = raw.get("events") or []
-        if not events:
-            continue
-        event_id = str(events[0].get("id", ""))
-        if not event_id:
-            continue
-        # Only group binary Yes/No markets
-        outcomes = raw.get("outcomes", [])
-        if isinstance(outcomes, str):
-            try:
-                outcomes = json.loads(outcomes)
-            except Exception:
-                outcomes = []
-        if {str(o).strip().lower() for o in outcomes} != {"yes", "no"}:
-            continue
-        event_groups[event_id].append(raw)
-
-    inserted = 0
-    for event_id, members in event_groups.items():
-        if len(members) != 3:
-            continue
-
-        _TIE_PREFIXES = ("draw", "tie", "drawn")
-        tie_members = [m for m in members
-                       if (m.get("groupItemTitle") or "").strip().lower().startswith(_TIE_PREFIXES)]
-        non_tie = [m for m in members if m not in tie_members]
-
-        if len(tie_members) != 1 or len(non_tie) != 2:
-            continue
-
-        tie_raw = tie_members[0]
-        t1_raw, t2_raw = non_tie[0], non_tie[1]
-
-        t1_tokens  = t1_raw.get("clobTokenIds") or []
-        t2_tokens  = t2_raw.get("clobTokenIds") or []
-        tie_tokens = tie_raw.get("clobTokenIds") or []
-        if isinstance(t1_tokens, str):
-            try: t1_tokens = json.loads(t1_tokens)
-            except: t1_tokens = []
-        if isinstance(t2_tokens, str):
-            try: t2_tokens = json.loads(t2_tokens)
-            except: t2_tokens = []
-        if isinstance(tie_tokens, str):
-            try: tie_tokens = json.loads(tie_tokens)
-            except: tie_tokens = []
-
-        if len(t1_tokens) != 2 or len(t2_tokens) != 2 or len(tie_tokens) != 2:
-            continue
-
-        t1_label  = (t1_raw.get("groupItemTitle") or "Team 1").strip()
-        t2_label  = (t2_raw.get("groupItemTitle") or "Team 2").strip()
-        # Normalize tie label to plain "Draw" — groupItemTitle can be "Draw (Team A vs Team B)"
-        tie_label = "Draw"
-
-        events_data = tie_raw.get("events", [])
-        event_slug  = events_data[0].get("slug", "") if events_data else ""
-        event_title = events_data[0].get("title", "") if events_data else f"{t1_label} vs {t2_label}"
-
-        synthetic_id = f"negrisk_{event_id}"
-        combined_raw = dict(tie_raw)  # copy base fields from tie market
-        combined_raw["id"]          = synthetic_id
-        combined_raw["question"]    = event_title
-        combined_raw["outcomes"]    = [t1_label, t2_label, tie_label]
-        combined_raw["clobTokenIds"] = t1_tokens[:2] + t2_tokens[:2] + tie_tokens[:2]
-        combined_raw["slug"]        = event_slug
-
-        try:
-            conn.execute(
-                """INSERT OR REPLACE INTO markets_raw
-                       (platform, market_id, title, category, end_date, raw_data)
-                   VALUES (?, ?, ?, ?, ?, ?)""",
-                (
-                    "polymarket",
-                    synthetic_id,
-                    event_title,
-                    tie_raw.get("feeType") or tie_raw.get("category") or "sports_fees_v2",
-                    tie_raw.get("endDateIso", ""),
-                    json.dumps(combined_raw),
-                ),
-            )
-            inserted += 1
-        except Exception as e:
-            print(f"  Error inserting soccer trio for event {event_id}: {e}")
-
-    if inserted:
-        conn.commit()
-        print(f"  Created {inserted} synthetic 3-outcome soccer markets")
-
-
 def flush(conn, cursor, batch, stored):
     now    = datetime.now(timezone.utc)
 
@@ -284,9 +172,6 @@ async def _run_async():
 
     if pending:
         stored = flush(conn, cur, pending, stored)
-
-    # Group NegRisk binary markets into synthetic 3-outcome soccer entries
-    _create_soccer_trio_markets(conn)
 
     conn.close()
     set_last_fetched("polymarket", run_start)
