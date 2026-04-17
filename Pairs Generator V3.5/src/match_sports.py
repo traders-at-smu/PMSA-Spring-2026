@@ -1594,7 +1594,7 @@ def run():
         "poly_teams", "poly_date", "poly_url", "poly_slug",
         "poly_event_url", "poly_outcomes", "poly_token_ids",
         "expiry_poly_utc", "resolution_time",
-        "kalshi_event_ticker", "kalshi_market_id", "kalshi_title",
+        "kalshi_event_ticker", "kalshi_market_id", "kalshi_outcome", "kalshi_title",
         "kalshi_teams", "kalshi_date", "kalshi_url", "expiry_kalshi_utc",
         "kalshi_t2_ticker", "kalshi_tie_ticker",
     ]

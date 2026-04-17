@@ -1,0 +1,600 @@
+Bitcoin
+BTC
+Ethereum
+ETH
+Tether USDt
+USDT
+XRP
+XRP
+BNB
+BNB
+USDC
+USDC
+Solana
+SOL
+TRON
+TRX
+Dogecoin
+DOGE
+UNUS SED LEO
+LEOu
+Hyperliquid
+HYPE
+Cardano
+ADA
+Bitcoin Cash
+BCH
+Chainlink
+LINK
+Monero
+XMR
+Ethena USDe
+eUSDe
+Canton
+CC
+Stellar
+XLM
+Dai
+DAI
+World Liberty Financial USD
+USD1
+Litecoin
+LTC
+PayPal USD
+PYUSD
+Zcash
+ZEC
+Avalanche
+AVAX
+Hedera
+HBAR
+Shiba Inu
+SHIB
+Sui
+SUI
+MemeCore
+M
+Bittensor
+TAO
+Toncoin
+TON
+World Liberty Financial
+WLFIw
+Cronos
+CRO
+Tether Gold
+XAUT
+PAX Gold
+PAXG
+Mantle
+MNTe
+Polkadot
+pDOTn
+Uniswap
+UNIs
+Global Dollar
+USDG
+OKB
+OKB
+Pi
+PI
+Sky
+SKYn
+Aster
+ASTER
+NEAR Protocol
+NEAR
+USDD
+USDD
+Aave
+AAVE
+Pepe
+PEPE
+Ripple USD
+RLUSD
+Bitget Token
+BGB
+Ondo
+ONDO
+Internet Computer
+ICP
+Ethereum Classic
+ETC
+United Stables
+Unst
+KuCoin Token
+KCS
+Algorand
+ALGO
+Render
+RENDER
+Polygon Ecosystem Token
+POL
+Quant
+QNT
+Worldcoin
+WLD
+Cosmos
+ATOM
+Kaspa
+KAS
+GateToken
+GT
+Midnight
+NIGHT
+Ethena
+ENA
+DeXe
+DEXE
+Aptos
+APT
+OFFICIAL TRUMP
+TRUMPo
+Flare
+FLR
+Filecoin
+FIL
+Morpho
+MORPHO
+XDC Network
+XDC
+Stable
+STABLE
+VeChain
+VET
+LayerZero
+ZRO
+Jupiter
+JUPa
+Arbitrum
+ARBm
+Nexo
+NEXO
+Pump.fun
+PUMPf
+JUST
+JST
+Artificial Superintelligence Alliance
+FET
+Bonk
+BONK
+TrueUSD
+TUSD
+PancakeSwap
+CAKE
+Virtuals Protocol
+VIRTUAL
+EURC
+EURC
+Chiliz
+CHZ
+Pudgy Penguins
+PENGU
+First Digital USD
+FDUSD
+Stacks
+STXk
+Dash
+DASH
+Tezos
+XTZ
+Sei
+SEI
+edgeX
+EDGEx
+Decred
+DCR
+ether.fi
+ETHFI
+APENFT
+NFT
+Sun (New)
+SUN
+Venice Token
+VVV
+Curve DAO Token
+CRV
+Gnosis
+GNO
+BitTorrent [New]
+BTT
+Kaia
+KAIA
+Bitcoin SV
+BCHSV
+Aerodrome Finance
+AERO
+Monad
+MONd
+Injective
+INJ
+IOTA
+IOTA
+Conflux
+CFX
+Lido DAO
+LDO
+DoubleZero
+2Z
+Celestia
+TIA
+Immutable
+IMXm
+JasmyCoin
+JASMY
+The Graph
+GRT
+FLOKI
+FLOKI
+River
+RIVER
+Lighter
+LITr
+Kite
+KITE
+Zebec Network
+ZBCN
+SPX6900
+SPX
+Maple Finance
+SYRUP
+Pyth Network
+PYTH
+Optimism
+OPm
+The Sandbox
+SAND
+Humanity Protocol
+H
+Ethereum Name Service
+ENS
+Vision
+VSN
+Telcoin
+TEL
+Plasma
+XPL
+Neo
+NEO
+Terra Classic
+LUNC
+Helium
+HNT
+Axie Infinity
+AXS
+Starknet
+STRKn
+OriginTrail
+TRAC
+Onyxcoin
+XCNt
+dogwifhat
+WIF
+BUILDon
+B
+Pendle
+PENDLE
+Story
+IP
+Decentraland
+MANA
+Raydium
+RAY
+Trust Wallet Token
+TWT
+Stargate Finance
+STG
+Compound
+COMP
+Fartcoin
+FARTCOIN
+Convex Finance
+CVX
+Walrus
+WAL
+MX TOKEN
+MX
+Falcon Finance
+FF
+ZKsync
+ZK
+AB
+AB
+Theta Network
+THETA
+SafePal
+SFP
+Basic Attention Token
+BAT
+DeepBook Protocol
+DEEP
+THORChain
+RUNE
+Gala
+GALA
+eCash
+XEC
+Vaulta
+Ah
+Golem
+GLM
+siren
+SIREN
+1inch Network
+1INCH
+Akash Network
+AKT
+Sonic (prev. FTM)
+S
+Aethir
+ATH
+Sentient
+SENT
+JITO
+JTO
+Gas
+GAS
+Fluid
+FLUID
+WEMIX
+WEMIX
+Arweave
+AR
+CoW Protocol
+COW
+0G
+0G
+MultiversX
+EGLD
+Official Melania Meme
+MELANIA
+KAITO
+KAITO
+EigenCloud
+EIGEN
+Qtum
+QTUM
+Livepeer
+LPT
+Berachain
+BERA
+Centrifuge
+CFG
+YZY MONEY
+YZY
+Ontology
+ONT
+FTX Token
+FTT
+Synthetix
+SNX
+Horizen
+ZEN
+Impossible Cloud Network
+ICNT
+Solana Mobile Seeker
+SKRm
+Ravencoin
+RVN
+Reserve Rights
+RSR
+Lombard
+BARD
+Beam
+BEAMo
+0x Protocol
+ZRX
+yearn.finance
+YFI
+dYdX (Native)
+DYDXn
+Keeta
+KTA
+Amp
+AMPt
+Safe
+SAFEt
+Audiera
+BEATa
+Rain
+RAINn
+Falcon USD
+USDfn
+HTX
+HTX
+Ondo US Dollar Yield
+USDY
+Jupiter Perps LP
+JLP
+Beldex
+BDX
+GHO
+GHO
+Legacy Frax Dollar
+FRAX
+Ape and Pepe
+APEPE
+ADI
+ADIt
+SwissBorg
+BORG
+Yooldo
+ESPORTS
+Undeads Games
+UDS
+AriaAI
+ARIAi
+GUSD
+GUSDd
+Zano
+ZANO
+Circle Internet Group Tokenized Stock (Ondo)
+CRCLON
+SuperTrust
+SUT
+Banana For Scale
+BANANAS31
+Qubic
+QUBIC
+Ultima
+ULTIMA
+Gomining
+Gomining
+Astherus USDF
+USDF
+EUR CoinVertible
+EURCV
+ViciCoin
+VCNT
+Shuffle
+SHFL
+Ribbita by Virtuals
+TIBBIR
+MNEE
+MNEE
+Pieverse
+PIEVERSE
+TronBank
+TBK
+BitMart Token
+BMX
+Light
+LIGHT
+SLT
+SLTg
+Circle tokenized stock (xStock)
+CRCLX
+Tesla tokenized stock (xStock)
+TSLAX
+Theta Fuel
+TFUEL
+Cheems (cheems.pet)
+CHEEMSp
+DigiByte
+DGB
+Zilliqa
+ZIL
+Kusama
+KSM
+Wormhole
+W
+Tagger
+TAGt
+Toshi
+TOSHI
+Creditcoin
+CTC
+Kamino Finance
+KMNO
+Wiki Cat
+WKC
+Oasis Network
+ROSE
+NEXPACE
+NXPC
+Mina
+MINA
+DOG•GO•TO•THE•MOON
+DOG
+Nervos Network
+CKB
+Holo
+HOT
+Verge
+XVG
+AIOZ Network
+AIOZ
+Grass
+GRASS
+MindWaveDAO
+NILA
+Ronin
+RONIN
+Threshold
+T
+Turbo
+TURBOt
+Meteora
+METr
+ApeCoin
+APE
+Velo
+VELO
+Defi App
+HOME
+SKYAI
+SKYAI
+Sahara AI
+SAHARA
+ZetaChain
+ZETA
+XPR Network
+XPR
+aelf
+ELF
+Fogo
+FOGO
+GMX
+GMXi
+SuperVerse
+SUPERf
+Niza Global
+NIZA
+ZORA
+ZORA
+Fidelity Digital Dollar
+FIDD
+GEODNET
+GEOD
+Pythia
+PYTHIA
+Burnedfi
+BURNd
+Zeebu
+ZBU
+Astar
+ASTR
+World Mobile Token
+WMTX
+Movement
+MOVEm
+RaveDAO
+RAVE
+Brett (Based)
+BRETT
+SP500 tokenized stock (xStock)
+SPYX
+Alchemy Pay
+ACH
+Nano
+NANO
+Derive
+DRV
+InitVerse
+INI
+MYX Finance
+MYX
+Eurite
+EURI
+Unibase
+UB
+Sign
+SIGNt
+VVS Finance
+VVS
+Joseon Mun
+JSM
+Kava
+KAVA
+Lumera Health
+LUR
+BitDCA
+BDCA
+Bitkub Coin
+KUB
+Alphabet tokenized stock (xStock)
+GOOGLX
+HashKey Platform Token
+HSK
+Concordium
+CCD

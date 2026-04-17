@@ -1,0 +1,90 @@
+gold
+silver
+oil
+crude
+natural gas
+wheat
+corn
+soybean
+cocoa
+coffee
+cotton
+lumber
+copper
+platinum
+palladium
+sugar
+rice
+cattle
+livestock
+commodity
+futures
+price
+close price
+open price
+stock
+share
+equity
+nasdaq
+dow jones
+s&p
+sp500
+index
+ipo
+earnings
+revenue
+profit
+market cap
+dividend
+yield
+bond
+treasury
+interest rate
+fed rate
+federal reserve
+rate hike
+rate cut
+basis points
+bps
+mortgage
+debt
+dollar
+euro
+yen
+forex
+currency
+exchange rate
+gdp
+trade
+tariff
+deficit
+surplus
+unemployment
+jobs
+payroll
+nonfarm
+inflation
+cpi
+ppi
+pce
+fomc
+fed funds
+repo
+libor
+sofr
+10 year
+30 year
+yield curve
+inversion
+recession
+bankruptcy
+acquisition
+merger
+ipo
+spac
+etf
+fund
+hedge
+portfolio
+asset
+valuation
