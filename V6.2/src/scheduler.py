@@ -37,6 +37,30 @@ def run_generator(generator_dir):
         print(f"  {Fore.RED}[{ts}] [scheduler] Unexpected error: {e}{Style.RESET_ALL}")
         return False
 
+def run_scripts(v6_dir):
+    """Run all .py files in scripts/ and save their stdout to input_files/summary-MM-DD-YY.txt."""
+    import sys
+    scripts_dir = v6_dir / "scripts"
+    if not scripts_dir.exists():
+        return
+    scripts = sorted(scripts_dir.glob("*.py"))
+    if not scripts:
+        return
+    date_str = (datetime.now() - timedelta(days=1)).strftime("%m-%d-%y")
+    out_dir = v6_dir / "input_files"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%H:%M:%S")
+    for script in scripts:
+        out_path = out_dir / f"summary-{date_str}.txt"
+        try:
+            result = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+            out_path.write_text(result.stdout)
+            print(f"  {Fore.GREEN}[{ts}] [scheduler] Script {script.name} -> {out_path.name}{Style.RESET_ALL}")
+            if result.stderr:
+                print(f"  {Fore.YELLOW}[{ts}] [scheduler] {script.name} stderr: {result.stderr[:200]}{Style.RESET_ALL}")
+        except Exception as e:
+            print(f"  {Fore.RED}[{ts}] [scheduler] Failed to run {script.name}: {e}{Style.RESET_ALL}")
+
 def run_export(v6_dir, cfg):
     """Export today's trades log to a dated CSV in data/."""
     ts = datetime.now().strftime("%H:%M:%S")
@@ -89,6 +113,9 @@ def scheduler_loop(cfg):
         print(f"  [scheduler] Running initial startup update...")
         if run_generator(generator_dir):
             copy_newest_output(generator_outputs, v6_inputs)
+            ve62_inputs = root_dir / "VE6.2" / cfg.get("input_files_dir", "input_files")
+            if (root_dir / "VE6.2").exists():
+                copy_newest_output(generator_outputs, ve62_inputs)
         last_run_date = datetime.now().date()
 
     if cfg.get("export_on_startup", False):
@@ -99,9 +126,13 @@ def scheduler_loop(cfg):
 
         # Check if it's 8:00 AM UTC (3:00 AM CDT) and we haven't run today
         if now.hour == 8 and now.minute == 0 and last_run_date != now.date():
+            run_scripts(v6_dir)
+            run_export(v6_dir, cfg)
             if run_generator(generator_dir):
                 copy_newest_output(generator_outputs, v6_inputs)
-            run_export(v6_dir, cfg)
+                ve62_inputs = root_dir / "VE6.2" / cfg.get("input_files_dir", "input_files")
+                if (root_dir / "VE6.2").exists():
+                    copy_newest_output(generator_outputs, ve62_inputs)
             last_run_date = now.date()
         
         # Sleep for 30 seconds before checking again
