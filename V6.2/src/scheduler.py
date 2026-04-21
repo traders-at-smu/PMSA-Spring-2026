@@ -37,7 +37,7 @@ def run_generator(generator_dir):
         print(f"  {Fore.RED}[{ts}] [scheduler] Unexpected error: {e}{Style.RESET_ALL}")
         return False
 
-def run_scripts(v6_dir):
+def run_scripts(v6_dir, cfg=None):
     """Run all .py files in scripts/ and save their stdout to input_files/summary-MM-DD-YY.txt."""
     import sys
     scripts_dir = v6_dir / "scripts"
@@ -58,6 +58,9 @@ def run_scripts(v6_dir):
             print(f"  {Fore.GREEN}[{ts}] [scheduler] Script {script.name} -> {out_path.name}{Style.RESET_ALL}")
             if result.stderr:
                 print(f"  {Fore.YELLOW}[{ts}] [scheduler] {script.name} stderr: {result.stderr[:200]}{Style.RESET_ALL}")
+            if cfg and cfg.get("dropbox", {}).get("enabled"):
+                from export_trades import upload_to_dropbox
+                upload_to_dropbox(str(out_path), cfg)
         except Exception as e:
             print(f"  {Fore.RED}[{ts}] [scheduler] Failed to run {script.name}: {e}{Style.RESET_ALL}")
 
@@ -126,7 +129,7 @@ def scheduler_loop(cfg):
 
         # Check if it's 8:00 AM UTC (3:00 AM CDT) and we haven't run today
         if now.hour == 8 and now.minute == 0 and last_run_date != now.date():
-            run_scripts(v6_dir)
+            run_scripts(v6_dir, cfg)
             run_export(v6_dir, cfg)
             if run_generator(generator_dir):
                 copy_newest_output(generator_outputs, v6_inputs)
