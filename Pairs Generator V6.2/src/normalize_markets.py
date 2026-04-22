@@ -134,6 +134,13 @@ def run():
             outcomes = parse_outcomes(raw_data, platform)
 
             if outcomes:
+                # Skip markets with 3+ outcomes (e.g. soccer Home/Draw/Away).
+                # V6.2 matcher cannot reliably align these against Kalshi's
+                # per-team tickers — they cause mis-aligned pairs. Handled
+                # properly in V6.4.
+                if len(outcomes) >= 3:
+                    skipped += 1
+                    continue
                 for outcome in outcomes:
                     norm = normalize_title(f"{title} {outcome}", stopwords)
                     if not norm:

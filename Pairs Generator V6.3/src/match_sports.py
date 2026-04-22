@@ -427,6 +427,11 @@ def get_market_type(ticker: str, title: str = "", platform: str = "kalshi") -> s
             return "spread"
         if "TOTAL" in ticker_upper:
             return "total"
+        # Team-batter / per-player prop event tickers (e.g. KXMLBTB-..., KXNHLTB-...).
+        # The market-type suffix sits directly after the sport prefix. Use a
+        # regex to avoid false positives on TB team abbreviations (Tampa Bay).
+        if re.search(r"KX[A-Z]+TB-", ticker_upper) or "TEAMTOTAL" in ticker_upper:
+            return "team_total"
         if any(x in ticker_upper for x in ["1HWINNER", "1H"]) or "first half" in title_lower:
             return "1h"
         if any(x in ticker_upper for x in ["2HWINNER", "2H"]) or "second half" in title_lower:
@@ -435,21 +440,41 @@ def get_market_type(ticker: str, title: str = "", platform: str = "kalshi") -> s
             return "f5"
         if "-TIE" in ticker_upper or "-DRAW" in ticker_upper or " end in a draw" in title_lower:
             return "draw"
-        return "winner"
+        # Series / futures / championship tickers resolve on a different time
+        # horizon than a single game, so they must not be classified as a
+        # game-winner market (which would mis-pair with Poly single-game markets).
+        if "SERIES" in ticker_upper or "FUTURES" in ticker_upper or "CHAMPION" in ticker_upper:
+            return "other"
+        # Only classify as "winner" on an affirmative signal. Many prop-style
+        # Kalshi event tickers (RFI, HR, SO, NEXTGM, …) otherwise silently fall
+        # through as "winner" and get mis-paired with game-winner Poly markets.
+        if "GAME" in ticker_upper or "WINNER" in ticker_upper or "winner" in title_lower:
+            return "winner"
+        return "other"
     else:
         # Polymarket slug / title
-        if any(x in text.lower() for x in ["-btts", "both teams to score", "both teams score", "teams score"]):
+        text_l = text.lower()
+        if any(x in text_l for x in ["-btts", "both teams to score", "both teams score", "teams score"]):
             return "btts"
-        if "-spread" in text.lower():
+        if "-spread" in text_l:
             return "spread"
-        if any(x in text.lower() for x in ["-total", "-over-", "-under-"]):
+        if any(x in text_l for x in ["-total", "-over-", "-under-"]):
             return "total"
-        if any(x in text.lower() for x in ["-1h-", "first half", "-1st-half"]):
+        if any(x in text_l for x in ["-1h-", "first half", "-1st-half"]):
             return "1h"
-        if any(x in text.lower() for x in ["-2h-", "second half", "-2nd-half"]):
+        if any(x in text_l for x in ["-2h-", "second half", "-2nd-half"]):
             return "2h"
-        if "-draw" in text.lower():
+        if "-draw" in text_l:
             return "draw"
+        # Series / futures / championship / finals — long-horizon slugs
+        # that must not pair with single-game Kalshi winners.
+        if any(x in text_l for x in ["-series", "-futures", "-champion", "-finals", "-playoff", "-standings"]):
+            return "other"
+        # Player / game-state prop slugs (method of victory, first inning,
+        # home runs, strikeouts, etc.). Keep this list conservative — only
+        # add tokens that clearly indicate a non-winner market.
+        if any(x in text_l for x in ["-method-", "-mov-", "-distance-", "-rfi-", "-homeruns-", "-strikeouts-", "-propbet-"]):
+            return "other"
         return "winner"
 
 
@@ -1170,6 +1195,26 @@ def run():
         if len(v["teams"]) <= MAX_TEAMS_KALSHI
     }
 
+    # Drop Kalshi 3-way events (any event that has a -TIE/-DRAW contract).
+    # V6.3 matcher cannot reliably align a 3-outcome Kalshi event against a
+    # 2-outcome Polymarket market — avoid them entirely, per team decision
+    # ("avoid 3-outcome markets completely until V6.4 is ready").
+    # NOTE: check the per-contract market_id, not the event_ticker — the event
+    # ticker itself does not carry the -TIE suffix.
+    def _has_3way_contract(ev):
+        for m in ev["markets"]:
+            mid = (m.get("market_id") or "").upper()
+            if "-TIE" in mid or "-DRAW" in mid:
+                return True
+            if (m.get("market_type") or "") == "draw":
+                return True
+        return False
+
+    kalshi_events = {
+        k: v for k, v in kalshi_events.items()
+        if not _has_3way_contract(v)
+    }
+
     print(f"  {len(kalshi_events)} unique Kalshi events after bundle filtering")
 
     # ── (team_lower, date) index for O(1) candidate lookup ─────────────────
@@ -1411,15 +1456,13 @@ def run():
                         "expiry_kalshi_utc":   kalshi_raw.get("close_time", ""),
                     })
 
-    # Step 1: best poly per kalshi (already enforced by best_for_kalshi dict)
-    # Step 2: from those, keep best kalshi per poly (one-to-one pairing)
-    best_for_poly: dict[str, tuple] = {}
-    for score, rec in best_for_kalshi.values():
-        pid = rec["poly_market_id"]
-        if pid not in best_for_poly or score > best_for_poly[pid][0]:
-            best_for_poly[pid] = (score, rec)
-
-    results = [v[1] for v in best_for_poly.values()]
+    # V6.3: emit one row per Kalshi market (best poly per kalshi is already
+    # enforced by best_for_kalshi). If both Kalshi per-team tickers for the
+    # same game match the same Polymarket event, BOTH rows are kept so the bot
+    # can see all 6 prices: K teamA YES/NO, K teamB YES/NO, P teamA, P teamB.
+    # Previously a final best_for_poly pass collapsed this to one row per Poly
+    # market — removed to support dual-ticker coverage.
+    results = [rec for _, rec in best_for_kalshi.values()]
 
     # Filter out expired markets. Allow live/in-progress games whose
     # Polymarket endDateIso has already ticked past midnight UTC (date-only
