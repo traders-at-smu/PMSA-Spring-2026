@@ -1,0 +1,594 @@
+{
+  "pair-0368": {
+    "pair_id": "pair-0368",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXVENEZUELALEADER-26DEC31-EGON",
+    "p_token_id": "85482789936744260311999371350699987044247644306653001528276695717482676507600",
+    "p_token_ids": [
+      "85482789936744260311999371350699987044247644306653001528276695717482676507600"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "85482789936744260311999371350699987044247644306653001528276695717482676507600",
+    "no_token_id": "70138439134789940151293221562290156019511842004756860386379046881297155754497",
+    "title": "Will Edmundo Gonz\u00e1lez be the leader of Venezuela end of 2026?",
+    "contracts": 1000,
+    "entry_k_price": 0.96,
+    "entry_p_price": 0.005,
+    "entry_kp_cost": 967.6900000000121,
+    "entry_fills": [
+      {
+        "k_price": 0.96,
+        "p_price": 0.005,
+        "contracts": 1000
+      }
+    ],
+    "entry_fee": 2.69,
+    "entry_edge_dollar": 19.62,
+    "entry_arr": 0.020275088096381743,
+    "entry_edge_pct": 0.020275088096381743,
+    "entry_timestamp": "2026-04-21T23:23:49.726400+00:00",
+    "entry_trade_number": "T00001",
+    "cooldown_until": "2026-04-22T00:23:49.726400+00:00",
+    "poly_fee_rate": 0.0,
+    "resolution_date": ""
+  },
+  "pair-0735": {
+    "pair_id": "pair-0735",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXMLBALCENT-26-KC",
+    "p_token_id": "110367548882545281488981585568639234422762071454403847917742798755078648472275",
+    "p_token_ids": [
+      "110367548882545281488981585568639234422762071454403847917742798755078648472275"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "1497605002039843382832075367677988482162757038083722553475428629560236765552",
+    "no_token_id": "110367548882545281488981585568639234422762071454403847917742798755078648472275",
+    "title": "Will Kansas City Royals win the 2026 AL Central title?",
+    "contracts": 253,
+    "entry_k_price": 0.13,
+    "entry_p_price": 0.85,
+    "entry_kp_cost": 245.3900000000001,
+    "entry_fills": [
+      {
+        "k_price": 0.13,
+        "p_price": 0.82,
+        "contracts": 52
+      },
+      {
+        "k_price": 0.13,
+        "p_price": 0.83,
+        "contracts": 100
+      },
+      {
+        "k_price": 0.13,
+        "p_price": 0.84,
+        "contracts": 100
+      },
+      {
+        "k_price": 0.13,
+        "p_price": 0.85,
+        "contracts": 1
+      }
+    ],
+    "entry_fee": 2.01,
+    "entry_edge_dollar": 3.07,
+    "entry_arr": 0.012510697257426536,
+    "entry_edge_pct": 0.012510697257426536,
+    "entry_timestamp": "2026-04-21T23:23:49.872055+00:00",
+    "entry_trade_number": "T00002",
+    "cooldown_until": "2026-04-22T00:23:49.872055+00:00",
+    "poly_fee_rate": 0.0,
+    "resolution_date": ""
+  },
+  "pair-0804": {
+    "pair_id": "pair-0804",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "APPLEFOLD-26DEC31",
+    "p_token_id": "35608595602971585131748334524997534059288005974951964270070510209825391272871",
+    "p_token_ids": [
+      "35608595602971585131748334524997534059288005974951964270070510209825391272871"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "35608595602971585131748334524997534059288005974951964270070510209825391272871",
+    "no_token_id": "86136836547770521111743494575582395458930966240091848908759010720929112549108",
+    "title": "Will Apple release a foldable iPhone before 2027?",
+    "contracts": 111,
+    "entry_k_price": 0.18,
+    "entry_p_price": 0.79,
+    "entry_kp_cost": 108.0400000000002,
+    "entry_fills": [
+      {
+        "k_price": 0.18,
+        "p_price": 0.77,
+        "contracts": 5
+      },
+      {
+        "k_price": 0.18,
+        "p_price": 0.78,
+        "contracts": 68
+      },
+      {
+        "k_price": 0.18,
+        "p_price": 0.79,
+        "contracts": 38
+      }
+    ],
+    "entry_fee": 1.15,
+    "entry_edge_dollar": 0.7,
+    "entry_arr": 0.006479081821545669,
+    "entry_edge_pct": 0.006479081821545669,
+    "entry_timestamp": "2026-04-21T23:23:49.894705+00:00",
+    "entry_trade_number": "T00003",
+    "cooldown_until": "2026-04-22T00:23:49.894705+00:00",
+    "poly_fee_rate": 0.0,
+    "resolution_date": ""
+  },
+  "pair-0822": {
+    "pair_id": "pair-0822",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXSB-27-SEA",
+    "p_token_id": "108653605515870936645618227692502841707998202104516753146823247672070536516170",
+    "p_token_ids": [
+      "108653605515870936645618227692502841707998202104516753146823247672070536516170"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "44921620302443755066232904216706419654951291213279649386577553092891642701355",
+    "no_token_id": "108653605515870936645618227692502841707998202104516753146823247672070536516170",
+    "title": "Will the Seattle Seahawks win the 2027 NFL league championship?",
+    "contracts": 1000,
+    "entry_k_price": 0.09,
+    "entry_p_price": 0.87,
+    "entry_kp_cost": 965.7400000000063,
+    "entry_fills": [
+      {
+        "k_price": 0.09,
+        "p_price": 0.87,
+        "contracts": 1000
+      }
+    ],
+    "entry_fee": 5.74,
+    "entry_edge_dollar": 18.52,
+    "entry_arr": 0.019177004162604445,
+    "entry_edge_pct": 0.019177004162604445,
+    "entry_timestamp": "2026-04-21T23:23:49.920188+00:00",
+    "entry_trade_number": "T00004",
+    "cooldown_until": "2026-04-22T00:23:49.920188+00:00",
+    "poly_fee_rate": 0.0,
+    "resolution_date": ""
+  },
+  "pair-0918": {
+    "pair_id": "pair-0918",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXPRESNOMR-28-MR",
+    "p_token_id": "13565458761220145250977753098276900790902214604876327357986816739576288755859",
+    "p_token_ids": [
+      "13565458761220145250977753098276900790902214604876327357986816739576288755859"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "13565458761220145250977753098276900790902214604876327357986816739576288755859",
+    "no_token_id": "75720156002519829912361786945091022242706922246722836126941546028340974330171",
+    "title": "Will Marco Rubio win the 2028 Republican presidential nomination?",
+    "contracts": 1000,
+    "entry_k_price": 0.75,
+    "entry_p_price": 0.203,
+    "entry_kp_cost": 965.8880000000025,
+    "entry_fills": [
+      {
+        "k_price": 0.75,
+        "p_price": 0.201,
+        "contracts": 72
+      },
+      {
+        "k_price": 0.75,
+        "p_price": 0.202,
+        "contracts": 98
+      },
+      {
+        "k_price": 0.75,
+        "p_price": 0.203,
+        "contracts": 830
+      }
+    ],
+    "entry_fee": 13.13,
+    "entry_edge_dollar": 10.982,
+    "entry_arr": 0.0044592425704843555,
+    "entry_edge_pct": 0.011369848263978263,
+    "entry_timestamp": "2026-04-21T23:23:49.977395+00:00",
+    "entry_trade_number": "T00005",
+    "cooldown_until": "2026-04-22T00:23:49.977395+00:00",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2028-11-07T15:00:00Z"
+  },
+  "pair-1351": {
+    "pair_id": "pair-1351",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXPRESPERSON-28-MRUB",
+    "p_token_id": "11171618905857319805355893398009978356002287408842633593535559412449299952250",
+    "p_token_ids": [
+      "11171618905857319805355893398009978356002287408842633593535559412449299952250"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "11171618905857319805355893398009978356002287408842633593535559412449299952250",
+    "no_token_id": "65892530750232246342273648992064742042382898919201083513241874070914353628268",
+    "title": "Will Marco Rubio win the 2028 US Presidential Election?",
+    "contracts": 1000,
+    "entry_k_price": 0.86,
+    "entry_p_price": 0.11,
+    "entry_kp_cost": 978.0830000000115,
+    "entry_fills": [
+      {
+        "k_price": 0.86,
+        "p_price": 0.109,
+        "contracts": 347
+      },
+      {
+        "k_price": 0.86,
+        "p_price": 0.11,
+        "contracts": 653
+      }
+    ],
+    "entry_fee": 8.43,
+    "entry_edge_dollar": 3.487,
+    "entry_arr": 0.001004341396314284,
+    "entry_edge_pct": 0.003565137110029013,
+    "entry_timestamp": "2026-04-21T23:23:50.118912+00:00",
+    "entry_trade_number": "T00006",
+    "cooldown_until": "2026-04-22T00:23:50.118912+00:00",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2029-11-07T15:00:00Z"
+  },
+  "pair-1354": {
+    "pair_id": "pair-1354",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXPRESPERSON-28-JOSS",
+    "p_token_id": "110102705199530588976777616718115948005824665233400132417374621750887344831757",
+    "p_token_ids": [
+      "110102705199530588976777616718115948005824665233400132417374621750887344831757"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "110102705199530588976777616718115948005824665233400132417374621750887344831757",
+    "no_token_id": "98394838816403247684221016468696784125095120854407803889228262583112436699261",
+    "title": "Will Jon Ossoff win the 2028 US Presidential Election?",
+    "contracts": 1000,
+    "entry_k_price": 0.93,
+    "entry_p_price": 0.041,
+    "entry_kp_cost": 975.5599999999803,
+    "entry_fills": [
+      {
+        "k_price": 0.93,
+        "p_price": 0.041,
+        "contracts": 1000
+      }
+    ],
+    "entry_fee": 4.56,
+    "entry_edge_dollar": 9.88,
+    "entry_arr": 0.002853041483045058,
+    "entry_edge_pct": 0.010127516503362093,
+    "entry_timestamp": "2026-04-21T23:23:50.137917+00:00",
+    "entry_trade_number": "T00007",
+    "cooldown_until": "2026-04-22T00:23:50.137917+00:00",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2029-11-07T15:00:00Z"
+  },
+  "pair-1442": {
+    "pair_id": "pair-1442",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXNEXTISRAELPM-45JAN01-YLAP",
+    "p_token_id": "30912854850866302644106316438153629460678506137655559406260043509960678109607",
+    "p_token_ids": [
+      "30912854850866302644106316438153629460678506137655559406260043509960678109607"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "30912854850866302644106316438153629460678506137655559406260043509960678109607",
+    "no_token_id": "111793355166132295017239163560645146761744336187614021796771100619201573005168",
+    "title": "Will Yair Lapid be the next Prime Minister of Israel?",
+    "contracts": 750,
+    "entry_k_price": 0.95,
+    "entry_p_price": 0.021,
+    "entry_kp_cost": 730.7500000000056,
+    "entry_fills": [
+      {
+        "k_price": 0.95,
+        "p_price": 0.021,
+        "contracts": 750
+      }
+    ],
+    "entry_fee": 2.5,
+    "entry_edge_dollar": 9.25,
+    "entry_arr": 0.0006764992477649326,
+    "entry_edge_pct": 0.012658227848093546,
+    "entry_timestamp": "2026-04-21T23:23:50.168690+00:00",
+    "entry_trade_number": "T00008",
+    "cooldown_until": "2026-04-22T00:23:50.168690+00:00",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2045-01-01T15:00:00Z"
+  },
+  "pair-1445": {
+    "pair_id": "pair-1445",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXNEXTISRAELPM-45JAN01-NBEN",
+    "p_token_id": "58945936829392654397399777214757608864525173988558750256164021442231118224154",
+    "p_token_ids": [
+      "58945936829392654397399777214757608864525173988558750256164021442231118224154"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "58945936829392654397399777214757608864525173988558750256164021442231118224154",
+    "no_token_id": "39409206330527880169507414405291721950884951005340760541937649898052386499519",
+    "title": "Will Naftali Bennett be the next Prime Minister of Israel?",
+    "contracts": 51,
+    "entry_k_price": 0.66,
+    "entry_p_price": 0.31,
+    "entry_kp_cost": 48.39000000000003,
+    "entry_fills": [
+      {
+        "k_price": 0.62,
+        "p_price": 0.31,
+        "contracts": 48
+      },
+      {
+        "k_price": 0.66,
+        "p_price": 0.31,
+        "contracts": 3
+      }
+    ],
+    "entry_fee": 0.84,
+    "entry_edge_dollar": 1.26,
+    "entry_arr": 0.0013915836975451866,
+    "entry_edge_pct": 0.026038437693737804,
+    "entry_timestamp": "2026-04-21T23:23:50.177899+00:00",
+    "entry_trade_number": "T00009",
+    "cooldown_until": "2026-04-22T00:23:50.177899+00:00",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2045-01-01T15:00:00Z"
+  },
+  "pair-1456": {
+    "pair_id": "pair-1456",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXNEXTUKPM-30-NF",
+    "p_token_id": "50960260636990249013018697727132070044900034089108950792866072435222205165583",
+    "p_token_ids": [
+      "50960260636990249013018697727132070044900034089108950792866072435222205165583"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "50960260636990249013018697727132070044900034089108950792866072435222205165583",
+    "no_token_id": "69165855929823223276623079497824884292884455984217711529407160439315932604807",
+    "title": "Will Nigel Farage be the next Prime Minister of the United Kingdom in 2026?",
+    "contracts": 1000,
+    "entry_k_price": 0.93,
+    "entry_p_price": 0.03,
+    "entry_kp_cost": 956.9659999999805,
+    "entry_fills": [
+      {
+        "k_price": 0.9,
+        "p_price": 0.028,
+        "contracts": 29
+      },
+      {
+        "k_price": 0.91,
+        "p_price": 0.028,
+        "contracts": 287
+      },
+      {
+        "k_price": 0.92,
+        "p_price": 0.028,
+        "contracts": 41
+      },
+      {
+        "k_price": 0.93,
+        "p_price": 0.028,
+        "contracts": 90
+      },
+      {
+        "k_price": 0.93,
+        "p_price": 0.029,
+        "contracts": 100
+      },
+      {
+        "k_price": 0.93,
+        "p_price": 0.03,
+        "contracts": 453
+      }
+    ],
+    "entry_fee": 4.98,
+    "entry_edge_dollar": 28.054,
+    "entry_arr": 0.007922245374856566,
+    "entry_edge_pct": 0.029315566070288932,
+    "entry_timestamp": "2026-04-21T23:23:50.200472+00:00",
+    "entry_trade_number": "T00010",
+    "cooldown_until": "2026-04-22T00:23:50.200472+00:00",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2030-01-01T15:00:00Z"
+  },
+  "pair-1077": {
+    "pair_id": "pair-1077",
+    "strategy": "BUY_KN_BUY_PY",
+    "k_side": "no",
+    "p_side": "yes",
+    "kalshi_ticker": "KXSENATEWVD-26-ZSHR",
+    "p_token_id": "4835507014992300277959685271181290188701411543195603584888475156296621379165",
+    "p_token_ids": [
+      "4835507014992300277959685271181290188701411543195603584888475156296621379165"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "4835507014992300277959685271181290188701411543195603584888475156296621379165",
+    "no_token_id": "84894400428625071047950881215661639722391493961642605510730968213782585346476",
+    "title": "Will Rio Phillips be the Democratic nominee for Senate in West Virginia?",
+    "contracts": 426,
+    "entry_k_price": 0.93,
+    "entry_p_price": 0.042,
+    "entry_kp_cost": 347.2180000000017,
+    "entry_fills": [
+      {
+        "k_price": 0.71,
+        "p_price": 0.006,
+        "contracts": 20
+      },
+      {
+        "k_price": 0.73,
+        "p_price": 0.006,
+        "contracts": 89
+      },
+      {
+        "k_price": 0.73,
+        "p_price": 0.007,
+        "contracts": 5
+      },
+      {
+        "k_price": 0.73,
+        "p_price": 0.008,
+        "contracts": 6
+      },
+      {
+        "k_price": 0.74,
+        "p_price": 0.008,
+        "contracts": 4
+      },
+      {
+        "k_price": 0.74,
+        "p_price": 0.009,
+        "contracts": 5
+      },
+      {
+        "k_price": 0.74,
+        "p_price": 0.012,
+        "contracts": 6
+      },
+      {
+        "k_price": 0.74,
+        "p_price": 0.014,
+        "contracts": 10
+      },
+      {
+        "k_price": 0.74,
+        "p_price": 0.015,
+        "contracts": 123
+      },
+      {
+        "k_price": 0.74,
+        "p_price": 0.018,
+        "contracts": 7
+      },
+      {
+        "k_price": 0.74,
+        "p_price": 0.022,
+        "contracts": 10
+      },
+      {
+        "k_price": 0.74,
+        "p_price": 0.024,
+        "contracts": 8
+      },
+      {
+        "k_price": 0.74,
+        "p_price": 0.03,
+        "contracts": 6
+      },
+      {
+        "k_price": 0.74,
+        "p_price": 0.036,
+        "contracts": 10
+      },
+      {
+        "k_price": 0.74,
+        "p_price": 0.037,
+        "contracts": 11
+      },
+      {
+        "k_price": 0.93,
+        "p_price": 0.037,
+        "contracts": 78
+      },
+      {
+        "k_price": 0.93,
+        "p_price": 0.04,
+        "contracts": 20
+      },
+      {
+        "k_price": 0.93,
+        "p_price": 0.042,
+        "contracts": 8
+      }
+    ],
+    "entry_fee": 5.06,
+    "entry_edge_dollar": 69.462,
+    "entry_arr": 0.18936136652062244,
+    "entry_edge_pct": 0.20005299264438461,
+    "entry_timestamp": "2026-04-21T23:23:50.258552+00:00",
+    "entry_trade_number": "T00011",
+    "cooldown_until": "2026-04-22T00:23:50.258552+00:00",
+    "poly_fee_rate": 0.0,
+    "resolution_date": "2027-05-12T14:00:00Z"
+  },
+  "pair-0471": {
+    "pair_id": "pair-0471",
+    "strategy": "BUY_KY_BUY_PN",
+    "k_side": "yes",
+    "p_side": "no",
+    "kalshi_ticker": "KXMLB-26-ATL",
+    "p_token_id": "29295580868306068896124583600000282365944247641268463074038627370917750913578",
+    "p_token_ids": [
+      "29295580868306068896124583600000282365944247641268463074038627370917750913578"
+    ],
+    "p_leg_prices": [],
+    "p_leg_spend": [],
+    "yes_token_id": "87400549613971964996449731299293585289302880817247437384669548139968257881468",
+    "no_token_id": "29295580868306068896124583600000282365944247641268463074038627370917750913578",
+    "title": "Will the Atlanta Braves win the 2026 World Series?",
+    "contracts": 182,
+    "entry_k_price": 0.06,
+    "entry_p_price": 0.92,
+    "entry_kp_cost": 178.89900000000017,
+    "entry_fills": [
+      {
+        "k_price": 0.06,
+        "p_price": 0.919,
+        "contracts": 181
+      },
+      {
+        "k_price": 0.06,
+        "p_price": 0.92,
+        "contracts": 1
+      }
+    ],
+    "entry_fee": 0.72,
+    "entry_edge_dollar": 0.561,
+    "entry_arr": 0.0031358476011595082,
+    "entry_edge_pct": 0.0031358476011595082,
+    "entry_timestamp": "2026-04-22T00:03:47.131471+00:00",
+    "entry_trade_number": "T00012",
+    "cooldown_until": "2026-04-22T01:03:47.131471+00:00",
+    "poly_fee_rate": 0.0,
+    "resolution_date": ""
+  }
+}
