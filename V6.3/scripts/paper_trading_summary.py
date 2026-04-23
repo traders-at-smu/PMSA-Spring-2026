@@ -322,7 +322,7 @@ for label, fn in edge_buckets_def:
     row = f'  {label:<8}'
     for d in dur_labels:
         row += f'  {_cross_cell(by_dur.get(d, []))}'
-    row += f'  {_cross_cell(matched)}'
+    row += f'  {_cross_cell([r[1] for r in matched])}'
     print(row)
 sep()
 tot_row = f'  {"Total":<8}'
