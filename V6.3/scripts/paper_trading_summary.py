@@ -82,13 +82,13 @@ def duration(ts_start, ts_end):
     t1   = datetime.fromisoformat(ts_start.replace('Z', '+00:00'))
     t2   = datetime.fromisoformat(ts_end.replace('Z', '+00:00'))
     secs = int((t2 - t1).total_seconds())
-    if secs == 0:      return '<15s', 0
+    if secs == 0:      return '<5s', 0
     elif secs < 60:    return f'{secs}s', secs
     elif secs < 3600:  return f'{secs//60}m {secs%60}s', secs
     else:              return f'{secs//3600}h {(secs%3600)//60}m', secs
 
 def dur_bucket(secs):
-    if secs == 0:    return '<15s'
+    if secs == 0:    return '<5s'
     if secs < 60:    return '15s-1m'
     if secs < 300:   return '1m-5m'
     if secs < 1800:  return '5m-30m'
@@ -113,7 +113,7 @@ for s in sessions:
     arr       = best.get('arr', None)
     results.append((
         s[0]['timestamp'], profit, best['title'], contracts, edge,
-        start_ts, end_ts, cost, dur_str, dur_secs, exec_date, game_date, d_held, arr
+        start_ts, end_ts, cost, dur_str, dur_secs, exec_date, game_date, d_held, arr, token
     ))
 
 results.sort()
@@ -235,7 +235,7 @@ if valid_arrs:
 
 # ── Arb window persistence ─────────────────────────────────────────────────────
 header('ARB WINDOW PERSISTENCE')
-window_buckets      = {'<15s': [0,0.0], '15s-1m': [0,0.0], '1m-5m': [0,0.0], '5m-30m': [0,0.0], '30m+': [0,0.0]}
+window_buckets      = {'<5s': [0,0.0], '15s-1m': [0,0.0], '1m-5m': [0,0.0], '5m-30m': [0,0.0], '30m+': [0,0.0]}
 single_profit = 0.0; single_count = 0
 multi_profit  = 0.0; multi_count  = 0
 
@@ -268,7 +268,7 @@ if multi_count:
 
 # ── Edge x Duration cross-tab ──────────────────────────────────────────────────
 header('EDGE BUCKET × ARB WINDOW')
-dur_labels = ['<15s', '15s-1m', '1m-5m', '5m-30m', '30m+']
+dur_labels = ['<5s', '15s-1m', '1m-5m', '5m-30m', '30m+']
 
 print('  Count / total profit per cell')
 print(f"  {'':12}" + ''.join(f"  {d:>12}" for d in dur_labels) + f"  {'Total':>12}")
@@ -287,21 +287,29 @@ for label, fn in edge_buckets_def:
     row += f'  {len(matched):>3}/${sum(r[1] for r in matched):>7.2f}'
     print(row)
 
-print()
-print('  Avg profit per session per cell')
-print(f"  {'':12}" + ''.join(f"  {d:>10}" for d in dur_labels))
+# ── Sport breakdown ────────────────────────────────────────────────────────────
+header('SPORT BREAKDOWN  (sorted by profit)')
+print(f"  {'Sport':<14}  {'Pos':>3}  {'Contracts':>9}  {'Spent':>9}  {'Profit':>8}  {'ROI':>6}  {'Avg edge':>9}  {'Avg ARR':>8}")
 sep()
-for label, fn in edge_buckets_def:
-    matched = [r for r in results if isinstance(r[4], (int, float)) and fn(r[4])]
-    if not matched:
-        continue
-    by_dur = defaultdict(list)
-    for r in matched:
-        by_dur[dur_bucket(r[9])].append(r[1])
-    row = f'  {label:<12}'
-    for d in dur_labels:
-        items = by_dur.get(d, [])
-        row  += f'  ${sum(items)/len(items):>8.2f}' if items else f'  {"--":>10}'
-    print(row)
+
+sport_stats = defaultdict(lambda: {'count': 0, 'profit': 0.0, 'contracts': 0, 'cost': 0.0, 'edges': [], 'arrs': []})
+for r in results:
+    token_str = r[14]
+    sport = token_str.split('-')[0].upper() if token_str else 'UNKNOWN'
+    sport_stats[sport]['count']     += 1
+    sport_stats[sport]['profit']    += r[1]
+    sport_stats[sport]['contracts'] += r[3]
+    sport_stats[sport]['cost']      += r[7]
+    if isinstance(r[4], (int, float)):
+        sport_stats[sport]['edges'].append(r[4])
+    if r[13] is not None:
+        sport_stats[sport]['arrs'].append(r[13])
+
+for sport, s in sorted(sport_stats.items(), key=lambda x: -x[1]['profit']):
+    roi      = s['profit'] / s['cost'] * 100 if s['cost'] > 0 else 0
+    avg_edge = sum(s['edges']) / len(s['edges']) if s['edges'] else 0
+    avg_arr  = sum(s['arrs']) / len(s['arrs']) if s['arrs'] else 0
+    avg_arr_str = f"{avg_arr:.0f}%" if s['arrs'] else 'n/a'
+    print(f"  {sport:<14}  {s['count']:>3}  {s['contracts']:>9,}  ${s['cost']:>8,.2f}  ${s['profit']:>7,.2f}  {roi:>5.1f}%  {avg_edge:>8.2f}%  {avg_arr_str:>8}")
 
 sep('═', 95)
