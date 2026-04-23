@@ -118,7 +118,10 @@ def duration(ts_start, ts_end):
 
 def dur_bucket(secs):
     if secs == 0:    return '<5s'
-    if secs < 60:    return '5s-1m'
+    if secs < 10:    return '5s-10s'
+    if secs < 15:    return '10s-15s'
+    if secs < 30:    return '15s-30s'
+    if secs < 60:    return '30s-1m'
     if secs < 300:   return '1m-5m'
     if secs < 1800:  return '5m-30m'
     return '30m+'
@@ -264,7 +267,7 @@ if valid_arrs:
 
 # ── Arb window persistence ─────────────────────────────────────────────────────
 header('ARB WINDOW PERSISTENCE')
-window_buckets      = {'<5s': [0,0.0], '5s-1m': [0,0.0], '1m-5m': [0,0.0], '5m-30m': [0,0.0], '30m+': [0,0.0]}
+window_buckets      = {'<5s': [0,0.0], '5s-10s': [0,0.0], '10s-15s': [0,0.0], '15s-30s': [0,0.0], '30s-1m': [0,0.0], '1m-5m': [0,0.0], '5m-30m': [0,0.0], '30m+': [0,0.0]}
 single_profit = 0.0; single_count = 0
 multi_profit  = 0.0; multi_count  = 0
 
@@ -297,7 +300,7 @@ if multi_count:
 
 # ── Edge x Duration cross-tab ──────────────────────────────────────────────────
 header('EDGE BUCKET × ARB WINDOW')
-dur_labels = ['<5s', '5s-1m', '1m-5m', '5m-30m', '30m+']
+dur_labels = ['<5s', '5s-10s', '10s-15s', '15s-30s', '30s-1m', '1m-5m', '5m-30m', '30m+']
 
 print('  Count / total profit per cell')
 print(f"  {'':12}" + ''.join(f"  {d:>12}" for d in dur_labels) + f"  {'Total':>12}")
