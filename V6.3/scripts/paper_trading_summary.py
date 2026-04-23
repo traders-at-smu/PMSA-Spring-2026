@@ -166,7 +166,7 @@ sep()
 
 pair_stats = defaultdict(lambda: {'count': 0, 'profit': 0.0, 'contracts': 0, 'cost': 0.0, 'edges': [], 'arrs': []})
 for r in results:
-    _, profit, title, contracts, edge, _, _, cost, _, _, _, _, _, arr = r
+    _, profit, title, contracts, edge, _, _, cost, _, _, _, _, _, arr, *_ = r
     pair_stats[title]['count']     += 1
     pair_stats[title]['profit']    += profit
     pair_stats[title]['contracts'] += contracts
