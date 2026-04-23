@@ -5,6 +5,35 @@ from datetime import datetime, date, timedelta
 from collections import defaultdict
 from pathlib import Path
 
+SPORT_PREFIXES = [
+    ('ATPCHALLENGER', 'ATP Challenger'),
+    ('ATP',           'ATP'),
+    ('WTA',           'WTA'),
+    ('KBO',           'KBO'),
+    ('MLB',           'MLB'),
+    ('NBA',           'NBA'),
+    ('NHL',           'NHL'),
+    ('NFL',           'NFL'),
+    ('NCAABB',        'NCAAB'),
+    ('NCAAFB',        'NCAAF'),
+    ('MLS',           'MLS'),
+    ('EPL',           'EPL'),
+    ('UEFA',          'UEFA'),
+    ('WNBA',          'WNBA'),
+    ('CFL',           'CFL'),
+]
+
+def parse_sport(token):
+    if not token:
+        return 'Unknown'
+    s = token.upper().split('-')[0]
+    if s.startswith('KX'):
+        s = s[2:]
+    for prefix, label in SPORT_PREFIXES:
+        if s.startswith(prefix):
+            return label
+    return s[:12] if s else 'Unknown'
+
 MONTH_MAP = {
     'JAN': 1, 'FEB': 2, 'MAR': 3, 'APR': 4, 'MAY': 5, 'JUN': 6,
     'JUL': 7, 'AUG': 8, 'SEP': 9, 'OCT': 10, 'NOV': 11, 'DEC': 12
@@ -89,7 +118,7 @@ def duration(ts_start, ts_end):
 
 def dur_bucket(secs):
     if secs == 0:    return '<5s'
-    if secs < 60:    return '15s-1m'
+    if secs < 60:    return '5s-1m'
     if secs < 300:   return '1m-5m'
     if secs < 1800:  return '5m-30m'
     return '30m+'
@@ -235,7 +264,7 @@ if valid_arrs:
 
 # ── Arb window persistence ─────────────────────────────────────────────────────
 header('ARB WINDOW PERSISTENCE')
-window_buckets      = {'<5s': [0,0.0], '15s-1m': [0,0.0], '1m-5m': [0,0.0], '5m-30m': [0,0.0], '30m+': [0,0.0]}
+window_buckets      = {'<5s': [0,0.0], '5s-1m': [0,0.0], '1m-5m': [0,0.0], '5m-30m': [0,0.0], '30m+': [0,0.0]}
 single_profit = 0.0; single_count = 0
 multi_profit  = 0.0; multi_count  = 0
 
@@ -262,13 +291,13 @@ for label, (count, profit) in window_buckets.items():
 
 print()
 if single_count:
-    print(f"  Instant (<15s)     {single_count:>3} sessions  ${single_profit:>8.2f}  avg ${single_profit/single_count:.2f}/session")
+    print(f"  Instant (<5s)      {single_count:>3} sessions  ${single_profit:>8.2f}  avg ${single_profit/single_count:.2f}/session")
 if multi_count:
-    print(f"  Persistent (15s+)  {multi_count:>3} sessions  ${multi_profit:>8.2f}  avg ${multi_profit/multi_count:.2f}/session")
+    print(f"  Persistent (5s+)   {multi_count:>3} sessions  ${multi_profit:>8.2f}  avg ${multi_profit/multi_count:.2f}/session")
 
 # ── Edge x Duration cross-tab ──────────────────────────────────────────────────
 header('EDGE BUCKET × ARB WINDOW')
-dur_labels = ['<5s', '15s-1m', '1m-5m', '5m-30m', '30m+']
+dur_labels = ['<5s', '5s-1m', '1m-5m', '5m-30m', '30m+']
 
 print('  Count / total profit per cell')
 print(f"  {'':12}" + ''.join(f"  {d:>12}" for d in dur_labels) + f"  {'Total':>12}")
@@ -295,7 +324,7 @@ sep()
 sport_stats = defaultdict(lambda: {'count': 0, 'profit': 0.0, 'contracts': 0, 'cost': 0.0, 'edges': [], 'arrs': []})
 for r in results:
     token_str = r[14]
-    sport = token_str.split('-')[0].upper() if token_str else 'UNKNOWN'
+    sport = parse_sport(token_str)
     sport_stats[sport]['count']     += 1
     sport_stats[sport]['profit']    += r[1]
     sport_stats[sport]['contracts'] += r[3]
