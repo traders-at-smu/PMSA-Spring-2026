@@ -302,22 +302,44 @@ if multi_count:
 header('EDGE BUCKET × ARB WINDOW')
 dur_labels = ['<5s', '5s-10s', '10s-15s', '15s-30s', '30s-1m', '1m-5m', '5m-30m', '30m+']
 
-print('  Count / total profit per cell')
-print(f"  {'':12}" + ''.join(f"  {d:>12}" for d in dur_labels) + f"  {'Total':>12}")
-sep()
-for label, fn in edge_buckets_def:
-    matched = [r for r in results if isinstance(r[4], (int, float)) and fn(r[4])]
-    if not matched:
-        continue
-    by_dur = defaultdict(list)
-    for r in matched:
-        by_dur[dur_bucket(r[9])].append(r[1])
-    row = f'  {label:<12}'
-    for d in dur_labels:
-        items = by_dur.get(d, [])
-        row  += f'  {len(items):>3}/${sum(items):>7.2f}' if items else f'  {"--":>12}'
-    row += f'  {len(matched):>3}/${sum(r[1] for r in matched):>7.2f}'
-    print(row)
+def _cross_cell(items):
+    if not items:
+        return f'{"--":>8}'
+    return f'{len(items)}/{sum(items):.1f}'.rjust(8)
+
+def _cross_rows(cols):
+    print(f"  {'':10}" + ''.join(f"  {d:>8}" for d in cols) + f"  {'Total':>8}")
+    sep()
+    col_totals = defaultdict(list)
+    for label, fn in edge_buckets_def:
+        matched = [r for r in results if isinstance(r[4], (int, float)) and fn(r[4])]
+        if not matched:
+            continue
+        by_dur = defaultdict(list)
+        for r in matched:
+            by_dur[dur_bucket(r[9])].append(r[1])
+            col_totals[dur_bucket(r[9])].append(r[1])
+        row = f'  {label:<10}'
+        for d in cols:
+            items = by_dur.get(d, [])
+            row += f'  {_cross_cell(items)}'
+        row += f'  {len(matched)}/{sum(r[1] for r in matched):.1f}'.rjust(10)
+        print(row)
+    sep()
+    tot_row = f'  {"Total":<10}'
+    grand = []
+    for d in cols:
+        items = col_totals.get(d, [])
+        tot_row += f'  {_cross_cell(items)}'
+        grand += items
+    tot_row += f'  {len(grand)}/{sum(grand):.1f}'.rjust(10)
+    print(tot_row)
+
+print('  Sub-minute windows:')
+_cross_rows(['<5s', '5s-10s', '10s-15s', '15s-30s', '30s-1m'])
+print()
+print('  Longer windows:')
+_cross_rows(['1m-5m', '5m-30m', '30m+'])
 
 # ── Sport breakdown ────────────────────────────────────────────────────────────
 header('SPORT BREAKDOWN  (sorted by profit)')
