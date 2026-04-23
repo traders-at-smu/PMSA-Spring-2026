@@ -1,3 +1,18 @@
+Increase pairs per cycle and max workers. The local computer was fetching 5 and 5  in 2.8 seconds and the server is doing 10 and 10 in 6 seconds
+
+ALSO HOME COMPUTER IS A LOT FASTER
+
+
+add an extra day of games to check
+
+
+
+
+
+
+
+
+
 - [ ] Pairs generation is broken on Ties for Football Games - AI Ignore thi
 - [ ] Add script to find and fix failed pairs in V4 - AI Ignore 
 - [X] add script to polytoken to check for same information already exisiting 

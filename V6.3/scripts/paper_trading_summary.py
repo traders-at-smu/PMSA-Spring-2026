@@ -51,7 +51,7 @@ with open(data_file) as f:
 
 trades.sort(key=lambda x: x['timestamp'])
 
-GAP = timedelta(seconds=20)
+GAP = timedelta(minutes=2)
 CDT = timedelta(hours=-5)
 
 current  = {}
