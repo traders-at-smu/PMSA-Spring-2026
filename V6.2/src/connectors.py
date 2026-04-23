@@ -761,6 +761,7 @@ def load_pairs(path: str) -> list[dict[str, Any]]:
             "pair_id": pair_id,
             "title": _pick(row, "title_clean", "title", "poly_title", "kalshi_title", default=pair_id),
             "kalshi_ticker": kalshi_ticker,
+            "kalshi_ticker_b": _pick(row, "kalshi_market_id_b", "kalshi_ticker_b", default=""),
             # Token IDs are optional — if absent they are resolved via slug at scan time
             "polymarket_yes_token_id": _pick(row, "polymarket_yes_token_id"),
             "polymarket_no_token_id": _pick(row, "polymarket_no_token_id"),

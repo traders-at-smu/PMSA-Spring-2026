@@ -75,6 +75,7 @@ def run():
                 "poly_slug": row.get("poly_slug", ""),
                 "poly_url": row.get("poly_url", ""),
                 "kalshi_market_id": row.get("kalshi_market_id", ""),
+                "kalshi_market_id_b": row.get("kalshi_market_id_b", ""),
                 "kalshi_url": row.get("kalshi_url", ""),
                 "poly_event_url": row.get("poly_event_url", ""),
                 "poly_outcomes_json": row.get("poly_outcomes", "[]"),
@@ -93,7 +94,7 @@ def run():
     fieldnames = [
         "pair_id", "title_clean", "category_tag", "similarity_score",
         "poly_market_id", "poly_slug", "poly_url",
-        "kalshi_market_id", "kalshi_url",
+        "kalshi_market_id", "kalshi_market_id_b", "kalshi_url",
         "poly_event_url", "poly_outcomes_json", "poly_token_ids_json",
         "poly_primary_outcome", "expiry_poly_utc", "expiry_kalshi_utc",
         "resolution_time_utc"

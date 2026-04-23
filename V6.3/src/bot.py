@@ -190,22 +190,32 @@ def _poly_fee_fn_for_rate(rate: float):
     return parse_formula(f"p * (1 - p) * {rate} * c")
 
 
+_fee_rate_cache: dict[str, float] = {}
+
+
 def _resolve_poly_fee_rate(poly, token_ids: list[str], market: dict | None = None) -> float:
     """Resolve a Polymarket taker fee rate via the fee-rate endpoint.
 
     Raises if the fee rate cannot be determined, or if token-level rates disagree.
+    Fee rates are stable for the life of a market and cached in memory after first fetch.
     """
     if market is not None and market.get("feesEnabled") is False:
         return 0.0
     token_ids = [str(t).strip() for t in token_ids if str(t).strip()]
     if not token_ids:
         raise FeeRateError("Polymarket fee-rate lookup failed: missing token IDs")
-    try:
-        rates = [float(poly.get_fee_rate(tid)) for tid in token_ids]
-    except Exception as exc:
-        if _is_transient_error(exc):
-            raise
-        raise FeeRateError(f"fee-rate lookup failed: {exc}") from exc
+    uncached = [tid for tid in token_ids if tid not in _fee_rate_cache]
+    if uncached:
+        try:
+            with ThreadPoolExecutor(max_workers=len(uncached)) as pool:
+                fetched = list(pool.map(poly.get_fee_rate, uncached))
+            for tid, rate in zip(uncached, fetched):
+                _fee_rate_cache[tid] = float(rate)
+        except Exception as exc:
+            if _is_transient_error(exc):
+                raise
+            raise FeeRateError(f"fee-rate lookup failed: {exc}") from exc
+    rates = [_fee_rate_cache[tid] for tid in token_ids]
     base = rates[0]
     for r in rates[1:]:
         if abs(r - base) > 1e-9:
@@ -822,13 +832,16 @@ def evaluate_pair(
     poly_quotes: dict[str, Any],
     cfg: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """Evaluate both arbitrage strategies for one pair.
+    """Evaluate all arbitrage strategies for one pair and return the best by $ edge.
 
-    Two strategies:
-        BUY_KY_BUY_PN  - Buy Kalshi YES + Buy Polymarket NO
-        BUY_KN_BUY_PY  - Buy Kalshi NO  + Buy Polymarket YES
+    Up to 4 strategies when kalshi_quotes_b is present (dual-ticker pairs):
+        BUY_KY_BUY_PN  (T1) - Buy Kalshi T1 YES + Buy Polymarket T2 YES
+        BUY_KN_BUY_PY  (T1) - Buy Kalshi T1 NO  + Buy Polymarket T1 YES
+        BUY_KY_BUY_PN  (T2) - Buy Kalshi T2 YES + Buy Polymarket T1 YES
+        BUY_KN_BUY_PY  (T2) - Buy Kalshi T2 NO  + Buy Polymarket T2 YES
 
-    Returns a list of tradeable opportunity dicts (empty if no arb found).
+    Returns a list with at most one opportunity dict (the highest $ edge), or
+    empty if no arb found.
     """
     max_contracts = int(cfg["max_contracts"])
     days = _days_to_resolution(pair.get("resolution_date", ""))
@@ -846,6 +859,11 @@ def evaluate_pair(
     poly_type = poly_quotes.get("type", "binary")
     kalshi_url = pair.get("kalshi_url") or ""
     kalshi_event_url = kalshi_quotes.get("event_url") or ""
+
+    # Second Kalshi ticker quotes (present when CSV has kalshi_market_id_b)
+    kalshi_quotes_b = kalshi_quotes.get("kalshi_quotes_b", {})
+    k_rate_b = _kalshi_fee_rate_for_ticker(pair.get("kalshi_ticker_b", ""))
+    k_fee_fn_b = _kalshi_fee_fn_for_rate(k_rate_b)
 
     strategies: list[dict[str, Any]] = []
     yes_token_id = ""
@@ -886,6 +904,9 @@ def evaluate_pair(
                 "k_price_hint": float(kalshi_quotes["yes_ask"]),
                 "p_price_hint": float(poly_quotes.get("complement_best_ask", 1.0)),
                 "p_leg_prices_hint": complement_leg_price_hints,
+                "_kq": kalshi_quotes,
+                "_k_fee_fn": k_fee_fn,
+                "_kalshi_ticker": pair.get("kalshi_ticker", ""),
             },
             {
                 "strategy": "BUY_KN_BUY_PY",
@@ -898,6 +919,9 @@ def evaluate_pair(
                 "k_price_hint": float(kalshi_quotes["no_ask"]),
                 "p_price_hint": float(poly_quotes.get("primary_best_ask", 1.0)),
                 "p_leg_prices_hint": [float(poly_quotes.get("primary_best_ask", 1.0))],
+                "_kq": kalshi_quotes,
+                "_k_fee_fn": k_fee_fn,
+                "_kalshi_ticker": pair.get("kalshi_ticker", ""),
             },
         ]
     else:
@@ -910,29 +934,76 @@ def evaluate_pair(
                 "k_side": "yes",
                 "p_side": "no",
                 "p_token_ids": [no_token_id],
-                "p_token_id": no_token_id,      # buying NO on Polymarket
+                "p_token_id": no_token_id,
                 "k_levels": _normalize_levels(k_depth.get("buy_yes", [])),
                 "p_levels": _normalize_levels(p_depth.get("no_asks", [])),
                 "k_price_hint": float(kalshi_quotes["yes_ask"]),
                 "p_price_hint": float(poly_quotes["no_ask"]),
+                "_kq": kalshi_quotes,
+                "_k_fee_fn": k_fee_fn,
+                "_kalshi_ticker": pair.get("kalshi_ticker", ""),
             },
             {
                 "strategy": "BUY_KN_BUY_PY",
                 "k_side": "no",
                 "p_side": "yes",
                 "p_token_ids": [yes_token_id],
-                "p_token_id": yes_token_id,     # buying YES on Polymarket
+                "p_token_id": yes_token_id,
                 "k_levels": _normalize_levels(k_depth.get("buy_no", [])),
                 "p_levels": _normalize_levels(p_depth.get("yes_asks", [])),
                 "k_price_hint": float(kalshi_quotes["no_ask"]),
                 "p_price_hint": float(poly_quotes["yes_ask"]),
+                "_kq": kalshi_quotes,
+                "_k_fee_fn": k_fee_fn,
+                "_kalshi_ticker": pair.get("kalshi_ticker", ""),
             },
         ]
 
+        # Strategies 3 & 4: use second Kalshi ticker if available.
+        # For ticker B (opponent ticker), Poly sides are SWAPPED vs ticker A:
+        #   K_B YES (opponent wins) hedges with Poly YES (primary/complement token pays if primary loses)
+        #   K_B NO  (primary wins)  hedges with Poly NO  (opponent token pays if opponent loses)
+        if kalshi_quotes_b and kalshi_quotes_b.get("depth"):
+            k_depth_b = kalshi_quotes_b["depth"]
+            strategies += [
+                {
+                    "strategy": "BUY_KBY_BUY_PY",
+                    "k_side": "yes",
+                    "p_side": "yes",
+                    "p_token_ids": [yes_token_id],
+                    "p_token_id": yes_token_id,
+                    "k_levels": _normalize_levels(k_depth_b.get("buy_yes", [])),
+                    "p_levels": _normalize_levels(p_depth.get("yes_asks", [])),
+                    "k_price_hint": float(kalshi_quotes_b["yes_ask"]),
+                    "p_price_hint": float(poly_quotes["yes_ask"]),
+                    "_kq": kalshi_quotes_b,
+                    "_k_fee_fn": k_fee_fn_b,
+                    "_kalshi_ticker": pair.get("kalshi_ticker_b", ""),
+                },
+                {
+                    "strategy": "BUY_KBN_BUY_PN",
+                    "k_side": "no",
+                    "p_side": "no",
+                    "p_token_ids": [no_token_id],
+                    "p_token_id": no_token_id,
+                    "k_levels": _normalize_levels(k_depth_b.get("buy_no", [])),
+                    "p_levels": _normalize_levels(p_depth.get("no_asks", [])),
+                    "k_price_hint": float(kalshi_quotes_b["no_ask"]),
+                    "p_price_hint": float(poly_quotes["no_ask"]),
+                    "_kq": kalshi_quotes_b,
+                    "_k_fee_fn": k_fee_fn_b,
+                    "_kalshi_ticker": pair.get("kalshi_ticker_b", ""),
+                },
+            ]
+
     results: list[dict[str, Any]] = []
+    same_side_warned = False
     for strat in strategies:
         k_levels = strat["k_levels"]
         p_levels = strat["p_levels"]
+        strat_kq = strat["_kq"]
+        strat_k_fee_fn = strat["_k_fee_fn"]
+        strat_kalshi_ticker = strat["_kalshi_ticker"]
 
         # Skip if either side has no liquidity
         if not k_levels or not p_levels:
@@ -940,54 +1011,56 @@ def evaluate_pair(
 
         walk = _walk_depth(
             k_levels, p_levels, days, max_contracts,
-            k_fee_fn, p_fee_fn, k_round_up, exit_target,
+            strat_k_fee_fn, p_fee_fn, k_round_up, exit_target,
         )
 
-        if walk["contracts"] > 0:
-            # V6: no exit fees — settlement pays $1/contract at expiry automatically.
-            c = walk["contracts"]
-            edge_dollar = c * exit_target - walk["kp_cost"]
+        c = walk["contracts"]
 
-            # Sanity check: a genuine two-sided hedge always costs close to $1 per
-            # contract. If the top-of-book sum is far below $1, both legs are almost
-            # certainly betting the SAME underlying outcome (mismatched/same-side pair).
-            top_of_book_sum = walk["k_price"] + walk["p_price"]
-            if top_of_book_sum < 0.80:
-                print(
-                    f"  [WARN] {pair['pair_id']} {strat['strategy']}: "
-                    f"top_of_book={top_of_book_sum:.3f} < 0.80 — "
-                    f"likely mismatched (same-side) pair, skipping",
-                    file=sys.stderr,
-                )
-                return [{"_bad_pair": True, "strategy": strat["strategy"], "cost_per_contract": walk["kp_cost"] / c}]
+        if c == 0:
+            continue
 
-            # Arb gap check: if any fill level has 1 - (k_price + p_price) > 0.15,
-            # the edge is unrealistically large — likely an inaccurate/mismatched pair.
-            _max_arb_gap = max(
-                (1.0 - (s["k_price"] + s["p_price"]) for s in walk.get("slippage", [])),
-                default=0.0,
+        edge_dollar = c * exit_target - walk["kp_cost"]
+        if edge_dollar <= 0 or walk["edge_pct"] < min_edge_pct:
+            continue
+
+        top_of_book_sum = walk["k_price"] + walk["p_price"]
+        if top_of_book_sum < 0.80:
+            print(
+                f"  [WARN] {pair['pair_id']} {strat['strategy']} ({strat_kalshi_ticker}): "
+                f"top_of_book={top_of_book_sum:.3f} < 0.80 — "
+                f"likely mismatched (same-side) pair, skipping",
+                file=sys.stderr,
             )
-            if _max_arb_gap > 0.15:
-                print(
-                    f"  [WARN] {pair['pair_id']} {strat['strategy']}: "
-                    f"max arb gap={_max_arb_gap:.3f} > 0.15 — "
-                    f"prices too good to be true, flagging as bad",
-                    file=sys.stderr,
-                )
-                return [{"_bad_pair": True, "strategy": strat["strategy"], "cost_per_contract": walk["kp_cost"] / c, "price_gap": _max_arb_gap}]
+            same_side_warned = True
+            continue
+        _max_arb_gap = max(
+            (1.0 - (s["k_price"] + s["p_price"]) for s in walk.get("slippage", [])),
+            default=0.0,
+        )
+        if _max_arb_gap > 0.15:
+            print(
+                f"  [WARN] {pair['pair_id']} {strat['strategy']} ({strat_kalshi_ticker}): "
+                f"max arb gap={_max_arb_gap:.3f} > 0.15 — "
+                f"prices too good to be true, flagging as bad",
+                file=sys.stderr,
+            )
+            continue
+        k_price_out = walk["k_price"]
+        p_price_out = walk["p_price"]
+        kp_cost_out = walk["kp_cost"]
+        edge_pct_out = walk["edge_pct"]
+        arr_out      = walk["arr"]
+        total_fee_out = walk["total_fee"]
 
-            if edge_dollar <= 0 or walk["edge_pct"] < min_edge_pct:
-                continue
-
-            results.append({
+        results.append({
                 "pair_id": pair["pair_id"],
                 "title": pair.get("title", pair["pair_id"]),
                 "poly_market_title": pair.get("poly_market_question", ""),
-                "kalshi_market_title": kalshi_quotes.get("kalshi_title", ""),
-                "kalshi_ticker": pair["kalshi_ticker"],
+                "kalshi_market_title": strat_kq.get("kalshi_title", ""),
+                "kalshi_ticker": strat_kalshi_ticker,
                 "polymarket_slug": pair.get("polymarket_market_slug", ""),
-                "kalshi_url": kalshi_url,
-                "kalshi_event_url": kalshi_event_url,
+                "kalshi_url": strat_kq.get("kalshi_url") or kalshi_url,
+                "kalshi_event_url": strat_kq.get("event_url") or kalshi_event_url,
                 "polymarket_url": pair.get("polymarket_url", ""),
                 "poly_event_url": pair.get("poly_event_url", ""),
                 "strategy": strat["strategy"],
@@ -997,26 +1070,31 @@ def evaluate_pair(
                 "p_token_id": strat.get("p_token_id", ""),
                 "yes_token_id": yes_token_id,
                 "no_token_id": no_token_id,
-                "contracts": walk["contracts"],
-                "k_price": walk["k_price"],
-                "p_price": walk["p_price"],
+                "contracts": c,
+                "k_price": k_price_out,
+                "p_price": p_price_out,
                 "k_spend": walk.get("k_spend", 0.0),
                 "p_spend": walk.get("p_spend", 0.0),
                 "p_leg_prices": walk.get("p_leg_prices", []),
                 "p_leg_spend": walk.get("p_leg_spend", []),
-                "kp_cost": walk["kp_cost"],
+                "kp_cost": kp_cost_out,
                 "edge_dollar": round(edge_dollar, 4),
-                "edge_pct": walk["edge_pct"],
-                "arr": walk["arr"],
-                "total_fee": walk["total_fee"],
+                "edge_pct": edge_pct_out,
+                "arr": arr_out,
+                "total_fee": total_fee_out,
                 "days": days,
-                "slippage": walk["slippage"],
-                "remaining": walk["remaining"],
+                "slippage": walk.get("slippage", []),
+                "remaining": walk.get("remaining", {}),
                 "poly_fee_rate": pair.get("poly_fee_rate"),
                 "resolution_date": str(pair.get("resolution_date", "")),
             })
 
-    return results
+    if not results:
+        if same_side_warned:
+            return [{"_bad_pair": True, "strategy": "SAME_SIDE"}]
+        return results
+    best = max(results, key=lambda r: r["edge_dollar"])
+    return [best]
 
 
 def _next_trade_number(log_path: str) -> str:
@@ -1701,8 +1779,8 @@ def _build_polymarket_quotes(pair: dict[str, Any], poly) -> dict[str, Any]:
     outcomes_lc = [o.strip().lower() for o in outcomes]
     binary_yes_no = len(outcomes_lc) == 2 and "yes" in outcomes_lc and "no" in outcomes_lc
 
-    # Non-binary (or non-yes/no) outcomes require explicit primary mapping
-    if outcomes and not binary_yes_no:
+    # 3+ outcome markets require explicit primary mapping and multi-outcome logic
+    if outcomes and not binary_yes_no and len(outcomes) > 2:
         if not primary:
             raise RuntimeError("Missing poly_primary_outcome for non-binary Polymarket market")
         primary_idx = _find_outcome_index(outcomes, primary)
@@ -1751,6 +1829,45 @@ def _build_polymarket_quotes(pair: dict[str, Any], poly) -> dict[str, Any]:
             "tokens": tokens,
             "poly_fee_rate": fee_rate,
         }
+    elif outcomes and not binary_yes_no and len(outcomes) == 2:
+        # 2-outcome team-name market (e.g. ["Stars", "Wild"]) — treat as binary.
+        # Map primary outcome → YES token, complement → NO token.
+        # Use get_books batch call (avoids slug resolution + get_question_by_token overhead).
+        if not primary:
+            raise RuntimeError("Missing poly_primary_outcome for 2-outcome market")
+        primary_idx = _find_outcome_index(outcomes, primary)
+        if primary_idx is None:
+            raise RuntimeError(f"poly_primary_outcome '{primary}' not found in outcomes {outcomes}")
+        complement_idx = 1 - primary_idx
+        yes_id = token_ids[primary_idx]
+        no_id = token_ids[complement_idx]
+        pair["polymarket_yes_token_id"] = yes_id
+        pair["polymarket_no_token_id"] = no_id
+        books = poly.get_books([yes_id, no_id])
+        yes_book = books.get(yes_id)
+        no_book = books.get(no_id)
+        if not yes_book or not no_book:
+            raise RuntimeError(f"Missing orderbook for 2-outcome Polymarket tokens {yes_id}, {no_id}")
+        fee_rate = _resolve_poly_fee_rate(poly, [yes_id, no_id], market)
+        pair["poly_fee_rate"] = fee_rate
+        if not pair.get("poly_market_question"):
+            pair["poly_market_question"] = pair.get("title", "")
+        return {
+            "type": "binary",
+            "yes_bid": poly._best_bid(yes_book),
+            "yes_ask": poly._best_ask(yes_book),
+            "no_bid": poly._best_bid(no_book),
+            "no_ask": poly._best_ask(no_book),
+            "depth": {
+                "yes_asks": poly._parse_ask_levels(yes_book),
+                "no_asks": poly._parse_ask_levels(no_book),
+                "yes_bids": poly._parse_bid_levels(yes_book),
+                "no_bids": poly._parse_bid_levels(no_book),
+            },
+            "yes_token_id": yes_id,
+            "no_token_id": no_id,
+            "poly_fee_rate": fee_rate,
+        }
 
     # Binary yes/no path
     try:
@@ -1780,19 +1897,39 @@ def _build_polymarket_quotes(pair: dict[str, Any], poly) -> dict[str, Any]:
 def _fetch_pair(pair: dict[str, Any], kalshi, poly) -> tuple[dict, dict, dict]:
     """Fetch orderbook quotes for one pair (runs in a worker thread).
 
-    Retries up to 3 times with exponential backoff on transient errors (429, 503,
-    timeouts). Permanent errors (404, bad ticker) are raised immediately.
+    Rate limits (429) are raised immediately — skipped for the cycle by run_scan.
+    Other transient errors (503, timeouts) retry up to 3 times with exponential backoff.
+    Permanent errors (404, bad ticker) are raised immediately.
+
+    All fetches (Kalshi A, Kalshi B if present, Polymarket) fire in parallel.
     """
     max_retries = 3
-    delay = 1.0  # seconds before first retry; doubles each attempt
+    delay = 1.0
     last_exc: Exception | None = None
+    ticker_b = pair.get("kalshi_ticker_b", "")
+
     for attempt in range(max_retries + 1):
         try:
-            kq = kalshi.get_quotes(pair["kalshi_ticker"])
-            pq = _build_polymarket_quotes(pair, poly)
+            tasks: dict[str, Any] = {
+                "kq": lambda: kalshi.get_quotes(pair["kalshi_ticker"]),
+                "pq": lambda: _build_polymarket_quotes(pair, poly),
+            }
+            if ticker_b:
+                tasks["kq_b"] = lambda: kalshi.get_quotes(ticker_b)
+
+            results: dict[str, Any] = {}
+            with ThreadPoolExecutor(max_workers=len(tasks)) as ex:
+                futures = {ex.submit(fn): key for key, fn in tasks.items()}
+                for fut in as_completed(futures):
+                    results[futures[fut]] = fut.result()
+
+            kq = results["kq"]
+            pq = results["pq"]
+            if ticker_b:
+                kq["kalshi_quotes_b"] = results["kq_b"]
             return pair, kq, pq
         except Exception as exc:
-            if _is_transient_error(exc) and attempt < max_retries:
+            if _is_transient_error(exc) and "429" not in str(exc) and attempt < max_retries:
                 last_exc = exc
                 time.sleep(delay)
                 delay *= 2

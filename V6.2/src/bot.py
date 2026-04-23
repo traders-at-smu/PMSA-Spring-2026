@@ -1782,14 +1782,33 @@ def _fetch_pair(pair: dict[str, Any], kalshi, poly) -> tuple[dict, dict, dict]:
 
     Retries up to 3 times with exponential backoff on transient errors (429, 503,
     timeouts). Permanent errors (404, bad ticker) are raised immediately.
+
+    All fetches (Kalshi A, Kalshi B if present, Polymarket) fire in parallel.
     """
     max_retries = 3
-    delay = 1.0  # seconds before first retry; doubles each attempt
+    delay = 1.0
     last_exc: Exception | None = None
+    ticker_b = pair.get("kalshi_ticker_b", "")
+
     for attempt in range(max_retries + 1):
         try:
-            kq = kalshi.get_quotes(pair["kalshi_ticker"])
-            pq = _build_polymarket_quotes(pair, poly)
+            tasks: dict[str, Any] = {
+                "kq": lambda: kalshi.get_quotes(pair["kalshi_ticker"]),
+                "pq": lambda: _build_polymarket_quotes(pair, poly),
+            }
+            if ticker_b:
+                tasks["kq_b"] = lambda: kalshi.get_quotes(ticker_b)
+
+            results: dict[str, Any] = {}
+            with ThreadPoolExecutor(max_workers=len(tasks)) as ex:
+                futures = {ex.submit(fn): key for key, fn in tasks.items()}
+                for fut in as_completed(futures):
+                    results[futures[fut]] = fut.result()
+
+            kq = results["kq"]
+            pq = results["pq"]
+            if ticker_b:
+                kq["kalshi_quotes_b"] = results["kq_b"]
             return pair, kq, pq
         except Exception as exc:
             if _is_transient_error(exc) and attempt < max_retries:

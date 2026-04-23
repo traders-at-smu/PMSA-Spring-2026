@@ -2202,8 +2202,24 @@ def _fetch_pair(pair: dict[str, Any], kalshi, poly) -> tuple[dict, dict, dict]:
                 kq = soccer_quotes["kalshi"]["t1"]  # T1 quotes as representative kq
                 return pair, kq, soccer_quotes
             else:
-                kq = kalshi.get_quotes(pair["kalshi_ticker"])
-                pq = _build_polymarket_quotes(pair, poly)
+                ticker_b = pair.get("kalshi_ticker_b", "")
+                tasks: dict[str, Any] = {
+                    "kq": lambda: kalshi.get_quotes(pair["kalshi_ticker"]),
+                    "pq": lambda: _build_polymarket_quotes(pair, poly),
+                }
+                if ticker_b:
+                    tasks["kq_b"] = lambda: kalshi.get_quotes(ticker_b)
+
+                fetch_results: dict[str, Any] = {}
+                with ThreadPoolExecutor(max_workers=len(tasks)) as ex:
+                    futures = {ex.submit(fn): key for key, fn in tasks.items()}
+                    for fut in as_completed(futures):
+                        fetch_results[futures[fut]] = fut.result()
+
+                kq = fetch_results["kq"]
+                pq = fetch_results["pq"]
+                if ticker_b:
+                    kq["kalshi_quotes_b"] = fetch_results["kq_b"]
                 return pair, kq, pq
         except Exception as exc:
             if _is_transient_error(exc) and attempt < max_retries:

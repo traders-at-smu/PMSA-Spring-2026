@@ -448,7 +448,7 @@ def get_market_type(ticker: str, title: str = "", platform: str = "kalshi") -> s
         # Only classify as "winner" on an affirmative signal. Many prop-style
         # Kalshi event tickers (RFI, HR, SO, NEXTGM, …) otherwise silently fall
         # through as "winner" and get mis-paired with game-winner Poly markets.
-        if "GAME" in ticker_upper or "WINNER" in ticker_upper or "winner" in title_lower:
+        if "GAME" in ticker_upper or "MATCH" in ticker_upper or "WINNER" in ticker_upper or "winner" in title_lower:
             return "winner"
         return "other"
     else:
@@ -1456,13 +1456,19 @@ def run():
                         "expiry_kalshi_utc":   kalshi_raw.get("close_time", ""),
                     })
 
-    # V6.3: emit one row per Kalshi market (best poly per kalshi is already
-    # enforced by best_for_kalshi). If both Kalshi per-team tickers for the
-    # same game match the same Polymarket event, BOTH rows are kept so the bot
-    # can see all 6 prices: K teamA YES/NO, K teamB YES/NO, P teamA, P teamB.
-    # Previously a final best_for_poly pass collapsed this to one row per Poly
-    # market — removed to support dual-ticker coverage.
-    results = [rec for _, rec in best_for_kalshi.values()]
+    # V6.32: merge both Kalshi per-team tickers for the same game into one row.
+    # When two rows share the same poly_market_id, the second Kalshi ticker is
+    # stored in kalshi_market_id_b so the bot can see all 6 prices from a
+    # single row: K teamA YES/NO, K teamB YES/NO, P teamA, P teamB.
+    _seen_poly: dict[str, dict] = {}
+    for rec in (rec for _, rec in best_for_kalshi.values()):
+        pmid = rec["poly_market_id"]
+        if pmid not in _seen_poly:
+            rec.setdefault("kalshi_market_id_b", "")
+            _seen_poly[pmid] = rec
+        else:
+            _seen_poly[pmid]["kalshi_market_id_b"] = rec["kalshi_market_id"]
+    results = list(_seen_poly.values())
 
     # Filter out expired markets. Allow live/in-progress games whose
     # Polymarket endDateIso has already ticked past midnight UTC (date-only
@@ -1497,7 +1503,7 @@ def run():
         "poly_teams", "poly_date", "poly_url", "poly_slug",
         "poly_event_url", "poly_outcomes", "poly_token_ids",
         "expiry_poly_utc", "resolution_time",
-        "kalshi_event_ticker", "kalshi_market_id", "kalshi_title",
+        "kalshi_event_ticker", "kalshi_market_id", "kalshi_market_id_b", "kalshi_title",
         "kalshi_teams", "kalshi_date", "kalshi_url", "expiry_kalshi_utc",
     ]
 

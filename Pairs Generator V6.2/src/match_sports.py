@@ -448,7 +448,7 @@ def get_market_type(ticker: str, title: str = "", platform: str = "kalshi") -> s
         # Only classify as "winner" on an affirmative signal. Many prop-style
         # Kalshi event tickers (RFI, HR, SO, NEXTGM, …) otherwise silently fall
         # through as "winner" and get mis-paired with game-winner Poly markets.
-        if "GAME" in ticker_upper or "WINNER" in ticker_upper or "winner" in title_lower:
+        if "GAME" in ticker_upper or "MATCH" in ticker_upper or "WINNER" in ticker_upper or "winner" in title_lower:
             return "winner"
         return "other"
     else:
