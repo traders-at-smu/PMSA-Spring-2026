@@ -304,42 +304,35 @@ dur_labels = ['<5s', '5s-10s', '10s-15s', '15s-30s', '30s-1m', '1m-5m', '5m-30m'
 
 def _cross_cell(items):
     if not items:
-        return f'{"--":>8}'
-    return f'{len(items)}/{sum(items):.1f}'.rjust(8)
+        return f'{"--":>7}'
+    return f'{len(items)}/{sum(items):.1f}'.rjust(7)
 
-def _cross_rows(cols):
-    print(f"  {'':10}" + ''.join(f"  {d:>8}" for d in cols) + f"  {'Total':>8}")
-    sep()
-    col_totals = defaultdict(list)
-    for label, fn in edge_buckets_def:
-        matched = [r for r in results if isinstance(r[4], (int, float)) and fn(r[4])]
-        if not matched:
-            continue
-        by_dur = defaultdict(list)
-        for r in matched:
-            by_dur[dur_bucket(r[9])].append(r[1])
-            col_totals[dur_bucket(r[9])].append(r[1])
-        row = f'  {label:<10}'
-        for d in cols:
-            items = by_dur.get(d, [])
-            row += f'  {_cross_cell(items)}'
-        row += f'  {len(matched)}/{sum(r[1] for r in matched):.1f}'.rjust(10)
-        print(row)
-    sep()
-    tot_row = f'  {"Total":<10}'
-    grand = []
-    for d in cols:
-        items = col_totals.get(d, [])
-        tot_row += f'  {_cross_cell(items)}'
-        grand += items
-    tot_row += f'  {len(grand)}/{sum(grand):.1f}'.rjust(10)
-    print(tot_row)
-
-print('  Sub-minute windows:')
-_cross_rows(['<5s', '5s-10s', '10s-15s', '15s-30s', '30s-1m'])
-print()
-print('  Longer windows:')
-_cross_rows(['1m-5m', '5m-30m', '30m+'])
+print('  Count / $profit per cell')
+print(f"  {'':8}" + ''.join(f"  {d:>7}" for d in dur_labels) + f"  {'Total':>7}")
+sep()
+col_totals = defaultdict(list)
+for label, fn in edge_buckets_def:
+    matched = [r for r in results if isinstance(r[4], (int, float)) and fn(r[4])]
+    if not matched:
+        continue
+    by_dur = defaultdict(list)
+    for r in matched:
+        by_dur[dur_bucket(r[9])].append(r[1])
+        col_totals[dur_bucket(r[9])].append(r[1])
+    row = f'  {label:<8}'
+    for d in dur_labels:
+        row += f'  {_cross_cell(by_dur.get(d, []))}'
+    row += f'  {_cross_cell(matched)}'
+    print(row)
+sep()
+tot_row = f'  {"Total":<8}'
+grand = []
+for d in dur_labels:
+    items = col_totals.get(d, [])
+    tot_row += f'  {_cross_cell(items)}'
+    grand += items
+tot_row += f'  {_cross_cell(grand)}'
+print(tot_row)
 
 # ── Sport breakdown ────────────────────────────────────────────────────────────
 header('SPORT BREAKDOWN  (sorted by profit)')
