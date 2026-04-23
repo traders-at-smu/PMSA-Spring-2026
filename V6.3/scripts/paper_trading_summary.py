@@ -154,7 +154,7 @@ header('TRADE LOG')
 print(f"  {'Market':<35} {'Ctrs':>6}  {'Edge':>6}  {'Profit':>9}  {'Window':<22}  {'ARR':>7}")
 sep()
 for r in results:
-    _, profit, title, contracts, edge, start, end, cost, dur_str, dur_secs, exec_d, game_dt, d_held, arr = r
+    _, profit, title, contracts, edge, start, end, cost, dur_str, dur_secs, exec_d, game_dt, d_held, arr, *_ = r
     arr_str  = f'{arr:.0f}%' if arr is not None else 'n/a'
     win_str  = f'{start} ({dur_str})'
     print(f"  {title[:35]:<35} {contracts:>6,}  {edge:>5}%  ${profit:>8,.2f}  {win_str:<32}  {arr_str:>7}")
