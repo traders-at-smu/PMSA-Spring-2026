@@ -37,6 +37,28 @@ def run_generator(generator_dir):
         print(f"  {Fore.RED}[{ts}] [scheduler] Unexpected error: {e}{Style.RESET_ALL}")
         return False
 
+def run_summary(v6_dir, cfg):
+    """Run paper_trading_summary.py, write to Paper_Trading_Results.md, upload to Dropbox."""
+    ts = datetime.now().strftime("%H:%M:%S")
+    try:
+        import sys
+        result = subprocess.run(
+            [sys.executable, "scripts/paper_trading_summary.py"],
+            cwd=str(v6_dir), capture_output=True, text=True
+        )
+        output = result.stdout
+        if not output.strip():
+            print(f"  {Fore.YELLOW}[{ts}] [scheduler] Summary produced no output.{Style.RESET_ALL}")
+            return
+        out_path = Path(v6_dir) / "Paper_Trading_Results.md"
+        out_path.write_text(output, encoding="utf-8")
+        print(f"  {Style.DIM}[{ts}] [scheduler] Summary written to {out_path.name}{Style.RESET_ALL}")
+        from export_trades import upload_to_dropbox
+        upload_to_dropbox(str(out_path), cfg)
+    except Exception as e:
+        print(f"  {Fore.YELLOW}[{ts}] [scheduler] Summary failed: {e}{Style.RESET_ALL}")
+
+
 def run_export(v6_dir, cfg):
     """Export today's trades log to a dated CSV in data/."""
     ts = datetime.now().strftime("%H:%M:%S")
@@ -102,6 +124,7 @@ def scheduler_loop(cfg):
             if run_generator(generator_dir):
                 copy_newest_output(generator_outputs, v6_inputs)
             run_export(v6_dir, cfg)
+            run_summary(v6_dir, cfg)
             last_run_date = now.date()
         
         # Sleep for 30 seconds before checking again
