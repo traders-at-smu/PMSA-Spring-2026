@@ -48,7 +48,10 @@ def run_summary(v6_dir, cfg):
         )
         output = result.stdout
         if not output.strip():
+            err = result.stderr.strip() if result.stderr else ""
             print(f"  {Fore.YELLOW}[{ts}] [scheduler] Summary produced no output.{Style.RESET_ALL}")
+            if err:
+                print(f"  {Fore.YELLOW}[{ts}] [scheduler] stderr: {err}{Style.RESET_ALL}")
             return
         out_path = Path(v6_dir) / "Paper_Trading_Results.md"
         out_path.write_text(output, encoding="utf-8")
@@ -123,8 +126,8 @@ def scheduler_loop(cfg):
         if now.hour == 8 and now.minute == 0 and last_run_date != now.date():
             if run_generator(generator_dir):
                 copy_newest_output(generator_outputs, v6_inputs)
-            run_export(v6_dir, cfg)
             run_summary(v6_dir, cfg)
+            run_export(v6_dir, cfg)
             last_run_date = now.date()
         
         # Sleep for 30 seconds before checking again
