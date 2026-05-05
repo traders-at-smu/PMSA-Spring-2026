@@ -107,7 +107,7 @@ def scheduler_loop(cfg):
     v6_inputs = v6_dir / cfg.get("input_files_dir", "input_files")
 
     last_run_date = None
-
+    
     print(f"  [scheduler] Background updater active. Target time: 08:00 UTC (03:00 CDT) daily.")
 
     # Optional: Run immediately on startup

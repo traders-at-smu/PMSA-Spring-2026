@@ -1,0 +1,97 @@
+{
+    "_doc": "Kalshi × Polymarket Arb Bot VE6.3 — Live execution bot. Safe to commit. API credentials live in api-keys.json (gitignored).",
+
+    "_doc_mode": "Trading mode. 'paper' = simulate trades, fetch live prices but never place real orders. 'live' = place real orders (requires api-keys.json credentials).",
+    "mode": "live",
+
+    "_doc_fallback_to_paper": "When false: if mode=live and any credential is missing, bot exits immediately with an error rather than silently running in paper mode. Set to true only during testing.",
+    "fallback_to_paper": false,
+
+    "_doc_min_edge_pct": "Minimum edge percentage required to trigger a trade. 0.001 = 0.1% edge after fees.",
+    "min_edge_pct": 0.001,
+
+    "_doc_max_contracts": "Maximum contracts to accumulate in a single arb trade. Depth-walk stops when this cap is reached.",
+    "max_contracts": 5,
+
+    "_doc_scan_interval_seconds": "Seconds between full scan cycles in 'run' mode.",
+    "scan_interval_seconds": 0,
+
+    "_doc_pairs_per_cycle": "Max pairs to scan per cycle. Pairs with open positions are always scanned first; the rest rotate so every pair gets checked evenly.",
+    "pairs_per_cycle": 10,
+
+    "_doc_max_workers": "Parallel threads for fetching orderbook data. Higher = faster scans, but too high triggers 429 rate-limits from Kalshi. 10 is a safe default.",
+    "max_workers": 10,
+
+    "_doc_print_market_status": "Print a one-line market snapshot for every pair each cycle, even when no arb is found.",
+    "print_market_status": false,
+
+    "_doc_play_sounds": "Play audio notifications on trade entry and exit.",
+    "play_sounds": false,
+
+    "_doc_skip_multi_outcome": "When true, pairs with 3+ Polymarket outcomes are silently skipped each cycle.",
+    "skip_multi_outcome": false,
+
+    "_doc_exit_enabled": "Monitor open positions and sell at bids when the exit rule is met.",
+    "exit_enabled": false,
+
+    "_doc_exit_target_total_price": "Combined YES+NO bid threshold to trigger early exit (e.g. 0.99). V6 holds to expiry by default — only used for early-exit scanning.",
+    "exit_target_total_price": 0.99,
+
+    "_doc_pairs_input_mode": "'csv' = load from the newest file in input_files_dir each cycle (hot-reloads). 'excel' = load from pairs_file.",
+    "pairs_input_mode": "csv",
+
+    "_doc_input_files_dir": "Directory where daily CSV pairs files are dropped. Bot auto-uses the newest file.",
+    "input_files_dir": "input_files",
+
+    "_doc_pairs_file": "Fallback pairs file (Excel or CSV). Used when pairs_input_mode is 'excel' or no CSV is found in input_files_dir.",
+    "pairs_file": "Pairs_for_Kalshi_and_Polymarket.xlsx",
+
+    "_doc_user_pairs_dirs": "Paths to Polytoken per-user pairs directories. Each is scanned for {username}/pairs.csv at startup and merged into pairs_file.",
+    "user_pairs_dirs": ["../Polytoken/pairs"],
+
+    "_doc_position_file": "JSON file tracking currently open positions across restarts.",
+    "position_file": "data/open_positions.json",
+
+    "_doc_entry_log": "File where entry trades are logged (one JSON object per line).",
+    "entry_log": "data/entry_trades.json",
+
+    "_doc_exit_log": "File where exit trades are logged.",
+    "exit_log": "data/exit_trades.json",
+
+    "_doc_opportunities_log": "File where every detected arb opportunity is logged.",
+    "opportunities_log": "data/opportunities.json",
+
+    "_doc_expired_log": "Pairs past their resolution_date are permanently logged here and never fetched again.",
+    "expired_log": "data/expired_pairs.json",
+
+    "_doc_failed_log": "Pairs that fail to fetch are logged here and skipped for the session.",
+    "failed_log": "data/failed_pairs.json",
+
+    "_doc_bad_log": "Same-side/inverted pairs are permanently logged here.",
+    "bad_log": "data/bad_pairs.json",
+
+    "_doc_fees": "Fee formulas (math expressions). Variables: p = price (0–1), c = contracts.",
+    "fees": {
+        "kalshi": {
+            "_doc": "Kalshi taker fee. round_up_to_cent=true matches Kalshi's actual billing.",
+            "formula": "p * (1 - p) * 0.07 * c",
+            "round_up_to_cent": true
+        },
+        "polymarket": {
+            "_doc": "Formula is for config validation only; runtime uses 0.03 if feesEnabled=true (Gamma API), 0.0 if feesEnabled=false (e.g. NHL).",
+            "formula": "p * (1 - p) * 0.03 * c"
+        }
+    },
+
+    "_doc_dropbox": "Dropbox upload settings. Credentials (app_key, app_secret, refresh_token) go in api-keys.json.",
+    "dropbox": {
+        "enabled": true,
+        "remote_path": "/Daily Excel"
+    },
+
+    "auto_update_pairs": true,
+    "update_on_startup": false,
+
+    "_doc_export_on_startup": "Run a trade export to CSV on bot startup. Output: data/trades_export_YYYY-MM-DD.csv.",
+    "export_on_startup": false
+}

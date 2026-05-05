@@ -277,7 +277,7 @@ for r in results:
     b      = dur_bucket(secs)
     window_buckets[b][0] += 1
     window_buckets[b][1] += profit
-    if secs == 0:
+    if secs < 10:
         single_count += 1; single_profit += profit
     else:
         multi_count  += 1; multi_profit  += profit
@@ -294,9 +294,9 @@ for label, (count, profit) in window_buckets.items():
 
 print()
 if single_count:
-    print(f"  Instant (<5s)      {single_count:>3} sessions  ${single_profit:>8.2f}  avg ${single_profit/single_count:.2f}/session")
+    print(f"  Instant (<10s)     {single_count:>3} sessions  ${single_profit:>8.2f}  avg ${single_profit/single_count:.2f}/session")
 if multi_count:
-    print(f"  Persistent (5s+)   {multi_count:>3} sessions  ${multi_profit:>8.2f}  avg ${multi_profit/multi_count:.2f}/session")
+    print(f"  Persistent (10s+)  {multi_count:>3} sessions  ${multi_profit:>8.2f}  avg ${multi_profit/multi_count:.2f}/session")
 
 # ── Edge x Duration cross-tab ──────────────────────────────────────────────────
 header('EDGE BUCKET × ARB WINDOW')

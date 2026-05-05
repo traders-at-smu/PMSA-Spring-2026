@@ -6,7 +6,15 @@
       "Bash(cp /tmp/exec_9167200.tsx \"d:/GitHub/polymarket-copy-trading-bot-mtg/polymarket-copy-trading-bot/V1/src/dashboard-ui/src/components/ExecutionPanel.tsx\")",
       "Bash(python3 -c \":*)",
       "Bash(python main.py --config config.json validate)",
-      "Bash(python3 -c ':*)"
+      "Bash(python3 -c ':*)",
+      "WebFetch(domain:docs.kalshi.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:docs.polymarket.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.polymarket.us)",
+      "Bash(gh api *)",
+      "Bash(python3 main.py validate)",
+      "Bash(python3 main.py scan)"
     ]
   }
 }
