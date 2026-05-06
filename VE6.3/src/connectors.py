@@ -12,12 +12,13 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import requests
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 
-_KALSHI_BASE = "https://api.elections.kalshi.com/trade-api/v2"
+_KALSHI_BASE = "https://external-api.kalshi.com/trade-api/v2"
 _POLY_CLOB = "https://clob.polymarket.com"
 _POLY_GAMMA = "https://gamma-api.polymarket.com"
 _TIMEOUT = 10  # seconds
@@ -81,7 +82,9 @@ class KalshiConnector:
                 "Kalshi live trading requires 'api_key' and 'private_key_base64' in config"
             )
         ts_ms = str(int(time.time() * 1000))
-        msg = f"{ts_ms}{method.upper()}{path}".encode()
+        base_path = urlparse(self.base).path.rstrip("/")
+        sign_path = path.split("?")[0]
+        msg = f"{ts_ms}{method.upper()}{base_path}{sign_path}".encode()
         sig = self._private_key.sign(
             msg,
             padding.PSS(
@@ -390,21 +393,16 @@ class PolymarketConnector:
         return market
 
     def get_balance(self) -> dict[str, float]:
-        """Return available cash balance and total portfolio value."""
+        """Return available USDC cash balance from Polymarket International CLOB."""
         self._ensure_client()
-        # ClobClient.get_balance() returns { "balance": str, "locked": str, "cash": str }
         try:
-            res = self._client.get_balance()
-            # The client might return a response object or a dict depending on version
-            if hasattr(res, "json"):
-                data = res.json()
-            else:
-                data = res
-            
-            return {
-                "balance": float(data.get("balance", 0.0)),
-                "cash": float(data.get("cash", 0.0)),
-            }
+            from py_clob_client.clob_types import BalanceAllowanceParams, AssetType  # type: ignore
+            params = BalanceAllowanceParams(asset_type=AssetType.COLLATERAL)
+            data = self._client.get_balance_allowance(params)
+            if hasattr(data, "json"):
+                data = data.json()
+            cash = float(data.get("balance", 0.0))
+            return {"cash": cash, "balance": cash}
         except Exception as exc:
             raise RuntimeError(f"Polymarket balance fetch failed: {exc}") from exc
 
