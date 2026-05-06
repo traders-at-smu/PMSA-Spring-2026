@@ -307,6 +307,7 @@ class PolymarketConnector:
         api_key: str = "",
         api_secret: str = "",
         api_passphrase: str = "",
+        funder_address: str = "",
         clob_url: str = "",
         gamma_url: str = "",
     ):
@@ -317,6 +318,7 @@ class PolymarketConnector:
         self.api_key = api_key.strip()
         self.api_secret = api_secret.strip()
         self.api_passphrase = api_passphrase.strip()
+        self.funder_address = funder_address.strip()
         self._client = None  # lazy-init on first live order
 
     def _ensure_client(self) -> None:
@@ -346,6 +348,8 @@ class PolymarketConnector:
             key=self.private_key,
             chain_id=137,
             creds=creds,
+            signature_type=2,
+            funder=self.funder_address or None,
         )
 
     def _resolve_tokens(self, market_slug: str) -> tuple[str, str]:

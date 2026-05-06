@@ -182,6 +182,7 @@ def _build_connectors(cfg: dict) -> tuple[KalshiConnector, PolymarketConnector]:
         api_key=p_cfg.get("api_key", ""),
         api_secret=p_cfg.get("api_secret", ""),
         api_passphrase=p_cfg.get("api_passphrase", ""),
+        funder_address=p_cfg.get("funder_address", ""),
         clob_url=p_cfg.get("clob_url", ""),
         gamma_url=p_cfg.get("gamma_url", ""),
     )
