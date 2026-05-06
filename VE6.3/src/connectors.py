@@ -333,15 +333,14 @@ class PolymarketConnector:
             raise RuntimeError(
                 "polymarket.private_key required for live mode"
             )
-        creds = (
-            {
-                "key": self.api_key,
-                "secret": self.api_secret,
-                "passphrase": self.api_passphrase,
-            }
-            if self.api_key and self.api_secret and self.api_passphrase
-            else None
-        )
+        creds = None
+        if self.api_key and self.api_secret and self.api_passphrase:
+            from py_clob_client.clob_types import ApiCreds  # type: ignore
+            creds = ApiCreds(
+                api_key=self.api_key,
+                api_secret=self.api_secret,
+                api_passphrase=self.api_passphrase,
+            )
         self._client = ClobClient(
             host=self.clob_host,
             key=self.private_key,
