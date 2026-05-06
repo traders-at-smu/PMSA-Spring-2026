@@ -15,7 +15,7 @@ Changes made specifically for the $100 test run. These will be reverted or adjus
 
 | Date | File | Description |
 |------|------|-------------|
-| 2026-05-05 | `config.json` | `max_contracts` reduced from 1000 to 5 for $100 capital test. |
+| 2026-05-05 | `config.json` | `max_contracts` reduced from 1000 to 1 for $100 capital test. |
 
 ---
 
