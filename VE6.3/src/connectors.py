@@ -348,7 +348,7 @@ class PolymarketConnector:
             key=self.private_key,
             chain_id=137,
             creds=creds,
-            signature_type=2,
+            signature_type=1,
             funder=self.funder_address or None,
         )
 
@@ -404,7 +404,7 @@ class PolymarketConnector:
             data = self._client.get_balance_allowance(params)
             if hasattr(data, "json"):
                 data = data.json()
-            cash = float(data.get("balance", 0.0))
+            cash = float(data.get("balance", 0.0)) / 1_000_000
             return {"cash": cash, "balance": cash}
         except Exception as exc:
             raise RuntimeError(f"Polymarket balance fetch failed: {exc}") from exc
