@@ -660,12 +660,12 @@ class PolymarketConnector:
         order = self._client.create_order(
             OrderArgs(token_id=token_id, price=0.99, size=float(size), side=side_uc)
         )
-        resp = self._client.post_order(order, OrderType.FAK)
+        resp = self._client.post_order(order, OrderType.GTC)
 
         taking = resp.get("takingAmount", "0") or "0"
-        if int(taking) == 0:
+        if not taking or taking == "0":
             raise RuntimeError(
-                f"Polymarket FAK order filled 0 contracts "
+                f"Polymarket GTC order filled 0 contracts "
                 f"(status={resp.get('status','?')}, errorMsg={resp.get('errorMsg','')})"
             )
         return resp
