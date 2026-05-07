@@ -354,7 +354,7 @@ class PolymarketConnector:
             key=self.private_key,
             chain_id=137,
             creds=creds,
-            signature_type=SignatureTypeV2.POLY_PROXY if self.funder_address else None,
+            signature_type=SignatureTypeV2.POLY_1271 if self.funder_address else None,
             funder=self.funder_address or None,
         )
 
