@@ -17,10 +17,10 @@
     "scan_interval_seconds": 0,
 
     "_doc_pairs_per_cycle": "Max pairs to scan per cycle. Pairs with open positions are always scanned first; the rest rotate so every pair gets checked evenly.",
-    "pairs_per_cycle": 10,
+    "pairs_per_cycle": 7,
 
     "_doc_max_workers": "Parallel threads for fetching orderbook data. Higher = faster scans, but too high triggers 429 rate-limits from Kalshi. 10 is a safe default.",
-    "max_workers": 10,
+    "max_workers": 7,
 
     "_doc_print_market_status": "Print a one-line market snapshot for every pair each cycle, even when no arb is found.",
     "print_market_status": false,
