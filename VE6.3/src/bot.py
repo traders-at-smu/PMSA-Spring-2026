@@ -1278,6 +1278,7 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
             ticker=opp["kalshi_ticker"],
             side=opp["k_side"],
             contracts=requested,
+            price=opp["k_price"],
             client_order_id=f"{client_id}:k",
         )
         k_order = k_resp.get("order", {})

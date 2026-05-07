@@ -264,22 +264,29 @@ class KalshiConnector:
         ticker: str,
         side: str,
         contracts: int,
+        price: float,
         client_order_id: str,
         action: str = "buy",
     ) -> dict[str, Any]:
-        """Place an IOC market order on Kalshi. Fills up to contracts at best available price;
-        any unfilled remainder is cancelled automatically by the exchange."""
+        """Place a limit IOC order on Kalshi at the quoted price.
+        Fills up to contracts at the given price; unfilled remainder cancelled automatically."""
         if action not in {"buy", "sell"}:
             raise ValueError("action must be 'buy' or 'sell'")
         path = "/portfolio/orders"
+        price_cents = int(round(price * 100))
         payload: dict[str, Any] = {
             "ticker": ticker,
             "client_order_id": client_order_id,
+            "type": "limit",
             "action": action,
             "side": side,
             "count": contracts,
             "time_in_force": "immediate_or_cancel",
         }
+        if side == "yes":
+            payload["yes_price"] = price_cents
+        else:
+            payload["no_price"] = price_cents
         headers = self._signed_headers("POST", path)
         res = requests.post(
             f"{self.base}{path}", json=payload, headers=headers, timeout=_TIMEOUT
