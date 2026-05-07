@@ -89,6 +89,8 @@
         "remote_path": "/Daily Excel"
     },
 
+    "holdings": {"mode": "off"},
+
     "auto_update_pairs": true,
     "update_on_startup": false,
 
