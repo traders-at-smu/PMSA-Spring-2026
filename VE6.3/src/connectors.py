@@ -332,11 +332,11 @@ class PolymarketConnector:
         if self._client is not None:
             return
         try:
-            from py_clob_client.client import ClobClient  # type: ignore
+            from py_clob_client_v2 import ClobClient, ApiCreds as V2ApiCreds, SignatureTypeV2  # type: ignore
         except ImportError as exc:
             raise RuntimeError(
-                "py-clob-client is required for live Polymarket trading. "
-                "Install with: pip install py-clob-client"
+                "py-clob-client-v2 is required for live Polymarket trading. "
+                "Install with: pip install py_clob_client_v2"
             ) from exc
         if not self.private_key:
             raise RuntimeError(
@@ -344,8 +344,7 @@ class PolymarketConnector:
             )
         creds = None
         if self.api_key and self.api_secret and self.api_passphrase:
-            from py_clob_client.clob_types import ApiCreds  # type: ignore
-            creds = ApiCreds(
+            creds = V2ApiCreds(
                 api_key=self.api_key,
                 api_secret=self.api_secret,
                 api_passphrase=self.api_passphrase,
@@ -355,7 +354,7 @@ class PolymarketConnector:
             key=self.private_key,
             chain_id=137,
             creds=creds,
-            signature_type=1,
+            signature_type=SignatureTypeV2.POLY_PROXY if self.funder_address else None,
             funder=self.funder_address or None,
         )
 
@@ -403,10 +402,10 @@ class PolymarketConnector:
         return market
 
     def get_balance(self) -> dict[str, float]:
-        """Return available USDC cash balance from Polymarket International CLOB."""
+        """Return available pUSD cash balance from Polymarket International CLOB (V2)."""
         self._ensure_client()
         try:
-            from py_clob_client.clob_types import BalanceAllowanceParams, AssetType  # type: ignore
+            from py_clob_client_v2 import BalanceAllowanceParams, AssetType  # type: ignore
             params = BalanceAllowanceParams(asset_type=AssetType.COLLATERAL)
             data = self._client.get_balance_allowance(params)
             if hasattr(data, "json"):
@@ -642,25 +641,29 @@ class PolymarketConnector:
     def place_order(
         self, token_id: str, side: str, size: int, price: float = 0.99
     ) -> dict[str, Any]:
-        """Place a FAK market order on Polymarket International.
+        """Place a GTC limit order on Polymarket International (V2).
 
         Uses an aggressive limit price (0.99) so the order fills at whatever is
-        available on the book. FAK fills as many contracts as possible immediately
-        and cancels any unfilled remainder — no GTC lingering.
-
-        Raises if 0 contracts were filled.
+        available on the book. Raises if 0 contracts were filled.
         """
         self._ensure_client()
-        from py_clob_client.clob_types import OrderArgs, OrderType  # type: ignore
+        from py_clob_client_v2 import OrderArgs, OrderType, Side  # type: ignore
 
         side_uc = side.strip().upper()
         if side_uc not in {"BUY", "SELL"}:
             raise ValueError("Polymarket side must be 'buy' or 'sell'")
 
-        order = self._client.create_order(
-            OrderArgs(token_id=token_id, price=0.99, size=float(size), side=side_uc)
+        side_enum = Side.BUY if side_uc == "BUY" else Side.SELL
+
+        resp = self._client.create_and_post_order(
+            order_args=OrderArgs(
+                token_id=token_id,
+                price=0.99,
+                size=float(size),
+                side=side_enum,
+            ),
+            order_type=OrderType.GTC,
         )
-        resp = self._client.post_order(order, OrderType.GTC)
 
         taking = resp.get("takingAmount", "0") or "0"
         if not taking or taking == "0":
