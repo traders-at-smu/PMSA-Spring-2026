@@ -2329,7 +2329,7 @@ def run_scan(
                             f"— skipping (already executed this cycle){Style.RESET_ALL}"
                         )
                     elif execute_approved_ids is not None and opp["pair_id"] not in execute_approved_ids:
-                        print(f"    {Style.DIM}→ arb seen — awaiting 3-cycle confirmation{Style.RESET_ALL}")
+                        print(f"    {Style.DIM}→ arb seen — awaiting 2nd confirmation{Style.RESET_ALL}")
                     else:
                         executed_keys.add(exec_key)
                         trade = None
@@ -2497,7 +2497,7 @@ def run_loop(
 
             # Pairs approved for execution — seen as arb for 3 consecutive cycles
             execute_approved_ids = {
-                pid for pid, count in opportunity_streak.items() if count >= 3
+                pid for pid, count in opportunity_streak.items() if count >= 1
             }
 
             # Pre-filter permanently excluded and cooled-down pairs
