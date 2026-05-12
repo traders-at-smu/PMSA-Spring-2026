@@ -677,12 +677,15 @@ class PolymarketConnector:
         }
 
     def place_order(
-        self, token_id: str, side: str, size: int, price: float = 0.99
+        self, token_id: str, side: str, size: int, price: float
     ) -> dict[str, Any]:
         """Place a GTC limit order on Polymarket International (V2).
 
-        Uses an aggressive limit price (0.99) so the order fills at whatever is
-        available on the book. Raises if 0 contracts were filled.
+        price: live ask price from the depth walk — passed through to OrderArgs.
+        size: integer contract count. The library multiplies by price internally;
+              passing float can produce non-clean tick amounts that fail int() in
+              the signing pipeline (e.g. '4.865').
+        Raises if 0 contracts were filled.
         """
         self._ensure_client()
         from py_clob_client_v2 import OrderArgs, OrderType, Side  # type: ignore
@@ -696,8 +699,8 @@ class PolymarketConnector:
         resp = self._client.create_and_post_order(
             order_args=OrderArgs(
                 token_id=token_id,
-                price=0.99,
-                size=float(size),
+                price=price,
+                size=int(size),
                 side=side_enum,
             ),
             order_type=OrderType.GTC,
