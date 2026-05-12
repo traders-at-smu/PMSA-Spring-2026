@@ -1326,12 +1326,15 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
                 size=k_filled,
                 price=price,
             )
-            # takingAmount = shares received (6-decimal fixed-point, e.g. "70000000" = 70)
-            # makingAmount = USDC spent (6-decimal fixed-point)
+            print(f"DEBUG p_resp keys: {list(p_resp.keys())}", file=sys.stderr)
+            print(f"DEBUG p_resp: {p_resp}", file=sys.stderr)
+            # py_clob_client_v2 returns takingAmount/makingAmount as decimal dollar
+            # strings (e.g. "4.885"), NOT as 6-decimal micro-USDC integers.
+            # takingAmount for BUY = shares received (count). makingAmount = USDC spent.
             taking = p_resp.get("takingAmount", "0") or "0"
             making = p_resp.get("makingAmount", "0") or "0"
-            leg_filled = round(int(taking) / 1_000_000)
-            leg_cost = int(making) / 1_000_000
+            leg_filled = round(float(taking))
+            leg_cost = float(making)
             p_filled += leg_filled
             p_actual_cost += leg_cost
         p_actual_price = round(p_actual_cost / p_filled, 6) if p_filled > 0 else 0.0
