@@ -696,15 +696,24 @@ class PolymarketConnector:
 
         side_enum = Side.BUY if side_uc == "BUY" else Side.SELL
 
-        resp = self._client.create_and_post_order(
-            order_args=OrderArgs(
-                token_id=token_id,
-                price=price,
-                size=int(size),
-                side=side_enum,
-            ),
-            order_type=OrderType.GTC,
-        )
+        import traceback
+        try:
+            resp = self._client.create_and_post_order(
+                order_args=OrderArgs(
+                    token_id=token_id,
+                    price=price,
+                    size=int(size),
+                    side=side_enum,
+                ),
+                order_type=OrderType.GTC,
+            )
+        except Exception as exc:
+            print("=" * 70)
+            print("FULL POLYMARKET ORDER TRACEBACK:")
+            traceback.print_exc()
+            print("=" * 70)
+            print(f"order_args sent: token_id={token_id}, price={price}, size={int(size)}, side={side_enum}")
+            raise
 
         taking = resp.get("takingAmount", "0") or "0"
         if not taking or taking == "0":
