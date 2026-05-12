@@ -102,3 +102,34 @@ All JSON state files are append-only or full-replace and crash-resilient:
 - Gamma API for market metadata and token IDs
 - CLOB API for orderbook depth and order placement
 - `_resolve_tokens` maps YES/NO to correct CLOB token IDs (supports multi-outcome via `poly_primary_outcome`)
+
+## Proxy support
+
+**Why:** Polymarket's CLOB API blocks US datacenter IP ranges (including DigitalOcean). All Kalshi and Polymarket traffic is routed through a Bright Data Dedicated ISP proxy so the bot's egress IP appears as a Sweden residential address instead of the server's datacenter IP.
+
+**How to enable:** In `api-keys.json`, set `proxy.enabled` to `true` and fill in `host`, `port`, `username`, and `password`. The `config.json` `proxy` block contains only documentation defaults — actual credentials live in `api-keys.json`.
+
+```json
+"proxy": {
+    "enabled": true,
+    "host": "brd.superproxy.io",
+    "port": 33335,
+    "username": "brd-customer-...",
+    "password": "...",
+    "verify_ssl": true
+}
+```
+
+**How to verify:** When starting `python3 main.py run` or `python3 main.py scan`, the startup output prints three health-check lines once before the scan loop begins:
+
+```
+  [proxy] ✓ Proxy egress IP: 12.34.56.78
+  [proxy] ✓ Polymarket geoblock: country=SE blocked=False
+  [proxy] ✓ Kalshi status: exchange_active=True trading_active=True
+```
+
+These lines appear once at process startup only — not per scan cycle.
+
+**SSL:** `verify_ssl` should stay `true` unless explicitly debugging a TLS interception issue with the proxy. Setting it to `false` disables certificate verification for all sessions.
+
+**Provider note:** Tested with Bright Data Dedicated ISP, egress country Sweden. Other countries work as long as they are not on Kalshi's or Polymarket's geo-restricted lists. The proxy URL for the `py_clob_client_v2` CLOB client is injected via `HTTPS_PROXY`/`HTTP_PROXY` environment variables (the client library does not expose a proxies constructor parameter).

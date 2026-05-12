@@ -95,5 +95,10 @@
     "update_on_startup": false,
 
     "_doc_export_on_startup": "Run a trade export to CSV on bot startup. Output: data/trades_export_YYYY-MM-DD.csv.",
-    "export_on_startup": false
+    "export_on_startup": false,
+
+    "proxy": {
+        "enabled": false,
+        "_comment": "Real host/port/username/password live in api-keys.json under top-level proxy key. Set enabled true there to activate."
+    }
 }

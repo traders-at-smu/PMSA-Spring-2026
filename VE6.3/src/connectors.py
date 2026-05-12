@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -44,7 +45,7 @@ def _slugify(text: str) -> str:
 class KalshiConnector:
     """Minimal Kalshi client: fetch orderbook quotes and place limit orders."""
 
-    def __init__(self, api_key: str = "", private_key_base64: str = "", base_url: str = ""):
+    def __init__(self, api_key: str = "", private_key_base64: str = "", base_url: str = "", proxy_config: dict | None = None):
         # Use the public production URL by default — no key required for read access
         self.base = (base_url or _KALSHI_BASE).rstrip("/")
         self.api_key = api_key.strip()
@@ -53,6 +54,22 @@ class KalshiConnector:
         if private_key_base64.strip():
             key_bytes = base64.b64decode(private_key_base64.strip())
             self._private_key = serialization.load_pem_private_key(key_bytes, password=None)
+        proxy_enabled = bool(proxy_config and proxy_config.get("enabled"))
+        if proxy_enabled:
+            h = proxy_config["host"]
+            port = proxy_config["port"]
+            u = proxy_config["username"]
+            pw = proxy_config["password"]
+            proxy_url = f"http://{u}:{pw}@{h}:{port}"
+            self._proxies: dict | None = {"http": proxy_url, "https": proxy_url}
+            self._verify: bool | str = proxy_config.get("verify_ssl", True)
+        else:
+            self._proxies = None
+            self._verify = True
+        self._session = requests.Session()
+        if self._proxies:
+            self._session.proxies.update(self._proxies)
+        self._session.verify = self._verify
 
     def _event_url(self, event_ticker: str) -> str:
         if not event_ticker:
@@ -63,7 +80,7 @@ class KalshiConnector:
         et = event_ticker.lower()
         url = f"https://kalshi.com/markets/{et}"  # always-valid event page fallback
         try:
-            r = requests.get(f"{self.base}/events/{event_ticker}", timeout=_TIMEOUT)
+            r = self._session.get(f"{self.base}/events/{event_ticker}", timeout=_TIMEOUT)
             r.raise_for_status()
             event = r.json().get("event", {})
             title = str(event.get("title") or "").strip()
@@ -168,12 +185,12 @@ class KalshiConnector:
             depth.buy_no   — ask levels for buying NO   [{price, size}, ...]
         """
         def _fetch_orderbook() -> dict[str, Any]:
-            r = requests.get(f"{self.base}/markets/{ticker}/orderbook", timeout=_TIMEOUT)
+            r = self._session.get(f"{self.base}/markets/{ticker}/orderbook", timeout=_TIMEOUT)
             r.raise_for_status()
             return r.json()
 
         def _fetch_market() -> dict[str, Any]:
-            r = requests.get(f"{self.base}/markets/{ticker}", timeout=_TIMEOUT)
+            r = self._session.get(f"{self.base}/markets/{ticker}", timeout=_TIMEOUT)
             r.raise_for_status()
             return r.json()
 
@@ -246,7 +263,7 @@ class KalshiConnector:
         """Return available cash balance and total portfolio value."""
         path = "/portfolio/balance"
         headers = self._signed_headers("GET", path)
-        res = requests.get(f"{self.base}{path}", headers=headers, timeout=_TIMEOUT)
+        res = self._session.get(f"{self.base}{path}", headers=headers, timeout=_TIMEOUT)
         res.raise_for_status()
         data = res.json()
         
@@ -288,7 +305,7 @@ class KalshiConnector:
         else:
             payload["no_price"] = price_cents
         headers = self._signed_headers("POST", path)
-        res = requests.post(
+        res = self._session.post(
             f"{self.base}{path}", json=payload, headers=headers, timeout=_TIMEOUT
         )
         res.raise_for_status()
@@ -298,7 +315,7 @@ class KalshiConnector:
         """Cancel an open order by order_id. Silently ignores 404 (already filled/cancelled)."""
         path = f"/portfolio/orders/{order_id}"
         headers = self._signed_headers("DELETE", path)
-        res = requests.delete(f"{self.base}{path}", headers=headers, timeout=_TIMEOUT)
+        res = self._session.delete(f"{self.base}{path}", headers=headers, timeout=_TIMEOUT)
         if res.status_code != 404:
             res.raise_for_status()
 
@@ -317,6 +334,7 @@ class PolymarketConnector:
         funder_address: str = "",
         clob_url: str = "",
         gamma_url: str = "",
+        proxy_config: dict | None = None,
     ):
         # Use the public production URLs by default — no key required for read access
         self.clob_host = (clob_url or _POLY_CLOB).rstrip("/")
@@ -327,6 +345,26 @@ class PolymarketConnector:
         self.api_passphrase = api_passphrase.strip()
         self.funder_address = funder_address.strip()
         self._client = None  # lazy-init on first live order
+        proxy_enabled = bool(proxy_config and proxy_config.get("enabled"))
+        if proxy_enabled:
+            h = proxy_config["host"]
+            port = proxy_config["port"]
+            u = proxy_config["username"]
+            pw = proxy_config["password"]
+            proxy_url = f"http://{u}:{pw}@{h}:{port}"
+            self._proxies: dict | None = {"http": proxy_url, "https": proxy_url}
+            self._verify: bool | str = proxy_config.get("verify_ssl", True)
+            # py_clob_client_v2.ClobClient does not expose a proxies kwarg.
+            # Its internal requests calls honor HTTPS_PROXY/HTTP_PROXY env vars.
+            os.environ["HTTPS_PROXY"] = proxy_url
+            os.environ["HTTP_PROXY"] = proxy_url
+        else:
+            self._proxies = None
+            self._verify = True
+        self._session = requests.Session()
+        if self._proxies:
+            self._session.proxies.update(self._proxies)
+        self._session.verify = self._verify
 
     def _ensure_client(self) -> None:
         if self._client is not None:
@@ -384,7 +422,7 @@ class PolymarketConnector:
 
     def _fetch_market(self, market_slug: str) -> dict[str, Any]:
         """Fetch a Polymarket market payload for a given slug."""
-        res = requests.get(
+        res = self._session.get(
             f"{self.gamma_host}/markets",
             params={"slug": market_slug},
             timeout=_TIMEOUT,
@@ -548,7 +586,7 @@ class PolymarketConnector:
         """
         if not token_id:
             raise RuntimeError("Polymarket fee-rate lookup failed: empty token_id")
-        res = requests.get(
+        res = self._session.get(
             f"{self.gamma_host}/markets",
             params={"clob_token_ids": token_id},
             timeout=_TIMEOUT,
@@ -568,7 +606,7 @@ class PolymarketConnector:
         if not token_id:
             return ""
         try:
-            res = requests.get(
+            res = self._session.get(
                 f"{self.gamma_host}/markets",
                 params={"clob_token_ids": token_id},
                 timeout=_TIMEOUT,
@@ -583,7 +621,7 @@ class PolymarketConnector:
         return ""
 
     def _fetch_book(self, token_id: str) -> dict[str, Any]:
-        res = requests.get(
+        res = self._session.get(
             f"{self.clob_host}/book",
             params={"token_id": token_id},
             timeout=_TIMEOUT,

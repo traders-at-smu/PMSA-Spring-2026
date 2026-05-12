@@ -172,10 +172,12 @@ def _validate_live_credentials(cfg: dict, kalshi, poly) -> bool:
 def _build_connectors(cfg: dict) -> tuple[KalshiConnector, PolymarketConnector]:
     k_cfg = cfg.get("kalshi", {})
     p_cfg = cfg.get("polymarket", {})
+    proxy_config = cfg.get("proxy", {})
     kalshi = KalshiConnector(
         api_key=k_cfg.get("api_key", ""),
         private_key_base64=k_cfg.get("private_key_base64", ""),
         base_url=k_cfg.get("base_url", ""),
+        proxy_config=proxy_config,
     )
     poly = PolymarketConnector(
         private_key=p_cfg.get("private_key", ""),
@@ -185,8 +187,60 @@ def _build_connectors(cfg: dict) -> tuple[KalshiConnector, PolymarketConnector]:
         funder_address=p_cfg.get("funder_address", ""),
         clob_url=p_cfg.get("clob_url", ""),
         gamma_url=p_cfg.get("gamma_url", ""),
+        proxy_config=proxy_config,
     )
     return kalshi, poly
+
+
+def _health_check_proxy(cfg: dict) -> None:
+    """Run once at startup to verify proxy connectivity and geo-routing."""
+    import requests as _req
+    proxy_cfg = cfg.get("proxy", {})
+    if not proxy_cfg.get("enabled"):
+        print(f"  {Style.DIM}[proxy] Proxy disabled — skipping health check{Style.RESET_ALL}")
+        return
+    h = proxy_cfg.get("host", "")
+    port = proxy_cfg.get("port", 0)
+    u = proxy_cfg.get("username", "")
+    pw = proxy_cfg.get("password", "")
+    verify = proxy_cfg.get("verify_ssl", True)
+    proxy_url = f"http://{u}:{pw}@{h}:{port}"
+    session = _req.Session()
+    session.proxies.update({"http": proxy_url, "https": proxy_url})
+    session.verify = verify
+
+    # (a) Egress IP
+    try:
+        r = session.get("https://api.ipify.org", timeout=10)
+        r.raise_for_status()
+        print(f"  [proxy] {Fore.GREEN}✓{Style.RESET_ALL} Proxy egress IP: {r.text.strip()}")
+    except Exception as exc:
+        print(f"  [proxy] {Fore.YELLOW}⚠ Proxy egress IP check failed: {exc}{Style.RESET_ALL}")
+
+    # (b) Polymarket geoblock
+    try:
+        r = session.get("https://polymarket.com/api/geoblock", timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        country = data.get("country", "?")
+        blocked = data.get("blocked", "?")
+        if blocked is True:
+            print(f"  [proxy] {Fore.RED}✗ Polymarket geoblock: country={country} blocked={blocked}{Style.RESET_ALL}")
+        else:
+            print(f"  [proxy] {Fore.GREEN}✓{Style.RESET_ALL} Polymarket geoblock: country={country} blocked={blocked}")
+    except Exception as exc:
+        print(f"  [proxy] {Fore.YELLOW}⚠ Polymarket geoblock check failed: {exc}{Style.RESET_ALL}")
+
+    # (c) Kalshi exchange status
+    try:
+        r = session.get("https://api.elections.kalshi.com/trade-api/v2/exchange/status", timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        exchange_active = data.get("exchange_active", "?")
+        trading_active = data.get("trading_active", "?")
+        print(f"  [proxy] {Fore.GREEN}✓{Style.RESET_ALL} Kalshi status: exchange_active={exchange_active} trading_active={trading_active}")
+    except Exception as exc:
+        print(f"  [proxy] {Fore.YELLOW}⚠ Kalshi status check failed: {exc}{Style.RESET_ALL}")
 
 
 def _health_check_fee_rate(pairs: list[dict], poly: PolymarketConnector) -> bool:
@@ -380,6 +434,7 @@ def cmd_scan(args) -> int:
 
     _print_banner(cfg, len(pairs))
     kalshi, poly = _build_connectors(cfg)
+    _health_check_proxy(cfg)
     if args.health_check and not _health_check_fee_rate(pairs, poly):
         print(f"  {Fore.RED}✗{Style.RESET_ALL} fee-rate health check failed — aborting scan")
         return 1
@@ -425,6 +480,7 @@ def cmd_run(args) -> int:
                 file=sys.stderr,
             )
             return 1
+    _health_check_proxy(cfg)
     if args.health_check and not _health_check_fee_rate(pairs, poly):
         print(f"  {Fore.RED}✗{Style.RESET_ALL} fee-rate health check failed — aborting run")
         return 1

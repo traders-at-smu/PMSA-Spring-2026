@@ -14,7 +14,13 @@
       "WebFetch(domain:docs.polymarket.us)",
       "Bash(gh api *)",
       "Bash(python3 main.py validate)",
-      "Bash(python3 main.py scan)"
+      "Bash(python3 main.py scan)",
+      "WebFetch(domain:trading-api.readme.io)",
+      "Bash(grep -E '\\\\.py$')",
+      "Bash(python3 -c \"from src.connectors import KalshiConnector, PolymarketConnector; print\\('OK'\\)\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }
