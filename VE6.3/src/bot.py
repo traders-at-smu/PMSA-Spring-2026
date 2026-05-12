@@ -1259,7 +1259,11 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
       - Kalshi failed  → legs_filled="none"; nothing recorded
     """
     trade_num = _next_trade_number(log_path)
-    client_id = f"{trade_num}:{opp['pair_id']}:{opp['strategy']}"
+    # Millisecond timestamp makes client_order_id unique across retry cycles.
+    # Without it, trade_num resets to T00001 on each cycle when prior attempts
+    # failed (trade counter only advances on completed trades), so Kalshi sees
+    # the same idempotency key and returns 409 Conflict on every retry.
+    client_id = f"{trade_num}:{opp['pair_id']}:{opp['strategy']}:{int(time.time() * 1000)}"
     requested = opp["contracts"]
 
     p_token_ids = opp.get("p_token_ids") or [opp.get("p_token_id", "")]
@@ -1301,7 +1305,10 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
             f"  {'='*55}\n",
             file=sys.stderr,
         )
-        # Nothing filled — do not write to entry_trades
+        # Nothing filled — return immediately. Step 2 (Polymarket) and
+        # Step 3 (_write_trade_log / open_positions) are never reached.
+        # Any "Traded Xc" output visible in the same session came from a prior
+        # cycle's genuine fill, not from this failure path.
         return {"legs_filled": "none", "partial_fill": True, "trade_number": trade_num}
 
     # ── Step 2: Polymarket FAK market order — up to k_filled contracts ───────
