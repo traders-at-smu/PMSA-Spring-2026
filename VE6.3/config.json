@@ -11,7 +11,7 @@
     "min_edge_pct": 0.001,
 
     "_doc_max_contracts": "Maximum contracts to accumulate in a single arb trade. Depth-walk stops when this cap is reached.",
-    "max_contracts": 1,
+    "max_contracts": 5,
 
     "_doc_scan_interval_seconds": "Seconds between full scan cycles in 'run' mode.",
     "scan_interval_seconds": 0,
