@@ -1336,6 +1336,12 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
             p_actual_cost += leg_cost
         p_actual_price = round(p_actual_cost / p_filled, 6) if p_filled > 0 else 0.0
     except Exception as exc:
+        import traceback
+        print("=" * 70, file=sys.stderr)
+        print("FULL POLYMARKET ORDER TRACEBACK:", file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        print(f"order_args: token_id={token_id}, price={price}, size={k_filled}", file=sys.stderr)
+        print("=" * 70, file=sys.stderr)
         poly_exc = exc
 
     if poly_exc:
