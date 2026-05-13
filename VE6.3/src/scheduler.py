@@ -54,7 +54,7 @@ def run_summary(v6_dir, cfg):
                 print(f"  {Fore.YELLOW}[{ts}] [scheduler] stderr: {err}{Style.RESET_ALL}")
             return
         date_str = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-        out_path = Path(v6_dir) / f"Paper_Trading_Results_{date_str}.md"
+        out_path = Path(v6_dir) / f"Live_Trading_Results_{date_str}.md"
         out_path.write_text(output, encoding="utf-8")
         print(f"  {Style.DIM}[{ts}] [scheduler] Summary written to {out_path.name}{Style.RESET_ALL}")
         from export_trades import upload_to_dropbox
