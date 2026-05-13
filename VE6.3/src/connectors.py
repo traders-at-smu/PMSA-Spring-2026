@@ -677,14 +677,13 @@ class PolymarketConnector:
         }
 
     def place_order(
-        self, token_id: str, side: str, size: int, price: float
+        self, token_id: str, side: str, size: int
     ) -> dict[str, Any]:
-        """Place a GTC limit order on Polymarket International (V2).
+        """Place a GTC sweep order on Polymarket International (V2).
 
-        price: live ask price from the depth walk — passed through to OrderArgs.
-        size: integer contract count. The library multiplies by price internally;
-              passing float can produce non-clean tick amounts that fail int() in
-              the signing pipeline (e.g. '4.865').
+        Uses price=0.99 so the order sweeps all resting asks up to 99¢ and
+        fills at the best available price on the book rather than stopping at
+        the scanned ask. size must be an integer contract count.
         Raises if 0 contracts were filled.
         """
         self._ensure_client()
@@ -699,7 +698,7 @@ class PolymarketConnector:
         resp = self._client.create_and_post_order(
             order_args=OrderArgs(
                 token_id=token_id,
-                price=price,
+                price=0.99,
                 size=int(size),
                 side=side_enum,
             ),

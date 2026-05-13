@@ -1324,7 +1324,6 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
                 token_id=token_id,
                 side="buy",
                 size=k_filled,
-                price=price,
             )
             print(f"DEBUG p_resp keys: {list(p_resp.keys())}", file=sys.stderr)
             print(f"DEBUG p_resp: {p_resp}", file=sys.stderr)
@@ -2446,9 +2445,12 @@ def run_loop(
 
     def _on_new_position(opp: dict[str, Any], trade: dict[str, Any]) -> None:
         _record_open_position(positions, opp, trade, position_file)
-        # Start 1-hour cooldown — pair will not be scanned until it expires
-        expiry = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat()
-        cooldowns[opp["pair_id"]] = expiry
+        # Cooldown until next 3am CDT (08:00 UTC) — aligns with daily bot restart
+        now_utc = datetime.now(timezone.utc)
+        reset = now_utc.replace(hour=8, minute=0, second=0, microsecond=0)
+        if now_utc >= reset:
+            reset += timedelta(days=1)
+        cooldowns[opp["pair_id"]] = reset.isoformat()
         _save_cooldowns(cooldown_log, cooldowns)
         opportunity_streak.pop(opp["pair_id"], None)
 
@@ -2512,9 +2514,9 @@ def run_loop(
                     del cooldowns[pid]
             active_cooldowns = set(cooldowns.keys())
 
-            # Pairs approved for execution — seen as arb for 3 consecutive cycles
+            # Pairs approved for execution — seen as arb for 5 consecutive cycles
             execute_approved_ids = {
-                pid for pid, count in opportunity_streak.items() if count >= 1
+                pid for pid, count in opportunity_streak.items() if count >= 4
             }
 
             # Pre-filter permanently excluded and cooled-down pairs
