@@ -679,12 +679,12 @@ class PolymarketConnector:
     def place_order(
         self, token_id: str, side: str, size: int
     ) -> dict[str, Any]:
-        """Place a FOK sweep order on Polymarket International (V2).
+        """Place a FAK sweep order on Polymarket International (V2).
 
-        FOK (Fill or Kill) fills immediately against resting asks up to 99¢
-        or cancels entirely — never posts to the book. This prevents orphan
-        maker bids when there is no ask liquidity. size must be an integer
-        contract count. Raises if 0 contracts were filled.
+        FAK (Fill and Kill) fills whatever is immediately available at ≤0.99
+        and cancels the remainder — never posts to the book. Accepts partial
+        fills. size must be an integer contract count.
+        Raises if 0 contracts were filled.
         """
         self._ensure_client()
         from py_clob_client_v2 import OrderArgs, OrderType, Side  # type: ignore
@@ -702,7 +702,7 @@ class PolymarketConnector:
                 size=int(size),
                 side=side_enum,
             ),
-            order_type=OrderType.FOK,
+            order_type=OrderType.FAK,
         )
 
         taking = resp.get("takingAmount", "0") or "0"
