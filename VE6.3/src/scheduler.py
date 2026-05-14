@@ -38,12 +38,12 @@ def run_generator(generator_dir):
         return False
 
 def run_summary(v6_dir, cfg):
-    """Run paper_trading_summary.py, write to Paper_Trading_Results.md, upload to Dropbox."""
+    """Run live_trading_summary.py, write to Live_Trading_Results.md, upload to Dropbox."""
     ts = datetime.now().strftime("%H:%M:%S")
     try:
         import sys
         result = subprocess.run(
-            [sys.executable, "scripts/paper_trading_summary.py"],
+            [sys.executable, "scripts/live_trading_summary.py"],
             cwd=str(v6_dir), capture_output=True, text=True
         )
         output = result.stdout

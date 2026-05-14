@@ -22,4 +22,4 @@ cat /root/PMSA/VE6.3/data/open_positions.json
 grep partial_fill /root/PMSA/VE6.3/data/entry_trades.json
 
 ## Run trading summary
-cd /root/PMSA/VE6.3 && python3 scripts/paper_trading_summary.py
+cd /root/PMSA/VE6.3 && python3 scripts/live_trading_summary.py
