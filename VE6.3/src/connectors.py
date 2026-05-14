@@ -708,7 +708,7 @@ class PolymarketConnector:
         taking = resp.get("takingAmount", "0") or "0"
         if not taking or taking == "0":
             raise RuntimeError(
-                f"Polymarket GTC order filled 0 contracts "
+                f"Polymarket FAK order filled 0 contracts "
                 f"(status={resp.get('status','?')}, errorMsg={resp.get('errorMsg','')})"
             )
         return resp

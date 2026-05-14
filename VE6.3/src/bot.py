@@ -1273,6 +1273,19 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
     if len(p_leg_prices) < len(p_token_ids):
         p_leg_prices += [opp["p_price"] for _ in range(len(p_token_ids) - len(p_leg_prices))]
 
+    # Pre-check: abort before Kalshi fires if Polymarket notional would be below $1 minimum.
+    # Polymarket rejects orders where price × contracts < $1 regardless of order type.
+    for _pp in p_leg_prices:
+        if _pp * requested < 1.0:
+            print(
+                f"\n  {'='*55}\n"
+                f"  {Fore.YELLOW}!! SKIPPED — Polymarket notional ${_pp * requested:.2f} "
+                f"below $1 minimum (price={_pp:.4f} × {requested}c){Style.RESET_ALL}\n"
+                f"  {'='*55}\n",
+                file=sys.stderr,
+            )
+            return {"legs_filled": "none", "partial_fill": False, "trade_number": trade_num}
+
     # ── Step 1: Kalshi IOC market order ───────────────────────────────────────
     k_filled = 0
     k_actual_price = 0.0
@@ -1325,8 +1338,6 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
                 side="buy",
                 size=k_filled,
             )
-            print(f"DEBUG p_resp keys: {list(p_resp.keys())}", file=sys.stderr)
-            print(f"DEBUG p_resp: {p_resp}", file=sys.stderr)
             # py_clob_client_v2 returns takingAmount/makingAmount as decimal dollar
             # strings (e.g. "4.885"), NOT as 6-decimal micro-USDC integers.
             # takingAmount for BUY = shares received (count). makingAmount = USDC spent.
