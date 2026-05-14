@@ -677,13 +677,14 @@ class PolymarketConnector:
         }
 
     def place_order(
-        self, token_id: str, side: str, size: int
+        self, token_id: str, side: str, size: float
     ) -> dict[str, Any]:
         """Place a FAK sweep order on Polymarket International (V2).
 
         FAK (Fill and Kill) fills whatever is immediately available at ≤0.99
         and cancels the remainder — never posts to the book. Accepts partial
-        fills. size must be an integer contract count.
+        fills. size is a dollar amount (contracts × price); py_clob_client_v2
+        interprets size as notional, not contract count.
         Raises if 0 contracts were filled.
         """
         self._ensure_client()
@@ -699,7 +700,7 @@ class PolymarketConnector:
             order_args=OrderArgs(
                 token_id=token_id,
                 price=0.99,
-                size=int(size),
+                size=float(size),
                 side=side_enum,
             ),
             order_type=OrderType.FAK,
