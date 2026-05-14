@@ -152,18 +152,6 @@ def _fetch_balances():
         return {"error": str(exc)}
 
 
-def _load_open_positions():
-    """Load current open positions from data/open_positions.json."""
-    pos_file = Path(__file__).parent.parent / "data" / "open_positions.json"
-    try:
-        with pos_file.open() as f:
-            data = json.load(f)
-        if isinstance(data, dict):
-            return data
-    except Exception:
-        pass
-    return {}
-
 
 # Load trades — live only, skip legs_filled="none"
 trades = []
@@ -272,27 +260,8 @@ else:
     print(f'  Polymarket cash     ${p.get("cash", 0.0):>10,.2f}')
     k_total = k.get("balance", 0.0) + k.get("portfolio_value", 0.0)
     p_total = p.get("cash", 0.0)
-    print(f'  ─' * 30)
-    print(f'  Combined            ${k_total + p_total:>10,.2f}')
-
-# ── Open positions ─────────────────────────────────────────────────────────────
-header('OPEN POSITIONS')
-positions = _load_open_positions()
-if not positions:
-    print('  No open positions.')
-else:
-    print(f"  {'Market':<35}  {'Strat':<14}  {'K@':>6}  {'P@':>6}  {'Cost':>8}  {'Legs':<12}  {'Opened (CDT)'}")
-    sep()
-    for pid, pos in positions.items():
-        title   = str(pos.get('title', pid))[:35]
-        strat   = str(pos.get('strategy', ''))[:14]
-        k_price = float(pos.get('k_actual_price') or pos.get('k_price') or 0.0)
-        p_price = float(pos.get('p_actual_price') or pos.get('p_price') or 0.0)
-        cost    = float(pos.get('total_cost') or pos.get('k_actual_cost', 0.0))
-        legs    = str(pos.get('legs_filled', ''))[:12]
-        ts      = pos.get('entry_timestamp') or pos.get('timestamp', '')
-        opened  = to_cdt(ts) if ts else 'n/a'
-        print(f"  {title:<35}  {strat:<14}  {k_price:>5.3f}  {p_price:>5.3f}  ${cost:>7,.2f}  {legs:<12}  {opened}")
+    print('  ' + '─' * 40)
+    print(f'  Total account value ${k_total + p_total:>10,.2f}')
 
 # ── Trade log ─────────────────────────────────────────────────────────────────
 header('TRADE LOG')
