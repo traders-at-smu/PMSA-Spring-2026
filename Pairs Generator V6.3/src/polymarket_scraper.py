@@ -137,59 +137,66 @@ async def _run_async():
     now = datetime.now(timezone.utc)
     run_start = now.isoformat()
 
-    # Date range filter — only fetch markets ending within our window.
-    # This keeps the total result set small enough to avoid Polymarket's
-    # ~10,000 offset limit, and avoids fetching irrelevant distant futures.
-    end_date_min = (now - timedelta(days=1)).strftime("%Y-%m-%d")
-    end_date_max = (now + timedelta(days=14)).strftime("%Y-%m-%d")
-    print(f"  Fetching markets ending {end_date_min} → {end_date_max}")
+    # Split the 14-day window into 3-day chunks to stay under Polymarket's
+    # ~10,000 offset limit. Each chunk is fetched independently; duplicates
+    # are handled by INSERT OR REPLACE in the DB.
+    CHUNK_DAYS = 3
+    TOTAL_DAYS = 15
+    windows = []
+    start = now - timedelta(days=1)
+    for i in range(0, TOTAL_DAYS, CHUNK_DAYS):
+        w_min = (start + timedelta(days=i)).strftime("%Y-%m-%d")
+        w_max = (start + timedelta(days=i + CHUNK_DAYS)).strftime("%Y-%m-%d")
+        windows.append((w_min, w_max))
 
     conn    = get_connection()
     cur     = conn.cursor()
     sem     = asyncio.Semaphore(CONCURRENCY)
-    pending = []
     stored  = 0
     total   = 0
     limit   = 100
-    offset  = 0
 
     async with aiohttp.ClientSession() as session:
-        while True:
-            # Fetch the next batch of pages concurrently
-            tasks = [
-                _fetch_page(session, sem, offset + i * limit, limit, last_fetched,
-                            end_date_min=end_date_min, end_date_max=end_date_max)
-                for i in range(CONCURRENCY)
-            ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+        for w_min, w_max in windows:
+            print(f"  Fetching markets ending {w_min} → {w_max}")
+            pending = []
+            offset  = 0
+            while True:
+                tasks = [
+                    _fetch_page(session, sem, offset + i * limit, limit, last_fetched,
+                                end_date_min=w_min, end_date_max=w_max)
+                    for i in range(CONCURRENCY)
+                ]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            exhausted = False
-            for batch in results:
-                if isinstance(batch, Exception):
-                    print(f"  Page error: {batch}")
-                    exhausted = True
-                    break
-                if not batch:
-                    exhausted = True
-                    break
-                pending.extend(batch)
-                total += len(batch)
-                print(f"  Fetched {len(batch)} markets (total so far: {total})")
-                if len(batch) < limit:
-                    exhausted = True
+                exhausted = False
+                for batch in results:
+                    if isinstance(batch, Exception):
+                        print(f"  Page error: {batch}")
+                        exhausted = True
+                        break
+                    if not batch:
+                        exhausted = True
+                        break
+                    pending.extend(batch)
+                    total += len(batch)
+                    print(f"  Fetched {len(batch)} markets (total so far: {total})")
+                    if len(batch) < limit:
+                        exhausted = True
 
-            if len(pending) >= BATCH_SIZE:
+                if len(pending) >= BATCH_SIZE:
+                    stored = flush(conn, cur, pending, stored)
+                    print(f"  Flushed to DB (total stored: {stored})")
+                    pending.clear()
+
+                if exhausted:
+                    break
+
+                offset += CONCURRENCY * limit
+
+            if pending:
                 stored = flush(conn, cur, pending, stored)
-                print(f"  Flushed to DB (total stored: {stored})")
                 pending.clear()
-
-            if exhausted:
-                break
-
-            offset += CONCURRENCY * limit
-
-    if pending:
-        stored = flush(conn, cur, pending, stored)
 
     conn.close()
     set_last_fetched("polymarket", run_start)
