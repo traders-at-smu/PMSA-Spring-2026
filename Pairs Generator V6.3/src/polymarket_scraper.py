@@ -134,7 +134,8 @@ async def _run_async():
     else:
         print("  First run — full fetch")
 
-    run_start = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc)
+    run_start = now.isoformat()
 
     # Date range filter — only fetch markets ending within our window.
     # This keeps the total result set small enough to avoid Polymarket's
