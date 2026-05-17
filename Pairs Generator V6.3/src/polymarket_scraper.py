@@ -140,7 +140,7 @@ async def _run_async():
     # Split the 14-day window into 3-day chunks to stay under Polymarket's
     # ~10,000 offset limit. Each chunk is fetched independently; duplicates
     # are handled by INSERT OR REPLACE in the DB.
-    CHUNK_DAYS = 3
+    CHUNK_DAYS = 1
     TOTAL_DAYS = 15
     windows = []
     start = now - timedelta(days=1)
