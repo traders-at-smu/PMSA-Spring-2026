@@ -677,15 +677,15 @@ class PolymarketConnector:
         }
 
     def place_order(
-        self, token_id: str, side: str, size: int
+        self, token_id: str, side: str, size: int, price: float = 0.99
     ) -> dict[str, Any]:
         """Place a FAK sweep order on Polymarket International (V2).
 
-        FAK (Fill and Kill) fills whatever is immediately available at ≤0.99
+        FAK (Fill and Kill) fills whatever is immediately available at ≤price
         and cancels the remainder — never posts to the book.
-        size is an integer contract count. The library computes:
-          taker = size (contracts received, integer — 0 decimals)
-          maker = size × 0.99 (USDC paid — always 2 decimals for integer size)
+        size is an integer contract count. price is the limit (typically
+        scanned_price + 0.05, capped at 0.99) — controls both the fill ceiling
+        and the maker commitment (size × price USDC).
         Raises if 0 contracts were filled.
         """
         self._ensure_client()
@@ -700,7 +700,7 @@ class PolymarketConnector:
         resp = self._client.create_and_post_order(
             order_args=OrderArgs(
                 token_id=token_id,
-                price=0.99,
+                price=float(price),
                 size=int(size),
                 side=side_enum,
             ),

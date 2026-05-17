@@ -1337,6 +1337,7 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
                 token_id=token_id,
                 side="buy",
                 size=k_filled,
+                price=min(round(price + 0.03, 2), 0.99),
             )
             # py_clob_client_v2 returns takingAmount/makingAmount as decimal dollar
             # strings (e.g. "4.885"), NOT as 6-decimal micro-USDC integers.
