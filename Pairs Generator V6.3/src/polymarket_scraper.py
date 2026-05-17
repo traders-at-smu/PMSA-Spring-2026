@@ -74,8 +74,13 @@ def flush(conn, cursor, batch, stored):
 
         end_date = market.get("endDateIso", "") or market.get("closeTime", "")
         end_dt   = _parse_end_dt(end_date)
-        six_hours_ago = now - timedelta(hours=6)
-        if not end_dt or end_dt < six_hours_ago or end_dt > cutoff:
+        # Use parse_expiry_date so date-only strings (e.g. "2026-05-17") are treated
+        # as end-of-day (23:59:59 UTC) rather than midnight, preventing today's games
+        # from being filtered out when the date-only stamp falls in the past.
+        if end_dt and len(str(end_date).strip()) <= 10:
+            end_dt = end_dt.replace(hour=23, minute=59, second=59)
+        yesterday = now - timedelta(days=1)
+        if not end_dt or end_dt < yesterday or end_dt > cutoff:
             continue
 
         try:
@@ -105,7 +110,7 @@ def flush(conn, cursor, batch, stored):
 
 async def _fetch_page(session, sem, offset, limit, last_fetched_iso):
     """Fetch one page of markets with rate-limit semaphore."""
-    params = {"limit": limit, "offset": offset, "closed": "false", "order": "endDateIso", "ascending": "true"}
+    params = {"limit": limit, "offset": offset, "closed": "false"}
     # Note: Polymarket Gamma API does not support an updated_after filter.
     # Incremental efficiency is handled by INSERT OR REPLACE (no-op on duplicates).
 
