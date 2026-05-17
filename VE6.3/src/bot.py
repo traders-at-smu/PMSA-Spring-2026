@@ -2368,12 +2368,13 @@ def run_scan(
                                 print(f"    {Fore.YELLOW}! skipped - insufficient holdings{Style.RESET_ALL}")
                                 continue
                             trade = execute_live(opp, kalshi, poly, log_path)
-                            status = "PARTIAL FILL" if trade.get("partial_fill") else "filled"
-                            color = Fore.RED if trade.get("partial_fill") else Fore.GREEN
-                            print(f"    → {trade['trade_number']} {color}{status}{Style.RESET_ALL}")
-                        _print_fill_breakdown(opp)
-                        if on_new_position and trade is not None and trade.get("legs_filled") != "none":
-                            on_new_position(opp, trade)
+                            if trade.get("legs_filled") != "none":
+                                status = "PARTIAL FILL" if trade.get("partial_fill") else "filled"
+                                color = Fore.RED if trade.get("partial_fill") else Fore.GREEN
+                                print(f"    → {trade['trade_number']} {color}{status}{Style.RESET_ALL}")
+                                _print_fill_breakdown(opp)
+                            if on_new_position and trade is not None and trade.get("legs_filled") != "none":
+                                on_new_position(opp, trade)
                 else:
                     print(f"    {Style.DIM}(scan-only — use 'run' to execute){Style.RESET_ALL}")
                     _print_fill_breakdown(opp)
