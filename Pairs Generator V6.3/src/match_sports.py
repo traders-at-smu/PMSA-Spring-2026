@@ -1298,9 +1298,6 @@ def run():
         if "Instituto" in text or "Defensa" in text:
             print(f"DEBUG Soccer: {text} -> {poly_teams}")
 
-        # DEBUG: show team extraction for all Polymarket sports rows
-        print(f"  [poly] {slug[:55]:<55} sport={poly_sport:<12} teams={poly_teams}")
-
         poly_date = parse_date(poly_raw.get("gameStartTime") or poly_raw.get("endDateIso") or poly_raw.get("endDate") or poly_raw.get("closeTime"))
         if not poly_date:
             continue
