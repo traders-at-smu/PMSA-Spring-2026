@@ -108,9 +108,13 @@ def flush(conn, cursor, batch, stored):
     return stored
 
 
-async def _fetch_page(session, sem, offset, limit, last_fetched_iso):
+async def _fetch_page(session, sem, offset, limit, last_fetched_iso, end_date_min=None, end_date_max=None):
     """Fetch one page of markets with rate-limit semaphore."""
-    params = {"limit": limit, "offset": offset, "closed": "false"}
+    params = {"limit": limit, "offset": offset, "closed": "false", "order": "endDateIso", "ascending": "true"}
+    if end_date_min:
+        params["end_date_min"] = end_date_min
+    if end_date_max:
+        params["end_date_max"] = end_date_max
     # Note: Polymarket Gamma API does not support an updated_after filter.
     # Incremental efficiency is handled by INSERT OR REPLACE (no-op on duplicates).
 
@@ -132,6 +136,13 @@ async def _run_async():
 
     run_start = datetime.now(timezone.utc).isoformat()
 
+    # Date range filter — only fetch markets ending within our window.
+    # This keeps the total result set small enough to avoid Polymarket's
+    # ~10,000 offset limit, and avoids fetching irrelevant distant futures.
+    end_date_min = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+    end_date_max = (now + timedelta(days=14)).strftime("%Y-%m-%d")
+    print(f"  Fetching markets ending {end_date_min} → {end_date_max}")
+
     conn    = get_connection()
     cur     = conn.cursor()
     sem     = asyncio.Semaphore(CONCURRENCY)
@@ -145,7 +156,8 @@ async def _run_async():
         while True:
             # Fetch the next batch of pages concurrently
             tasks = [
-                _fetch_page(session, sem, offset + i * limit, limit, last_fetched)
+                _fetch_page(session, sem, offset + i * limit, limit, last_fetched,
+                            end_date_min=end_date_min, end_date_max=end_date_max)
                 for i in range(CONCURRENCY)
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
