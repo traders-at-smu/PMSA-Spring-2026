@@ -247,15 +247,21 @@ def _health_check_fee_rate(pairs: list[dict], poly: PolymarketConnector) -> bool
     """Verify that the Polymarket fee-rate endpoint is reachable and returning data."""
     if not pairs:
         return True
-    # Test with the first pair that has a slug or token IDs
-    test_pair = pairs[0]
-    tid = test_pair.get("polymarket_yes_token_id")
-    if not tid and test_pair.get("polymarket_market_slug"):
-        try:
-            _, tids = poly._resolve_tokens(test_pair["polymarket_market_slug"])
-            tid = tids[0]
-        except Exception:
-            pass
+    # Test with the first pair that has a valid token ID
+    tid = None
+    for test_pair in pairs:
+        # Prefer pre-resolved token IDs from poly_token_ids (new CSV format)
+        tids_list = test_pair.get("poly_token_ids") or []
+        if tids_list and str(tids_list[0]).strip():
+            candidate = str(tids_list[0]).strip()
+            if len(candidate) > 10:  # real tokens are very long numeric strings
+                tid = candidate
+                break
+        # Fall back to polymarket_yes_token_id (old Excel format)
+        candidate = test_pair.get("polymarket_yes_token_id", "")
+        if candidate and len(candidate) > 10:
+            tid = candidate
+            break
     if not tid:
         return True
 
