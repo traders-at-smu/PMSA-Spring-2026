@@ -25,6 +25,27 @@ def main():
     print("\n=== Step 4: Match sports pairs ===\n")
     match_sports.run()
 
+    # DEBUG: sample Polymarket sports rows to diagnose 0-match issue
+    import sqlite3, json
+    _conn = sqlite3.connect(DB_PATH)
+    _conn.row_factory = sqlite3.Row
+    _rows = _conn.execute("""
+        SELECT mr.title, mr.end_date, mn.normalized_title, mn.outcome, mr.raw_data
+        FROM markets_raw mr
+        JOIN markets_normalized mn ON mr.id = mn.raw_id
+        WHERE mr.platform = 'polymarket'
+        LIMIT 5
+    """).fetchall()
+    print("\nDEBUG — sample Polymarket sports rows:")
+    for _r in _rows:
+        _rd = json.loads(_r["raw_data"])
+        print(f"  title: {_r['title'][:70]}")
+        print(f"  end_date: {_r['end_date']}  outcome: {_r['outcome']}")
+        print(f"  slug: {_rd.get('slug','')[:60]}")
+        print(f"  gameStartTime: {_rd.get('gameStartTime','')}  endDateIso: {_rd.get('endDateIso','')}")
+        print()
+    _conn.close()
+
     print("\n=== Step 5: Export to final pair format ===\n")
     pairs_converter.run()
 
