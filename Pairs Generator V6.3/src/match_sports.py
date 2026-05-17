@@ -1042,6 +1042,34 @@ _INCOMPATIBLE_SLUG_FRAGMENTS = (
     "-set-handicap",
     "-handicap",
     # We now allow -1h- and -2h- but only if both platforms match
+    # Baseball prop markets — first inning, run scoring props
+    "-nrfi",
+    "-yrfi",
+    "-first-inning",
+    "-1st-inning",
+    "-run-scored",
+    "-innings-",
+    # Esports prop markets
+    "-first-blood",
+    "-first-tower",
+    "-first-dragon",
+    "-first-baron",
+    "-any-player",
+    "-game1",
+    "-game2",
+    "-game3",
+    "-game4",
+    "-game5",
+    "-map1",
+    "-map2",
+    "-map3",
+    # General prop/variant markets
+    "-leading-at",
+    "-halftime-result",
+    "-corner",
+    "-penalty",
+    "-clean-sheet",
+    "-anytime",
 )
 
 
