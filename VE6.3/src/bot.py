@@ -1343,7 +1343,7 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
             # takingAmount for BUY = shares received (count). makingAmount = USDC spent.
             taking = p_resp.get("takingAmount", "0") or "0"
             making = p_resp.get("makingAmount", "0") or "0"
-            leg_filled = round(float(taking))
+            leg_filled = float(taking)
             leg_cost = float(making)
             p_filled += leg_filled
             p_actual_cost += leg_cost

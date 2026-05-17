@@ -100,6 +100,13 @@ def get_fill_summary(trade):
         return f'{k}c Kalshi only'
     return f'{k}c/{p}c'
 
+def parse_sides(strategy: str):
+    """Return (k_side, p_side) as 'YES' or 'NO' from strategy string."""
+    s = (strategy or '').upper()
+    k_side = 'YES' if ('KY' in s or 'KBY' in s) else 'NO'
+    p_side = 'YES' if 'PY' in s else 'NO'
+    return k_side, p_side
+
 
 # ── Account balances ───────────────────────────────────────────────────────────
 
@@ -192,28 +199,33 @@ for t in trades:
     arr       = t.get('arr', None)
     legs      = t.get('legs_filled', 'both')
     fill_sum  = get_fill_summary(t)
+    k_side, p_side = parse_sides(t.get('strategy', ''))
 
     results.append({
-        'timestamp':  t['timestamp'],
-        'profit':     profit,
-        'title':      t.get('title', ''),
-        'contracts':  contracts,
-        'edge':       edge,
-        'cdt':        to_cdt(t['timestamp']),
-        'cost':       cost,
-        'exec_date':  exec_date,
-        'game_date':  game_date,
-        'd_held':     d_held,
-        'arr':        arr,
-        'token':      token,
-        'legs':       legs,
-        'fill_sum':   fill_sum,
-        'k_price':    t.get('k_actual_price', 0.0),
-        'p_price':    t.get('p_actual_price', 0.0),
-        'k_cost':     t.get('k_actual_cost', 0.0),
-        'p_cost':     t.get('p_actual_cost', 0.0),
-        'profit_if_k': t.get('profit_if_kalshi_wins'),
-        'profit_if_p': t.get('profit_if_poly_wins'),
+        'timestamp':    t['timestamp'],
+        'profit':       profit,
+        'title':        t.get('title', ''),
+        'contracts':    contracts,
+        'edge':         edge,
+        'cdt':          to_cdt(t['timestamp']),
+        'cost':         cost,
+        'exec_date':    exec_date,
+        'game_date':    game_date,
+        'd_held':       d_held,
+        'arr':          arr,
+        'token':        token,
+        'legs':         legs,
+        'fill_sum':     fill_sum,
+        'k_price':      t.get('k_actual_price', 0.0),
+        'p_price':      t.get('p_actual_price', 0.0),
+        'k_cost':       t.get('k_actual_cost', 0.0),
+        'p_cost':       t.get('p_actual_cost', 0.0),
+        'k_contracts':  t.get('k_contracts_filled', 0),
+        'p_contracts':  t.get('p_contracts_filled', 0),
+        'k_side':       k_side,
+        'p_side':       p_side,
+        'profit_if_k':  t.get('profit_if_kalshi_wins'),
+        'profit_if_p':  t.get('profit_if_poly_wins'),
     })
 
 results.sort(key=lambda r: r['timestamp'])
@@ -264,19 +276,31 @@ else:
     print(f'  Total account value ${k_total + p_total:>10,.2f}')
 
 # ── Trade log ─────────────────────────────────────────────────────────────────
+TLOG_W = 110
 header('TRADE LOG')
-print(f"  {'Market':<35} {'Fill':<18} {'K@':>6} {'P@':>6} {'Cost':>8} {'Profit':>9}  {'Time (CDT)':<16}  {'ARR':>7}")
-sep()
+print(f"  {'Market':<26}  {'Kalshi':<24}  {'Polymarket':<24}  {'Cost':>7}  {'Profit':>10}  {'Time (CDT)':<14}  {'ARR':>6}")
+print('  ' + '─' * (TLOG_W - 2))
 for r in results:
-    arr_str  = f"{r['arr']:.0f}%" if r['arr'] is not None else 'n/a'
-    profit_str = f"${r['profit']:>8,.2f}"
-    if r['legs'] != 'both' and r['profit_if_k'] is not None:
-        profit_str = f"K:${r['profit_if_k']:.2f}/P:${r['profit_if_p']:.2f}"
+    arr_str = f"{r['arr']:.0f}%" if r['arr'] is not None else 'n/a'
+
+    kc = r['k_contracts']
+    pc = r['p_contracts']
+    k_leg = f"{r['k_side']:<3}  {kc}c @ ${r['k_price']:.3f}"
+    if r['legs'] == 'kalshi_only':
+        p_leg = '—'
+    else:
+        p_leg = f"{r['p_side']:<3}  {pc:.1f}c @ ${r['p_price']:.3f}"
+
+    if r['legs'] == 'both':
+        profit_str = f"${r['profit']:>+8,.2f}"
+    elif r['profit_if_k'] is not None:
+        profit_str = f"K:${r['profit_if_k']:.2f} / P:${r['profit_if_p']:.2f}"
+    else:
+        profit_str = f"${r['profit']:>+8,.2f}"
+
     print(
-        f"  {r['title'][:35]:<35} {r['fill_sum']:<18} "
-        f"{r['k_price']:>5.3f}  {r['p_price']:>5.3f}  "
-        f"${r['cost']:>7,.2f}  {profit_str}  "
-        f"{r['cdt']:<16}  {arr_str:>7}"
+        f"  {r['title'][:26]:<26}  {k_leg:<24}  {p_leg:<24}  "
+        f"${r['cost']:>6,.2f}  {profit_str:>10}  {r['cdt']:<14}  {arr_str:>6}"
     )
 
 # ── Per-pair breakdown ─────────────────────────────────────────────────────────
