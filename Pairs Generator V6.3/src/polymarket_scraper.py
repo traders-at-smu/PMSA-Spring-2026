@@ -105,7 +105,7 @@ def flush(conn, cursor, batch, stored):
 
 async def _fetch_page(session, sem, offset, limit, last_fetched_iso):
     """Fetch one page of markets with rate-limit semaphore."""
-    params = {"limit": limit, "offset": offset, "closed": "false"}
+    params = {"limit": limit, "offset": offset, "closed": "false", "order": "endDateIso", "ascending": "true"}
     # Note: Polymarket Gamma API does not support an updated_after filter.
     # Incremental efficiency is handled by INSERT OR REPLACE (no-op on duplicates).
 
