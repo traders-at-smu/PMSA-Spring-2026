@@ -133,7 +133,7 @@ async def _run_async():
     pending = []
     stored  = 0
     total   = 0
-    limit   = 500
+    limit   = 100
     offset  = 0
 
     async with aiohttp.ClientSession() as session:
