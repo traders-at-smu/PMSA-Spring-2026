@@ -291,9 +291,7 @@ for r in results:
     else:
         p_leg = f"{r['p_side']:<3}  {pc:.1f}c @ ${r['p_price']:.3f}"
 
-    if r['legs'] == 'both':
-        profit_str = f"${r['profit']:>+8,.2f}"
-    elif r['profit_if_k'] is not None:
+    if r['profit_if_k'] is not None:
         profit_str = f"K:${r['profit_if_k']:.2f} / P:${r['profit_if_p']:.2f}"
     else:
         profit_str = f"${r['profit']:>+8,.2f}"

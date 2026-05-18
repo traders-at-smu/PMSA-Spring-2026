@@ -1388,16 +1388,20 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
     partial = legs_filled != "both"
 
     # Profit from actual fills
+    profit_if_kalshi_wins = round(k_filled * 1.0 - actual_total_cost, 4)
+    profit_if_poly_wins = round(p_filled * 1.0 - actual_total_cost, 4)
     if not partial and k_filled == p_filled:
-        total_profit = round(k_filled * 1.0 - actual_total_cost, 4)
+        total_profit = profit_if_kalshi_wins
         edge_pct = round((total_profit / actual_total_cost) * 100, 2) if actual_total_cost > 0 else 0.0
         profit_if_kalshi_wins = None
         profit_if_poly_wins = None
+    elif not partial:
+        p_k = (k_actual_price + (1.0 - p_actual_price)) / 2.0
+        total_profit = round(p_k * profit_if_kalshi_wins + (1.0 - p_k) * profit_if_poly_wins, 4)
+        edge_pct = round((total_profit / actual_total_cost) * 100, 2) if actual_total_cost > 0 else 0.0
     else:
         total_profit = 0.0
         edge_pct = 0.0
-        profit_if_kalshi_wins = round(k_filled * 1.0 - actual_total_cost, 4)
-        profit_if_poly_wins = round(p_filled * 1.0 - actual_total_cost, 4)
 
     # Annualised return from actual edge and days to resolution
     try:
@@ -2224,6 +2228,7 @@ def run_scan(
     # Deduplicate executions: if the same (ticker, strategy) appears more than once
     # (e.g. duplicate rows in the pairs file) only execute it the first time.
     executed_keys: set[tuple[str, str]] = set()
+    executed_pair_ids: set[str] = set()
 
     for pair in active_pairs:
         label = f"{pair['kalshi_ticker']}/{pair['pair_id']}"
@@ -2351,7 +2356,7 @@ def run_scan(
                     print(f"    {Style.DIM}Polymarket:  {p_url}{Style.RESET_ALL}")
                 _write_opportunity_log(opp, opp_log_path)
                 if execute:
-                    if exec_key in executed_keys:
+                    if exec_key in executed_keys or opp["pair_id"] in executed_pair_ids:
                         print(
                             f"    {Fore.YELLOW}⚠ duplicate {exec_key[0]}/{exec_key[1]} "
                             f"— skipping (already executed this cycle){Style.RESET_ALL}"
@@ -2360,6 +2365,7 @@ def run_scan(
                         print(f"    {Style.DIM}→ arb seen — awaiting 2nd confirmation{Style.RESET_ALL}")
                     else:
                         executed_keys.add(exec_key)
+                        executed_pair_ids.add(opp["pair_id"])
                         trade = None
                         if mode == "paper":
                             trade = execute_paper(opp, log_path)
@@ -2460,9 +2466,7 @@ def run_loop(
         _record_open_position(positions, opp, trade, position_file)
         # Cooldown until next 3am CDT (08:00 UTC) — aligns with daily bot restart
         now_utc = datetime.now(timezone.utc)
-        reset = now_utc.replace(hour=8, minute=0, second=0, microsecond=0)
-        if now_utc >= reset:
-            reset += timedelta(days=1)
+        reset = (now_utc + timedelta(days=1)).replace(hour=8, minute=0, second=0, microsecond=0)
         cooldowns[opp["pair_id"]] = reset.isoformat()
         _save_cooldowns(cooldown_log, cooldowns)
         opportunity_streak.pop(opp["pair_id"], None)
