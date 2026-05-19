@@ -343,7 +343,7 @@ def export(data_dir: str, out_path: str, clear_after: bool = False) -> None:
 
     if clear_after:
         entry_log = Path(data_dir) / "entry_trades.json"
-        entry_log.write_text("", encoding="utf-8")
+        entry_log.write_text("[]", encoding="utf-8")
         print(f"  Cleared {entry_log}")
 
 
