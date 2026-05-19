@@ -294,7 +294,10 @@ for r in results:
     if r['profit_if_k'] is not None:
         pk = r['k_price']
         pp = r['p_price']
-        p_k = (pk + (1.0 - pp)) / 2.0 if pk and pp else 0.5
+        if r['legs'] == 'kalshi_only' or not pp:
+            p_k = pk if pk else 0.5
+        else:
+            p_k = (pk + (1.0 - pp)) / 2.0 if pk else 0.5
         ev = p_k * r['profit_if_k'] + (1.0 - p_k) * r['profit_if_p']
         profit_str = f"EV:${ev:+.2f}  K:${r['profit_if_k']:.2f}/P:${r['profit_if_p']:.2f}"
     else:
