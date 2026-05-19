@@ -278,7 +278,7 @@ else:
 # ── Trade log ─────────────────────────────────────────────────────────────────
 TLOG_W = 110
 header('TRADE LOG')
-print(f"  {'Market':<26}  {'Kalshi':<24}  {'Polymarket':<24}  {'Cost':>7}  {'Profit':>10}  {'Time (CDT)':<14}  {'ARR':>6}")
+print(f"  {'Market':<26}  {'Kalshi':<24}  {'Polymarket':<24}  {'Cost':>7}  {'Profit (EV / K / P)':>26}  {'Time (CDT)':<14}  {'ARR':>6}")
 print('  ' + '─' * (TLOG_W - 2))
 for r in results:
     arr_str = f"{r['arr']:.0f}%" if r['arr'] is not None else 'n/a'
@@ -292,13 +292,17 @@ for r in results:
         p_leg = f"{r['p_side']:<3}  {pc:.1f}c @ ${r['p_price']:.3f}"
 
     if r['profit_if_k'] is not None:
-        profit_str = f"K:${r['profit_if_k']:.2f} / P:${r['profit_if_p']:.2f}"
+        pk = r['k_price']
+        pp = r['p_price']
+        p_k = (pk + (1.0 - pp)) / 2.0 if pk and pp else 0.5
+        ev = p_k * r['profit_if_k'] + (1.0 - p_k) * r['profit_if_p']
+        profit_str = f"EV:${ev:+.2f}  K:${r['profit_if_k']:.2f}/P:${r['profit_if_p']:.2f}"
     else:
         profit_str = f"${r['profit']:>+8,.2f}"
 
     print(
         f"  {r['title'][:26]:<26}  {k_leg:<24}  {p_leg:<24}  "
-        f"${r['cost']:>6,.2f}  {profit_str:>10}  {r['cdt']:<14}  {arr_str:>6}"
+        f"${r['cost']:>6,.2f}  {profit_str:>26}  {r['cdt']:<14}  {arr_str:>6}"
     )
 
 # ── Per-pair breakdown ─────────────────────────────────────────────────────────
