@@ -191,36 +191,32 @@ def _poly_fee_fn_for_rate(rate: float):
 
 
 _fee_rate_cache: dict[str, float] = {}
+_poly_default_fee_rate: float = 0.03  # overridden at startup from cfg["fees"]["polymarket"]["rate"]
 
 
 def _resolve_poly_fee_rate(poly, token_ids: list[str], market: dict | None = None) -> float:
-    """Resolve a Polymarket taker fee rate via the fee-rate endpoint.
+    """Return _poly_default_fee_rate if fees are enabled for this market, 0.0 if not.
 
-    Raises if the fee rate cannot be determined, or if token-level rates disagree.
-    Fee rates are stable for the life of a market and cached in memory after first fetch.
+    Uses feesEnabled from already-fetched market data — no additional API call.
+    Result is cached per token_id so each market is only checked once.
     """
-    if market is not None and market.get("feesEnabled") is False:
-        return 0.0
     token_ids = [str(t).strip() for t in token_ids if str(t).strip()]
     if not token_ids:
         raise FeeRateError("Polymarket fee-rate lookup failed: missing token IDs")
-    uncached = [tid for tid in token_ids if tid not in _fee_rate_cache]
-    if uncached:
-        try:
-            with ThreadPoolExecutor(max_workers=len(uncached)) as pool:
-                fetched = list(pool.map(poly.get_fee_rate, uncached))
-            for tid, rate in zip(uncached, fetched):
-                _fee_rate_cache[tid] = float(rate)
-        except Exception as exc:
-            if _is_transient_error(exc):
-                raise
-            raise FeeRateError(f"fee-rate lookup failed: {exc}") from exc
-    rates = [_fee_rate_cache[tid] for tid in token_ids]
-    base = rates[0]
-    for r in rates[1:]:
-        if abs(r - base) > 1e-9:
-            raise FeeRateError(f"Polymarket fee-rate mismatch across tokens: {rates}")
-    return base
+
+    # Return cached result if available
+    if token_ids[0] in _fee_rate_cache:
+        return _fee_rate_cache[token_ids[0]]
+
+    # Determine rate from feesEnabled field in already-fetched market data
+    if market is not None and market.get("feesEnabled") is False:
+        rate = 0.0
+    else:
+        rate = _poly_default_fee_rate
+
+    for tid in token_ids:
+        _fee_rate_cache[tid] = rate
+    return rate
 
 
 def _require_poly_fee_rate(rate: Any, label: str) -> float:
@@ -1384,7 +1380,15 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
 
     # ── Step 3: Build entry from actual fills only — no scan data ────────────
     now = datetime.now(timezone.utc)
-    actual_total_cost = round(k_actual_cost + p_actual_cost, 4)
+
+    # Poly fee is not included in makingAmount — apply if fees enabled for this market
+    p_actual_fee = 0.0
+    poly_fee_rate = float(opp.get("poly_fee_rate") or 0.0)
+    if p_filled > 0 and p_actual_price > 0 and poly_fee_rate > 0:
+        p_fee_fn = _poly_fee_fn_for_rate(poly_fee_rate)
+        p_actual_fee = round(apply_fee(p_fee_fn, p_actual_price, p_filled, False, round_decimals=5), 5)
+
+    actual_total_cost = round(k_actual_cost + p_actual_cost + p_actual_fee, 4)
     partial = legs_filled != "both"
 
     # Profit from actual fills
@@ -1444,6 +1448,7 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
         "p_actual_price":     p_actual_price,
         "k_actual_cost":      round(k_actual_cost, 4),
         "p_actual_cost":      round(p_actual_cost, 4),
+        "p_actual_fee":       p_actual_fee,
         "total_cost":         actual_total_cost,
         "total_profit":       total_profit,
         "edge_pct":           edge_pct,
@@ -2130,6 +2135,9 @@ def run_scan(
     If execute=False (scan command), opportunities are displayed but not traded.
     If execute=True (run command), each opportunity is executed immediately.
     """
+    global _poly_default_fee_rate
+    _poly_default_fee_rate = float(cfg.get("fees", {}).get("polymarket", {}).get("rate", 0.03))
+
     if failed_ids is None:
         failed_ids = set()
     if expired_ids is None:
@@ -2414,6 +2422,9 @@ def run_loop(
     def _sigterm_handler(signum, frame):
         raise KeyboardInterrupt
     _signal.signal(_signal.SIGTERM, _sigterm_handler)
+
+    global _poly_default_fee_rate
+    _poly_default_fee_rate = float(cfg.get("fees", {}).get("polymarket", {}).get("rate", 0.03))
 
     interval = max(1, int(cfg.get("scan_interval_seconds", 2)))
     pairs_per_cycle = int(cfg.get("pairs_per_cycle", 25))
