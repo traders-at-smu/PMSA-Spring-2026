@@ -1381,14 +1381,21 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
     # ── Step 3: Build entry from actual fills only — no scan data ────────────
     now = datetime.now(timezone.utc)
 
-    # Poly fee is not included in makingAmount — apply if fees enabled for this market
+    # Kalshi fee is not included in taker_fill_cost_dollars
+    k_actual_fee = 0.0
+    if k_filled > 0 and k_actual_price > 0:
+        k_rate = _kalshi_fee_rate_for_ticker(opp.get("kalshi_ticker", ""))
+        k_fee_fn = _kalshi_fee_fn_for_rate(k_rate)
+        k_actual_fee = round(apply_fee(k_fee_fn, k_actual_price, k_filled, True), 4)
+
+    # Poly fee is not included in makingAmount
     p_actual_fee = 0.0
     poly_fee_rate = float(opp.get("poly_fee_rate") or 0.0)
     if p_filled > 0 and p_actual_price > 0 and poly_fee_rate > 0:
         p_fee_fn = _poly_fee_fn_for_rate(poly_fee_rate)
         p_actual_fee = round(apply_fee(p_fee_fn, p_actual_price, p_filled, False, round_decimals=5), 5)
 
-    actual_total_cost = round(k_actual_cost + p_actual_cost + p_actual_fee, 4)
+    actual_total_cost = round(k_actual_cost + k_actual_fee + p_actual_cost + p_actual_fee, 4)
     partial = legs_filled != "both"
 
     # Profit from actual fills
@@ -1447,6 +1454,7 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
         "k_actual_price":     k_actual_price,
         "p_actual_price":     p_actual_price,
         "k_actual_cost":      round(k_actual_cost, 4),
+        "k_actual_fee":       k_actual_fee,
         "p_actual_cost":      round(p_actual_cost, 4),
         "p_actual_fee":       p_actual_fee,
         "total_cost":         actual_total_cost,
