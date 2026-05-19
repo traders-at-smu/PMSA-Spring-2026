@@ -1432,6 +1432,8 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
         "polymarket_token":   opp.get("p_token_id", ""),
         "p_token_ids":        opp.get("p_token_ids", []),
         "resolution_date":    str(opp.get("resolution_date", "")),
+        "k_scanned_price":    float(opp.get("k_price", 0.0)),
+        "p_scanned_price":    float(opp.get("p_price", 0.0)),
         # Actual fill data
         "fills":              actual_fills,
         "legs_filled":        legs_filled,

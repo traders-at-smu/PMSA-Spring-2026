@@ -201,36 +201,54 @@ for t in trades:
     fill_sum  = get_fill_summary(t)
     k_side, p_side = parse_sides(t.get('strategy', ''))
 
+    k_price        = t.get('k_actual_price', 0.0)
+    p_price        = t.get('p_actual_price', 0.0)
+    p_scanned      = t.get('p_scanned_price', 0.0)
+    profit_if_k    = t.get('profit_if_kalshi_wins')
+    profit_if_p    = t.get('profit_if_poly_wins')
+
+    if profit_if_k is not None:
+        if legs == 'kalshi_only' or not p_price:
+            p_implied = p_scanned if p_scanned else None
+            p_k = (k_price + (1.0 - p_implied)) / 2.0 if p_implied else k_price if k_price else 0.5
+        else:
+            p_k = (k_price + (1.0 - p_price)) / 2.0 if k_price else 0.5
+        ev = p_k * profit_if_k + (1.0 - p_k) * profit_if_p
+    else:
+        ev = profit
+
     results.append({
-        'timestamp':    t['timestamp'],
-        'profit':       profit,
-        'title':        t.get('title', ''),
-        'contracts':    contracts,
-        'edge':         edge,
-        'cdt':          to_cdt(t['timestamp']),
-        'cost':         cost,
-        'exec_date':    exec_date,
-        'game_date':    game_date,
-        'd_held':       d_held,
-        'arr':          arr,
-        'token':        token,
-        'legs':         legs,
-        'fill_sum':     fill_sum,
-        'k_price':      t.get('k_actual_price', 0.0),
-        'p_price':      t.get('p_actual_price', 0.0),
-        'k_cost':       t.get('k_actual_cost', 0.0),
-        'p_cost':       t.get('p_actual_cost', 0.0),
-        'k_contracts':  t.get('k_contracts_filled', 0),
-        'p_contracts':  t.get('p_contracts_filled', 0),
-        'k_side':       k_side,
-        'p_side':       p_side,
-        'profit_if_k':  t.get('profit_if_kalshi_wins'),
-        'profit_if_p':  t.get('profit_if_poly_wins'),
+        'timestamp':      t['timestamp'],
+        'profit':         profit,
+        'ev':             ev,
+        'title':          t.get('title', ''),
+        'contracts':      contracts,
+        'edge':           edge,
+        'cdt':            to_cdt(t['timestamp']),
+        'cost':           cost,
+        'exec_date':      exec_date,
+        'game_date':      game_date,
+        'd_held':         d_held,
+        'arr':            arr,
+        'token':          token,
+        'legs':           legs,
+        'fill_sum':       fill_sum,
+        'k_price':        k_price,
+        'p_price':        p_price,
+        'p_scanned_price': p_scanned,
+        'k_cost':         t.get('k_actual_cost', 0.0),
+        'p_cost':         t.get('p_actual_cost', 0.0),
+        'k_contracts':    t.get('k_contracts_filled', 0),
+        'p_contracts':    t.get('p_contracts_filled', 0),
+        'k_side':         k_side,
+        'p_side':         p_side,
+        'profit_if_k':    profit_if_k,
+        'profit_if_p':    profit_if_p,
     })
 
 results.sort(key=lambda r: r['timestamp'])
 
-total_profit    = sum(r['profit'] for r in results)
+total_profit    = sum(r['ev'] for r in results)
 total_contracts = sum(r['contracts'] for r in results)
 total_spent     = sum(r['cost'] for r in results)
 total_edge_pct  = (total_profit / total_spent * 100) if total_spent > 0 else 0
@@ -292,16 +310,9 @@ for r in results:
         p_leg = f"{r['p_side']:<3}  {pc:.1f}c @ ${r['p_price']:.3f}"
 
     if r['profit_if_k'] is not None:
-        pk = r['k_price']
-        pp = r['p_price']
-        if r['legs'] == 'kalshi_only' or not pp:
-            p_k = pk if pk else 0.5
-        else:
-            p_k = (pk + (1.0 - pp)) / 2.0 if pk else 0.5
-        ev = p_k * r['profit_if_k'] + (1.0 - p_k) * r['profit_if_p']
-        profit_str = f"EV:${ev:+.2f}  K:${r['profit_if_k']:.2f}/P:${r['profit_if_p']:.2f}"
+        profit_str = f"EV:${r['ev']:+.2f}  K:${r['profit_if_k']:.2f}/P:${r['profit_if_p']:.2f}"
     else:
-        profit_str = f"${r['profit']:>+8,.2f}"
+        profit_str = f"${r['ev']:>+8,.2f}"
 
     print(
         f"  {r['title'][:26]:<26}  {k_leg:<24}  {p_leg:<24}  "
