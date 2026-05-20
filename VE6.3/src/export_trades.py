@@ -34,44 +34,41 @@ _TIMEOUT      = 8
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def _get_leg(fills: list[dict], leg: str) -> dict:
+    """Return the fill entry for a given leg ('kalshi' or 'polymarket')."""
+    return next((f for f in fills if f.get("leg") == leg), {})
+
+
 def _fmt_fills(fills: list[dict]) -> str:
-    """Format fill levels as a human-readable summary.
-    e.g.  10c@(K=0.980 P=0.002) | 4c@(K=0.980 P=0.017)
-    """
+    """Format fills as a human-readable summary."""
     if not fills:
         return ""
-    parts = []
-    for f in fills:
-        parts.append(
-            f"{f['contracts']}c@(K={f['k_price']:.3f} P={f['p_price']:.3f})"
-        )
-    return " | ".join(parts)
+    k = _get_leg(fills, "kalshi")
+    p = _get_leg(fills, "polymarket")
+    kc = k.get("contracts", 0)
+    pc = p.get("contracts", 0)
+    kp = k.get("avg_price", 0.0)
+    pp = p.get("avg_price", 0.0)
+    return f"K={kc}c@{kp:.3f} P={pc}c@{pp:.3f}"
 
 
 def _weighted_avg(fills: list[dict], side: str) -> float | None:
-    """Weighted-average price across fill levels for 'k_price' or 'p_price'."""
-    if not fills:
-        return None
-    total_contracts = sum(f["contracts"] for f in fills)
-    if total_contracts == 0:
-        return None
-    return sum(f[side] * f["contracts"] for f in fills) / total_contracts
+    """Return avg_price for 'kalshi' or 'polymarket' leg."""
+    leg = "kalshi" if side == "k_price" else "polymarket"
+    f = _get_leg(fills, leg)
+    return f.get("avg_price") if f else None
 
 
 def _fill_columns(fills: list[dict], prefix: str, max_levels: int) -> dict:
-    """Expand fill levels into numbered columns: fill_1_contracts, fill_1_k_price, etc."""
-    row = {}
-    for i in range(1, max_levels + 1):
-        if i <= len(fills):
-            f = fills[i - 1]
-            row[f"{prefix}fill_{i}_contracts"] = f["contracts"]
-            row[f"{prefix}fill_{i}_k_price"]   = f["k_price"]
-            row[f"{prefix}fill_{i}_p_price"]    = f["p_price"]
-        else:
-            row[f"{prefix}fill_{i}_contracts"] = ""
-            row[f"{prefix}fill_{i}_k_price"]   = ""
-            row[f"{prefix}fill_{i}_p_price"]    = ""
-    return row
+    """Expand fills into columns: k_contracts, k_avg_price, p_contracts, p_avg_price."""
+    k = _get_leg(fills, "kalshi")
+    p = _get_leg(fills, "polymarket")
+    return {
+        f"{prefix}k_contracts":  k.get("contracts", ""),
+        f"{prefix}k_avg_price":  k.get("avg_price", ""),
+        f"{prefix}p_contracts":  p.get("contracts", ""),
+        f"{prefix}p_avg_price":  p.get("avg_price", ""),
+    }
 
 
 def _load_ndjson(path: Path) -> list[dict]:
