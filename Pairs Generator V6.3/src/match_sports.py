@@ -458,7 +458,7 @@ def get_market_type(ticker: str, title: str = "", platform: str = "kalshi") -> s
             return "btts"
         if "-spread" in text_l:
             return "spread"
-        if any(x in text_l for x in ["-total", "-over-", "-under-"]):
+        if any(x in text_l for x in ["-total", "-over-", "-under-", "o/u", " ou ", "-ou-", "over/under"]):
             return "total"
         if any(x in text_l for x in ["-1h-", "first half", "-1st-half"]):
             return "1h"
@@ -473,7 +473,10 @@ def get_market_type(ticker: str, title: str = "", platform: str = "kalshi") -> s
         # Player / game-state prop slugs (method of victory, first inning,
         # home runs, strikeouts, etc.). Keep this list conservative — only
         # add tokens that clearly indicate a non-winner market.
-        if any(x in text_l for x in ["-method-", "-mov-", "-distance-", "-rfi-", "-homeruns-", "-strikeouts-", "-propbet-"]):
+        if any(x in text_l for x in ["-method-", "-mov-", "-distance-", "-rfi-", "-homeruns-", "-strikeouts-", "-propbet-",
+                                       "-points-", "-assists-", "-rebounds-", "-threes-", "-blocks-", "-steals-",
+                                       "-rushing-", "-passing-", "-receiving-", "-touchdowns-", "-goals-", "-saves-",
+                                       "-kills-", "-aces-", "-double-fault"]):
             return "other"
         return "winner"
 
