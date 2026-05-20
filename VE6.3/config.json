@@ -10,6 +10,9 @@
     "_doc_min_edge_pct": "Minimum edge percentage required to trigger a trade. 0.001 = 0.1% edge after fees.",
     "min_edge_pct": 0.001,
 
+    "_doc_poly_fak_limit_bumps": "Sequence of price bumps to try for Polymarket FAK orders. Each is added to the scanned price as a limit ceiling. If the first fills 0, the next is tried.",
+    "poly_fak_limit_bumps": [0.01, 0.03, 0.05],
+
     "_doc_max_contracts": "Maximum contracts to accumulate in a single arb trade. Depth-walk stops when this cap is reached.",
     "max_contracts": 5,
 

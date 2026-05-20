@@ -192,6 +192,7 @@ def _poly_fee_fn_for_rate(rate: float):
 
 _fee_rate_cache: dict[str, float] = {}
 _poly_default_fee_rate: float = 0.03  # overridden at startup from cfg["fees"]["polymarket"]["rate"]
+_poly_fak_limit_bumps: list[float] = [0.01, 0.03, 0.05]  # overridden at startup from cfg["poly_fak_limit_bumps"]
 
 
 def _resolve_poly_fee_rate(poly, token_ids: list[str], market: dict | None = None) -> float:
@@ -1329,12 +1330,25 @@ def execute_live(opp: dict[str, Any], kalshi, poly, log_path: str) -> dict[str, 
         for token_id, price in zip(p_token_ids, p_leg_prices):
             if not token_id:
                 raise RuntimeError("Missing Polymarket token_id for multi-leg order")
-            p_resp = poly.place_order(
-                token_id=token_id,
-                side="buy",
-                size=k_filled,
-                price=min(round(price + 0.03, 2), 0.99),
-            )
+            p_resp = None
+            last_exc: Exception | None = None
+            for limit_bump in _poly_fak_limit_bumps:
+                limit = min(round(price + limit_bump, 2), 0.99)
+                try:
+                    p_resp = poly.place_order(
+                        token_id=token_id,
+                        side="buy",
+                        size=k_filled,
+                        price=limit,
+                    )
+                    break  # filled > 0, done
+                except RuntimeError as e:
+                    if "filled 0 contracts" in str(e):
+                        last_exc = e
+                        continue  # retry with wider limit
+                    raise
+            if p_resp is None:
+                raise last_exc or RuntimeError("Polymarket FAK filled 0 at all limits")
             # py_clob_client_v2 returns takingAmount/makingAmount as decimal dollar
             # strings (e.g. "4.885"), NOT as 6-decimal micro-USDC integers.
             # takingAmount for BUY = shares received (count). makingAmount = USDC spent.
@@ -2143,8 +2157,9 @@ def run_scan(
     If execute=False (scan command), opportunities are displayed but not traded.
     If execute=True (run command), each opportunity is executed immediately.
     """
-    global _poly_default_fee_rate
+    global _poly_default_fee_rate, _poly_fak_limit_bumps
     _poly_default_fee_rate = float(cfg.get("fees", {}).get("polymarket", {}).get("rate", 0.03))
+    _poly_fak_limit_bumps = [float(b) for b in cfg.get("poly_fak_limit_bumps", [0.01, 0.03, 0.05])]
 
     if failed_ids is None:
         failed_ids = set()
@@ -2431,8 +2446,9 @@ def run_loop(
         raise KeyboardInterrupt
     _signal.signal(_signal.SIGTERM, _sigterm_handler)
 
-    global _poly_default_fee_rate
+    global _poly_default_fee_rate, _poly_fak_limit_bumps
     _poly_default_fee_rate = float(cfg.get("fees", {}).get("polymarket", {}).get("rate", 0.03))
+    _poly_fak_limit_bumps = [float(b) for b in cfg.get("poly_fak_limit_bumps", [0.01, 0.03, 0.05])]
 
     interval = max(1, int(cfg.get("scan_interval_seconds", 2)))
     pairs_per_cycle = int(cfg.get("pairs_per_cycle", 25))
