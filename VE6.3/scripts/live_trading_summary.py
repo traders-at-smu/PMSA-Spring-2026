@@ -169,6 +169,8 @@ with open(data_file) as f:
         if not line:
             continue
         t = json.loads(line)
+        if not isinstance(t, dict):
+            continue
         if t.get('legs_filled') == 'none':
             continue
         if t.get('mode', 'live') != 'live':
