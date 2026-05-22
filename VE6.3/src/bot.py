@@ -1113,6 +1113,8 @@ def _next_trade_number(log_path: str) -> str:
                         continue
                     try:
                         entry = json.loads(line)
+                        if not isinstance(entry, dict):
+                            continue
                         num = int(str(entry.get("trade_number", "T0")).lstrip("T"))
                         last = max(last, num)
                     except (json.JSONDecodeError, ValueError):
