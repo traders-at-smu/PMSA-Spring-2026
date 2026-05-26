@@ -309,7 +309,7 @@ for r in results:
     if r['legs'] == 'kalshi_only':
         p_leg = '—'
     else:
-        p_leg = f"{r['p_side']:<3}  {pc:.1f}c @ ${r['p_price']:.3f}"
+        p_leg = f"{r['p_side']:<3}  {pc:.2f}c @ ${r['p_price']:.3f}"
 
     if r['profit_if_k'] is not None:
         profit_str = f"EV:${r['ev']:+.2f}  K:${r['profit_if_k']:.2f}/P:${r['profit_if_p']:.2f}"
