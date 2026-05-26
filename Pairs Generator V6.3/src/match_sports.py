@@ -1073,6 +1073,32 @@ _INCOMPATIBLE_SLUG_FRAGMENTS = (
     "-penalty",
     "-clean-sheet",
     "-anytime",
+    # "Will this match complete?" binary Poly market — never a player-winner arb
+    "-completed-match",
+    # Player prop slug fragments — title often contains "o/u" which causes get_market_type()
+    # to return "total" before the slug soft-classifiers run, pairing props with game totals
+    "-points-",
+    "-assists-",
+    "-rebounds-",
+    "-threes-",
+    "-blocks-",
+    "-steals-",
+    "-rushing-",
+    "-passing-",
+    "-receiving-",
+    "-touchdowns-",
+    "-goals-",
+    "-saves-",
+    "-kills-",
+    "-aces-",
+    "-double-fault",
+    "-homeruns-",
+    "-strikeouts-",
+    "-rfi-",
+    "-propbet-",
+    "-method-",
+    "-mov-",
+    "-distance-",
 )
 
 
@@ -1498,7 +1524,25 @@ def run():
             rec.setdefault("kalshi_market_id_b", "")
             _seen_poly[pmid] = rec
         else:
-            _seen_poly[pmid]["kalshi_market_id_b"] = rec["kalshi_market_id"]
+            existing = _seen_poly[pmid]
+            # Ensure ticker A is for the Poly primary player so bot strategies 1 & 2
+            # are valid (K_A YES/NO = primary player's market). Use the Kalshi ticker
+            # suffix (last segment after '-', e.g. "-CIN" or "-DEJ") to identify which
+            # player each market resolves for. Title-based matching fails because both
+            # markets share the same match title ("Cina vs De Jong").
+            poly_primary = (existing.get("poly_outcome") or "").lower()
+
+            def _suffix_in_name(market_id: str, name: str) -> bool:
+                suffix = (market_id or "").rsplit("-", 1)[-1].lower()
+                return bool(suffix) and any(suffix in w for w in name.split())
+
+            existing_is_primary = _suffix_in_name(existing.get("kalshi_market_id", ""), poly_primary)
+            new_is_primary = _suffix_in_name(rec.get("kalshi_market_id", ""), poly_primary)
+            if new_is_primary and not existing_is_primary:
+                rec["kalshi_market_id_b"] = existing["kalshi_market_id"]
+                _seen_poly[pmid] = rec
+            else:
+                existing["kalshi_market_id_b"] = rec["kalshi_market_id"]
     results = list(_seen_poly.values())
 
     # Filter out expired markets. Allow live/in-progress games whose
