@@ -494,11 +494,7 @@ def extract_kalshi_outcome(market_id: str, ticker: str, title: str, teams: list[
         code = m.group(1)
         if sport in _TICKER_CODE_MAP and code in _TICKER_CODE_MAP[sport]:
             return _TICKER_CODE_MAP[sport][code]
-        # Fallback: search all maps
-        for d in _TICKER_CODE_MAP.values():
-            if code in d:
-                return d[code]
-        # Fallback 2: try to match code against the teams list
+        # Fallback: try to match code against the teams list
         for team in teams:
             t_norm = to_ascii(team).upper()
             if t_norm.startswith(code) or code.startswith(t_norm[:3]):
@@ -1525,6 +1521,11 @@ def run():
             _seen_poly[pmid] = rec
         else:
             existing = _seen_poly[pmid]
+            # Reject cross-day merges: same teams may play consecutive days in a series.
+            # Ticker A (today's game) + Ticker B (tomorrow's game) are independent events
+            # and must not be paired — the bot would treat them as a single arb.
+            if existing.get("kalshi_date") != rec.get("kalshi_date"):
+                continue
             # Ensure ticker A is for the Poly primary player so bot strategies 1 & 2
             # are valid (K_A YES/NO = primary player's market). Use the Kalshi ticker
             # suffix (last segment after '-', e.g. "-CIN" or "-DEJ") to identify which
