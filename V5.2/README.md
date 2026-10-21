@@ -1,11 +1,11 @@
-# V5 — Kalshi × Polymarket Arbitrage Bot
+# V5.2 — Kalshi × Polymarket Arbitrage Bot
 
 Lightweight Python CLI arbitrage engine. No dashboard, no SQLite — state is file-backed JSON.
 
 ## Structure
 
 ```
-V5/
+V5.2/
 ├── main.py                  # CLI entrypoint: validate | scan | run
 ├── bot.py                   # Core engine: evaluate_pair, _walk_depth, trade, exit
 ├── connectors.py            # KalshiConnector, PolymarketConnector, load_pairs
@@ -26,7 +26,7 @@ V5/
 ## Commands
 
 ```bash
-cd V5
+cd V5.2
 python main.py --config config.json validate   # config + pairs file sanity check
 python main.py --config config.json scan       # one-shot scan, no execution
 python main.py --config config.json run        # continuous scan + execute loop
