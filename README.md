@@ -1,157 +1,66 @@
-# Polymarket × Kalshi Arbitrage Bot
-## 📊 Contribution Stats
-<!-- STATS_START -->
-<!-- STATS_END -->
+# Prediction Market Spatial Arbitrage (PMSA): Polymarket × Kalshi
 
+Traders@SMU, Spring 2026. Cross-venue arbitrage tooling for [Polymarket](https://polymarket.com) and [Kalshi](https://kalshi.com).
 
+When the same event is listed on both venues, buying YES on one and NO on the other locks in a $1 payout per contract at settlement. If the combined cost, after fees and order-book slippage, is below $1, the difference is risk-free edge. This repository contains the bots that scan for those mispricings and trade them, and the pipelines that build the cross-venue market pairs they trade.
 
+## How it works
 
-Cross-venue prediction market arbitrage tooling for [Polymarket](https://polymarket.com) and [Kalshi](https://kalshi.com).
+1. **Pair generation:** markets on the two venues are matched (titles normalized, outcomes mapped, expiry and resolution times aligned) into a pairs file.
+2. **Scan:** for each pair, the bot pulls both order books and evaluates both hedges (`BUY_KY_BUY_PN` and `BUY_KN_BUY_PY`). It walks order-book depth to price realistic fills, then applies each venue's fee formula.
+3. **Filter:** trades must clear a minimum edge after fees (V6: `min_edge_pct`; V5: minimum annualized return `min_arr` and minimum dollar profit), and must pass a same-side guard that rejects mismatched pairs (directional bets rather than hedges).
+4. **Execute:** paper mode by default. Live mode places both legs and records the actual fills.
+5. **Manage:** V5 exits early when the combined bid converges toward $1. V6 holds positions to expiry. Open positions, cooldowns and failed or expired pairs are persisted to JSON so a restart resumes cleanly.
 
-**Active codebases:**
-- **`V6/`** — Current active bot, **Sports focus**.
-- **`V5/`** — Current active bot, **General focus**.
-- **`V6 EXP/`** — **Experimental branch** for new features and testing.
+## Repository layout
 
-Legacy versions (V1–V4) and the arb-scanner web app are preserved under `Archived_Models/` for reference.
+| Path | Description |
+|---|---|
+| `V6.2/`, `V6.3/`, `V6.4/` | **V6 bot (current):** hold-to-expiry strategy, sports focus. CLI in `main.py`; engine, connectors, fee DSL, scheduler and trade export in `src/`. Loads daily pairs files from `input_files/`, with optional Dropbox sync and parallel scanning. |
+| `VE6.3/` | Experimental branch of V6.3 used for the live small-capital test: credential validation before live runs, fills recorded from actual exchange data, IOC/FAK orders, 3-cycle opportunity confirmation, per-pair cooldowns. Changes are logged in `VE6.3/CHANGES.md`. |
+| `V5/`, `V5.2/` | **V5 bot:** convergence-exit strategy, general markets. File-backed JSON state. |
+| `Pairs Generator V6.2/`, `V6.3/`, `V6.4/` | Async sports pairs generator: scrapes both venues into SQLite, normalizes and matches sports markets, and exports pairs files for the V6 bots. |
+| `Polytoken/` | Pair-row pipeline from Polymarket + Kalshi URLs: interactive and batch generation, validation, link/category backfill, expired-pair cleanup, retry of failed pairs. |
+| `Information/` | Trade rules, trader instructions, fee documentation and design notes. |
+| `Archived_Models/` | Earlier versions: V1 (TypeScript + React dashboard + Python bridge), V2 (Python + Streamlit + SQLite), V3 (TypeScript), V4 (Python), earlier V5/V6 snapshots (V5, V6 CSV, V6.1), and the `arb-scanner` Next.js web UI. |
 
----
-
-## Repository Layout
-
-```
-.
-├── V6/              # Active bot (Sports focus)
-├── V5/              # Active bot (General focus)
-├── V6 EXP/          # Experimental branch
-├── Pairs Generator V6.2/ # Pair generation for V6.2 bot
-├── Pairs Generator V6.4/ # Pair generation for V6.4 bot
-├── Polytoken/       # Legacy pair generation pipeline
-├── Archived_Models/ # Legacy: V1-V4, V6 CSV, arb-scanner
-├── Information/     # Fee docs, trade rules, design notes
-└── api/             # Vercel serverless endpoints (legacy)
-```
-
----
-
-## V5 Quick Start
-
-### 1) Install dependencies
+## Quick start (V6)
 
 ```bash
-cd V5
+cd V6.4
 pip install -r requirements.txt
+cp config.example.json config.json   # every key is documented inline
+python main.py --config config.json validate   # check config and pairs file
+python main.py --config config.json scan       # one scan, no trades
+python main.py --config config.json run        # continuous scan + paper trading
 ```
 
-### 2) Configure
+The V5 bot uses the same `validate | scan | run` commands from `V5/`. See each version's own README for configuration fields, state files and connector details.
 
-```bash
-cp config.example.json config.json
-```
+### Key configuration (V6)
 
-Edit `config.json` — at minimum set `pairs_file`, `mode`, `min_arr`, `max_contracts`, and the `fees` block.
-For live trading, also add `kalshi.api_key`, `kalshi.private_key_base64`, and Polymarket credentials.
+| Field | Description |
+|---|---|
+| `mode` | `"paper"` or `"live"` |
+| `pairs_file` | Path to the pairs Excel/CSV |
+| `min_edge_pct` | Minimum edge after fees (e.g. `0.001` = 0.1%) |
+| `scan_interval_seconds`, `pairs_per_cycle`, `max_workers` | Scan cadence and parallelism |
+| `max_contracts` | Contract cap per trade |
+| `exit_enabled`, `exit_target_total_price` | Optional early exit when YES bid + NO bid reaches the target |
+| `fees.kalshi`, `fees.polymarket` | Fee formulas (DSL with `p`, `q`, `c`; Kalshi supports round-up-to-cent billing) |
 
-### 3) Validate config
+## Pairs file
 
-```bash
-python main.py --config config.json validate
-```
+Required columns: `pair_id`, `kalshi_market_id`, `poly_slug`, `resolution_date`.
+Multi-outcome markets also need `poly_outcomes_json`, `poly_token_ids_json` and `poly_primary_outcome` (the Polymarket outcome that maps to Kalshi YES).
 
-### 4) Scan (no trades)
+## Tech stack
 
-```bash
-python main.py --config config.json scan
-```
-
-### 5) Run continuously (paper mode)
-
-```bash
-python main.py --config config.json run
-```
-
-Add `--execute` to actually place orders (requires `"mode": "live"` in config).
-
----
-
-## Polytoken — Pair Generation Pipeline
-
-Converts Polymarket + Kalshi market URLs into rows in `V5/Pairs_for_Kalshi_and_Polymarket.xlsx`.
-
-### Install dependencies
-
-```bash
-pip install requests openpyxl
-```
-
-### Add new pairs (interactive)
-
-```bash
-cd Polytoken
-python polytoken.py
-```
-
-Prompts for a Polymarket URL, a Kalshi URL, and submarket selection.
-
-### Add new pairs (batch from CSV/XLSX)
-
-```bash
-python polytoken.py links.csv
-```
-
-Input columns: `polymarket` (URL), `kalshi` (URL). Optional header row is supported.
-
-### Fix URLs / outcome mapping in existing rows
-
-```bash
-python backfill_pairs_links.py             # dry-run: preview changes
-python backfill_pairs_links.py --apply     # write updates to Excel
-```
-
-### Validate and append rows
-
-```bash
-python check_and_append_v2.py
-```
-
-### Remove expired pairs
-
-```bash
-python clean_pairs.py                      # dry-run
-python clean_pairs.py --apply
-```
-
----
-
-## Pairs File
-
-The shared pairs file is `V5/Pairs_for_Kalshi_and_Polymarket.xlsx`.
-
-Required columns: `pair_id`, `kalshi_market_id` (ticker), `poly_slug`, `resolution_date`.
-
-Optional outcome-mapping columns (needed for non-binary markets):
-- `poly_outcomes_json` — JSON array of Polymarket outcome labels
-- `poly_token_ids_json` — JSON array of corresponding CLOB token IDs
-- `poly_primary_outcome` — which outcome maps to Kalshi YES
-- `poly_event_url` — Polymarket event page URL
-- `kalshi_url` — Kalshi market URL (3-segment: `/{event}/{slug}/{ticker}`)
-
----
+Python (asyncio, requests, pandas, openpyxl, SQLite), Kalshi REST API (RSA-signed requests), Polymarket Gamma and CLOB APIs. Archived versions also use TypeScript/Node, React, Next.js and Streamlit.
 
 ## Safety
 
-- Always start in paper mode (`"mode": "paper"`) before enabling live trading.
-- Never commit `config.json`, `credentials.json`, `.env`, or private keys.
-- The bot writes state to JSON files in `V5/` — these are gitignored and crash-resilient.
-
----
-
-## Archived Versions
-
-| Version | Stack | Notes |
-|---------|-------|-------|
-| V1 | TypeScript + React + Python bridge | Copy-trading origin, dashboard UI |
-| V2 | Python + Streamlit | SQLite state, full copy-trading stack |
-| V3 | TypeScript | Intermediate iteration |
-| V4 | Python | Direct predecessor to V5 |
-| arb-scanner | Next.js | Web UI for live arb scanning |
+- Always start in paper mode.
+- Never commit `config.json` credentials, API keys, `.env` files or private keys.
+- Cross-venue execution is best-effort. If one leg fills and the other does not, the position is flagged for manual hedging.
+- Users are responsible for complying with each venue's terms of service and with the rules of their jurisdiction.

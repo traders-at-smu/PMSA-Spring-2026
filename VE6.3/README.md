@@ -1,15 +1,17 @@
-# V5 — Kalshi × Polymarket Arbitrage Bot
+# VE6.3 — Kalshi × Polymarket Arbitrage Bot (hold-to-expiry, experimental)
+
+Experimental branch of V6.3 used for the live small-capital test. See `CHANGES.md` for every difference from V6.3.
 
 Lightweight Python CLI arbitrage engine. No dashboard, no SQLite — state is file-backed JSON.
 
 ## Structure
 
 ```
-V5/
+VE6.3/
 ├── main.py                  # CLI entrypoint: validate | scan | run
-├── bot.py                   # Core engine: evaluate_pair, _walk_depth, trade, exit
-├── connectors.py            # KalshiConnector, PolymarketConnector, load_pairs
-├── fees.py                  # Fee formula DSL (parse_formula, apply_fee)
+├── src/bot.py               # Core engine: evaluate_pair, _walk_depth, trade, exit
+├── src/connectors.py        # KalshiConnector, PolymarketConnector, load_pairs
+├── src/fees.py              # Fee formula DSL (parse_formula, apply_fee)
 ├── config.example.json      # All config keys with inline documentation
 ├── requirements.txt         # Python dependencies
 ├── weird_behavior_check.py  # Diagnostic: flags token/strategy mismatches in logs
@@ -26,7 +28,7 @@ V5/
 ## Commands
 
 ```bash
-cd V5
+cd VE6.3
 python main.py --config config.json validate   # config + pairs file sanity check
 python main.py --config config.json scan       # one-shot scan, no execution
 python main.py --config config.json run        # continuous scan + execute loop
@@ -79,7 +81,7 @@ Optional outcome-mapping columns (needed for multi-outcome / non-binary markets)
 
 ## Fee Model
 
-`fees.py` provides a formula DSL. Variables: `p` (price), `q` (1−p), `c` (contract count).
+`src/fees.py` provides a formula DSL. Variables: `p` (price), `q` (1−p), `c` (contract count).
 Example: `"0.07 * p * c"` — 7% taker fee on notional.
 Kalshi supports `round_up_to_cent` to match actual billing behavior.
 
